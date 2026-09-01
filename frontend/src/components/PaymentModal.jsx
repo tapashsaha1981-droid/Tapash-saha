@@ -8,17 +8,19 @@ import { monthLabel, inr } from "@/lib/calc";
 import { toast } from "sonner";
 import dayjs from "dayjs";
 
+const today = () => dayjs().format("YYYY-MM-DD");
+
 export const PaymentModal = ({ open, onClose, student, month, paidThisMonth, fee, onSave }) => {
   const remaining = Math.max(0, fee - paidThisMonth);
   const [amount, setAmount] = useState(remaining);
   const [note, setNote] = useState("");
-  const [date, setDate] = useState(dayjs().format("YYYY-MM-DD"));
+  const [date, setDate] = useState(today);
 
   useEffect(() => {
     if (open) {
       setAmount(remaining);
       setNote("");
-      setDate(dayjs().format("YYYY-MM-DD"));
+      setDate(today());
     }
   }, [open, remaining]);
 

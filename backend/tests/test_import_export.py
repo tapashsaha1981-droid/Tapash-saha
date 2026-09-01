@@ -60,7 +60,7 @@ class TestImport:
         r = client.post(f"{BASE_URL}/api/import", json=payload, timeout=60)
         assert r.status_code == 200, r.text[:400]
         d = r.json()
-        assert d["ok"] is True
+        assert d["ok"]
         assert d["counts"]["batches"] == len(payload["batches"])
         assert d["counts"]["students"] == len(payload["students"])
         assert d["counts"]["payments"] == len(payload["payments"])

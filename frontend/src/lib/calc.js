@@ -71,3 +71,24 @@ export const lifetimeOverdue = (students, payments, upto) => {
   rows.sort((a, b) => b.overdue - a.overdue);
   return rows;
 };
+
+// Filter students by batch and free-text query (name / phone / batch name)
+export const filterStudents = (students, batches, { batchFilter, query }) => {
+  let filtered = students;
+  if (batchFilter !== "all") filtered = filtered.filter((s) => s.batch_id === batchFilter);
+  const q = (query || "").trim().toLowerCase();
+  if (q) {
+    filtered = filtered.filter((s) => {
+      const b = batches.find((b) => b.id === s.batch_id);
+      return s.name.toLowerCase().includes(q) || (s.phone || "").includes(q) || (b?.name || "").toLowerCase().includes(q);
+    });
+  }
+  return filtered;
+};
+
+export const reminderMessage = (student, amount, month) =>
+  `Hello ${student.name}, this is a reminder regarding the tuition fee of ${inr(amount)} for ${monthLabel(month)}. Please make the payment at your convenience. Thank you.`;
+
+export const openWhatsApp = (phone, message) => {
+  window.open(`https://wa.me/${(phone || "").replace(/\D/g, "")}?text=${encodeURIComponent(message)}`, "_blank", "noopener");
+};

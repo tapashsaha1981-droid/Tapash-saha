@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
@@ -9,6 +9,7 @@ export const MoveStudentModal = ({ open, onClose, student, batches, onMove }) =>
   const [target, setTarget] = useState("");
   useEffect(() => { if (open) setTarget(""); }, [open]);
   const current = batches.find((b) => b.id === student?.batch_id);
+  const otherBatches = useMemo(() => batches.filter((b) => b.id !== student?.batch_id), [batches, student]);
 
   const submit = async () => {
     if (!target || target === student.batch_id) return toast.error("Choose a different batch");
@@ -33,7 +34,7 @@ export const MoveStudentModal = ({ open, onClose, student, batches, onMove }) =>
             <Select value={target} onValueChange={setTarget}>
               <SelectTrigger data-testid="move-target-select"><SelectValue placeholder="Choose new batch" /></SelectTrigger>
               <SelectContent>
-                {batches.filter((b) => b.id !== student?.batch_id).map((b) => (
+                {otherBatches.map((b) => (
                   <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
                 ))}
               </SelectContent>

@@ -1,35 +1,27 @@
 import React, { useMemo, useState } from "react";
 import { useData } from "@/lib/store";
-import { ChevronLeft, ChevronRight, Plus, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, X } from "lucide-react";
 import dayjs from "dayjs";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Button } from "@/components/ui/button";
-import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
+import { DayCell } from "@/components/calendar/DayCell";
+import { EventDialog, EVENT_TYPES, colorFor } from "@/components/calendar/EventDialog";
 import { cn } from "@/lib/utils";
 
-const EVENT_TYPES = [
-  { value: "due", label: "Payment Due", color: "bg-rose-500" },
-  { value: "received", label: "Payment Received", color: "bg-emerald-500" },
-  { value: "class", label: "Class / Batch", color: "bg-indigo-500" },
-  { value: "note", label: "Reminder", color: "bg-amber-500" },
-];
-const colorFor = (t) => EVENT_TYPES.find((x) => x.value === t)?.color || "bg-slate-400";
+const buildMonthDays = (cursor) => {
+  const start = cursor.startOf("month").startOf("week");
+  const end = cursor.endOf("month").endOf("week");
+  const days = [];
+  let d = start;
+  while (d.isBefore(end) || d.isSame(end, "day")) { days.push(d); d = d.add(1, "day"); }
+  return days;
+};
 
 export const CalendarPage = () => {
   const { events, payments, addEvent, removeEvent } = useData();
   const [cursor, setCursor] = useState(dayjs());
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedDate, setSelectedDate] = useState(null);
-  const [title, setTitle] = useState("");
-  const [type, setType] = useState("note");
 
-  const start = cursor.startOf("month").startOf("week");
-  const end = cursor.endOf("month").endOf("week");
-  const days = [];
-  let d = start;
-  while (d.isBefore(end) || d.isSame(end, "day")) { days.push(d); d = d.add(1, "day"); }
+  const days = buildMonthDays(cursor);
 
   const paymentEvents = useMemo(() => payments.map((p) => ({
     id: `p-${p.id}`, date: p.payment_date, title: `Payment ${p.amount}`, type: "received",
@@ -41,15 +33,7 @@ export const CalendarPage = () => {
 
   const openAdd = (date) => {
     setSelectedDate(date);
-    setTitle("");
-    setType("note");
     setDialogOpen(true);
-  };
-
-  const save = async () => {
-    if (!title.trim()) return;
-    await addEvent({ date: selectedDate, title: title.trim(), type });
-    setDialogOpen(false);
   };
 
   return (
@@ -81,34 +65,17 @@ export const CalendarPage = () => {
           {["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"].map((d) => <div key={d}>{d}</div>)}
         </div>
         <div className="grid grid-cols-7 gap-1 sm:gap-2">
-          {days.map((day) => {
-            const inMonth = day.month() === cursor.month();
-            const isToday = day.isSame(dayjs(), "day");
-            const key = day.format("YYYY-MM-DD");
-            const evs = evsFor(key);
-            return (
-              <button
-                key={key}
-                data-testid={`cal-day-${key}`}
-                onClick={() => openAdd(key)}
-                className={cn(
-                  "text-left rounded-xl p-2 min-h-[70px] sm:min-h-[90px] border transition-colors",
-                  inMonth ? "bg-white hover:bg-slate-50 border-slate-100" : "bg-slate-50/50 text-slate-400 border-transparent",
-                  isToday && "ring-2 ring-indigo-500"
-                )}
-              >
-                <div className={cn("text-sm font-bold", isToday && "text-indigo-600")}>{day.date()}</div>
-                <div className="mt-1 space-y-0.5">
-                  {evs.slice(0, 2).map((e) => (
-                    <div key={e.id} className={cn("truncate text-[10px] px-1.5 py-0.5 rounded-md text-white font-semibold", colorFor(e.type))}>
-                      {e.title}
-                    </div>
-                  ))}
-                  {evs.length > 2 && <div className="text-[10px] text-slate-500 font-semibold">+{evs.length - 2} more</div>}
-                </div>
-              </button>
-            );
-          })}
+          {days.map((day) => (
+            <DayCell
+              key={day.format("YYYY-MM-DD")}
+              day={day}
+              inMonth={day.month() === cursor.month()}
+              isToday={day.isSame(dayjs(), "day")}
+              events={evsFor(day.format("YYYY-MM-DD"))}
+              colorFor={colorFor}
+              onSelect={openAdd}
+            />
+          ))}
         </div>
       </div>
 
@@ -130,32 +97,12 @@ export const CalendarPage = () => {
         </div>
       )}
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="rounded-2xl">
-          <DialogHeader>
-            <DialogTitle>Add Event · {selectedDate && dayjs(selectedDate).format("MMM D, YYYY")}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3">
-            <div>
-              <Label>Title</Label>
-              <Input data-testid="event-title-input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Class · Reminder · Note" />
-            </div>
-            <div>
-              <Label>Type</Label>
-              <Select value={type} onValueChange={setType}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {EVENT_TYPES.map((t) => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="ghost" onClick={() => setDialogOpen(false)}>Cancel</Button>
-            <Button onClick={save} data-testid="event-save" className="bg-indigo-600 hover:bg-indigo-700"><Plus size={14} /> Add</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <EventDialog
+        open={dialogOpen}
+        onClose={() => setDialogOpen(false)}
+        date={selectedDate}
+        onSave={addEvent}
+      />
     </div>
   );
 };

@@ -305,22 +305,16 @@ async def reset_all():
     return {"ok": True}
 
 
-@api_router.post("/seed")
-async def seed():
-    existing = await db.batches.count_documents({})
-    if existing > 0:
-        return {"ok": True, "seeded": False, "reason": "data exists"}
+def _prev_month(m, back):
+    y, mo = int(m[:4]), int(m[5:7])
+    mo -= back
+    while mo <= 0:
+        mo += 12
+        y -= 1
+    return f"{y:04d}-{mo:02d}"
 
-    now_month = datetime.now(timezone.utc).strftime("%Y-%m")
 
-    def prev_month(m, back):
-        y, mo = int(m[:4]), int(m[5:7])
-        mo -= back
-        while mo <= 0:
-            mo += 12
-            y -= 1
-        return f"{y:04d}-{mo:02d}"
-
+def _seed_batch_docs():
     batches_seed = [
         {"name": "CLASS 7", "subject": "English", "class_time": "7:00 PM", "monthly_fee": 600},
         {"name": "CLASS 8", "subject": "Math", "class_time": "6:30 PM", "monthly_fee": 700},
@@ -329,12 +323,19 @@ async def seed():
         {"name": "CLASS 12 EVENING", "subject": "Physics", "class_time": "5:00 PM", "monthly_fee": 1100},
         {"name": "CLASS 12 NIGHT", "subject": "Physics", "class_time": "8:30 PM", "monthly_fee": 1100},
     ]
-    batch_docs = []
-    for b in batches_seed:
-        obj = Batch(**b)
-        batch_docs.append(obj.model_dump())
-    await db.batches.insert_many(batch_docs)
+    return [Batch(**b).model_dump() for b in batches_seed]
 
+
+SKIP_LAST_MONTH = ("Adrika", "Trisha", "Anchal", "Kabir", "Vivaan")
+
+
+def _seed_payment_amount(name, fee, k):
+    if k == 2 and name == "Digbijoy":
+        return fee / 2  # partial
+    return fee
+
+
+def _seed_student_docs(batch_docs, now_month):
     students_seed = [
         ("Sejati", "8256910921", 0, 700, 5),
         ("Adrika", "9612909009", 0, 700, 6),
@@ -353,22 +354,29 @@ async def seed():
     payment_docs = []
     for name, phone, bidx, fee, months_back in students_seed:
         batch_id = batch_docs[bidx]["id"]
-        join = prev_month(now_month, months_back)
+        join = _prev_month(now_month, months_back)
         st = Student(name=name, phone=phone, batch_id=batch_id, monthly_fee=fee, join_month=join)
         student_docs.append(st.model_dump())
-        # Simulate partial payment history: pay all but current + maybe one older
         for k in range(months_back, 0, -1):
-            m = prev_month(now_month, k)
-            if k == 1:
-                # last month unpaid for some
-                if name in ("Adrika", "Trisha", "Anchal", "Kabir", "Vivaan"):
-                    continue
-                amt = fee
-            elif k == 2 and name == "Digbijoy":
-                amt = fee / 2  # partial
-            else:
-                amt = fee
+            if k == 1 and name in SKIP_LAST_MONTH:
+                continue
+            m = _prev_month(now_month, k)
+            amt = _seed_payment_amount(name, fee, k)
             payment_docs.append(Payment(student_id=st.id, month=m, amount=amt, fee_snapshot=fee).model_dump())
+    return student_docs, payment_docs
+
+
+@api_router.post("/seed")
+async def seed():
+    existing = await db.batches.count_documents({})
+    if existing > 0:
+        return {"ok": True, "seeded": False, "reason": "data exists"}
+
+    now_month = datetime.now(timezone.utc).strftime("%Y-%m")
+    batch_docs = _seed_batch_docs()
+    await db.batches.insert_many(batch_docs)
+
+    student_docs, payment_docs = _seed_student_docs(batch_docs, now_month)
     await db.students.insert_many(student_docs)
     if payment_docs:
         await db.payments.insert_many(payment_docs)

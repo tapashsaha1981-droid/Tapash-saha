@@ -1,15 +1,14 @@
 import React, { useMemo, useState } from "react";
 import { useData } from "@/lib/store";
-import { Plus, Pencil, Trash2, MessageCircle, CheckCircle2, ArrowLeftRight, FileText, Search, ChevronLeft, ChevronRight, Download, Phone } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Plus, Search, ChevronLeft, ChevronRight, Download } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { StudentForm } from "@/components/StudentForm";
 import { PaymentModal } from "@/components/PaymentModal";
 import { PaymentHistoryModal } from "@/components/PaymentHistoryModal";
 import { MoveStudentModal } from "@/components/MoveStudentModal";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
-import { StatusBadge } from "@/components/StatusBadge";
-import { monthLabel, shiftMonth, currentMonth, inr, studentMonthStats } from "@/lib/calc";
+import { StudentCard } from "@/components/StudentCard";
+import { monthLabel, shiftMonth, currentMonth, studentMonthStats, filterStudents, reminderMessage, openWhatsApp } from "@/lib/calc";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
@@ -29,28 +28,20 @@ export const Students = () => {
 
   const activeBatch = batches.find((b) => b.id === batchFilter);
 
+  const baseList = useMemo(
+    () => filterStudents(students, batches, { batchFilter, query }),
+    [students, batches, batchFilter, query]
+  );
+
   const list = useMemo(() => {
-    let filtered = students;
-    if (batchFilter !== "all") filtered = filtered.filter((s) => s.batch_id === batchFilter);
-    if (query.trim()) {
-      const q = query.toLowerCase();
-      filtered = filtered.filter((s) => {
-        const b = batches.find((b) => b.id === s.batch_id);
-        return s.name.toLowerCase().includes(q) || (s.phone || "").includes(q) || (b?.name.toLowerCase().includes(q));
-      });
-    }
-    const withStats = filtered.map((s) => ({ s, st: studentMonthStats(s, payments, month) }));
-    if (statusFilter !== "all") {
-      return withStats.filter(({ st }) => st.status === statusFilter);
-    }
-    return withStats;
-  }, [students, batches, payments, batchFilter, query, statusFilter, month]);
+    const withStats = baseList.map((s) => ({ s, st: studentMonthStats(s, payments, month) }));
+    return statusFilter === "all" ? withStats : withStats.filter(({ st }) => st.status === statusFilter);
+  }, [baseList, payments, month, statusFilter]);
 
   const remind = (student, monthStats) => {
     if (!student.phone) return toast.error("No phone number on file");
     const amount = Math.max(0, monthStats.fee - monthStats.paidThisMonth);
-    const msg = `Hello ${student.name}, this is a reminder regarding the tuition fee of ${inr(amount)} for ${monthLabel(month)}. Please make the payment at your convenience. Thank you.`;
-    window.open(`https://wa.me/${student.phone.replace(/\D/g, "")}?text=${encodeURIComponent(msg)}`, "_blank", "noopener");
+    openWhatsApp(student.phone, reminderMessage(student, amount, month));
   };
 
   const exportCSV = () => {
@@ -126,60 +117,20 @@ export const Students = () => {
 
       {/* Student cards */}
       <div className="grid gap-4 md:grid-cols-2" data-testid="student-list">
-        {list.map(({ s, st }) => {
-          const batch = batches.find((b) => b.id === s.batch_id);
-          const initial = s.name.charAt(0).toUpperCase();
-          const remaining = Math.max(0, st.fee - st.paidThisMonth);
-          return (
-            <div key={s.id} data-testid={`student-card-${s.id}`} className="rounded-3xl bg-white p-5 soft-shadow card-hover">
-              <div className="flex items-start gap-3">
-                <div className="h-12 w-12 rounded-full bg-indigo-100 text-indigo-700 font-bold flex items-center justify-center shrink-0">{initial}</div>
-                <div className="min-w-0 flex-1">
-                  <div className="font-extrabold text-slate-900">{s.name}</div>
-                  <a href={`tel:${s.phone}`} className="text-sm text-slate-500 inline-flex items-center gap-1 hover:text-indigo-600"><Phone size={12} /> {s.phone || "—"}</a>
-                  {batch && <div className="text-xs text-slate-400 mt-0.5">{batch.name}</div>}
-                </div>
-                <StatusBadge status={st.status} />
-              </div>
-
-              <div className="mt-4 grid grid-cols-3 gap-2 text-center">
-                <div className="rounded-xl bg-slate-50 p-2">
-                  <div className="text-[11px] text-slate-500">Total ({st.elapsed}m)</div>
-                  <div className="font-bold text-slate-900">{inr(st.totalDue)}</div>
-                </div>
-                <div className="rounded-xl bg-emerald-50 p-2">
-                  <div className="text-[11px] text-emerald-700">Already Paid</div>
-                  <div className="font-bold text-emerald-700">{inr(st.totalPaid)}</div>
-                </div>
-                <div className="rounded-xl bg-rose-50 p-2">
-                  <div className="text-[11px] text-rose-700">To Be Paid</div>
-                  <div className="font-bold text-rose-700">{inr(remaining)}</div>
-                </div>
-              </div>
-
-              <div className="mt-4 flex flex-wrap gap-2">
-                {st.status !== "paid" && (
-                  <>
-                    <ActionBtn testid={`edit-${s.id}`} onClick={() => { setEditing(s); setFormOpen(true); }} icon="✏️" label="Edit" />
-                    <ActionBtn testid={`mark-paid-${s.id}`} onClick={() => setPayFor({ s, st })} icon="✅" label="Mark Paid" tint="bg-emerald-600 text-white hover:bg-emerald-700" />
-                    <ActionBtn testid={`remind-${s.id}`} onClick={() => remind(s, st)} icon="💬" label="Remind" />
-                    <ActionBtn testid={`move-${s.id}`} onClick={() => setMoveFor(s)} icon="⇄" label="Move" />
-                    <ActionBtn testid={`history-${s.id}`} onClick={() => setHistoryFor(s)} icon="📄" label="History" />
-                    <ActionBtn testid={`delete-${s.id}`} onClick={() => setToDelete(s)} icon="🗑️" label="Delete" tint="bg-rose-50 text-rose-600 hover:bg-rose-100" />
-                  </>
-                )}
-                {st.status === "paid" && (
-                  <>
-                    <ActionBtn testid={`edit-${s.id}`} onClick={() => { setEditing(s); setFormOpen(true); }} icon="✏️" label="Edit" />
-                    <ActionBtn testid={`remind-${s.id}`} onClick={() => remind(s, st)} icon="💬" label="Remind" />
-                    <ActionBtn testid={`history-${s.id}`} onClick={() => setHistoryFor(s)} icon="📄" label="History" />
-                    <ActionBtn testid={`delete-${s.id}`} onClick={() => setToDelete(s)} icon="🗑️" label="Delete" tint="bg-rose-50 text-rose-600 hover:bg-rose-100" />
-                  </>
-                )}
-              </div>
-            </div>
-          );
-        })}
+        {list.map(({ s, st }) => (
+          <StudentCard
+            key={s.id}
+            student={s}
+            stats={st}
+            batch={batches.find((b) => b.id === s.batch_id)}
+            onEdit={() => { setEditing(s); setFormOpen(true); }}
+            onMarkPaid={() => setPayFor({ s, st })}
+            onRemind={() => remind(s, st)}
+            onMove={() => setMoveFor(s)}
+            onHistory={() => setHistoryFor(s)}
+            onDelete={() => setToDelete(s)}
+          />
+        ))}
         {list.length === 0 && (
           <div className="col-span-full rounded-3xl bg-white p-10 text-center text-slate-500 soft-shadow">No students match.</div>
         )}
@@ -252,15 +203,3 @@ const FilterChip = ({ active, onClick, label, testid }) => (
   >{label}</button>
 );
 
-const ActionBtn = ({ onClick, icon, label, tint, testid }) => (
-  <button
-    data-testid={testid}
-    onClick={onClick}
-    className={cn(
-      "btn-press inline-flex items-center gap-1.5 px-3 h-9 rounded-xl text-xs font-semibold",
-      tint || "bg-slate-100 text-slate-700 hover:bg-slate-200"
-    )}
-  >
-    <span aria-hidden>{icon}</span> {label}
-  </button>
-);

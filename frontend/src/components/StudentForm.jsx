@@ -7,44 +7,46 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { toast } from "sonner";
 
+const EMPTY_FORM = { name: "", phone: "", batch_id: "", monthly_fee: "", parent_name: "", notes: "" };
+
+const formFromStudent = (s) => ({
+  name: s.name || "",
+  phone: s.phone || "",
+  batch_id: s.batch_id || "",
+  monthly_fee: s.monthly_fee ? String(s.monthly_fee) : "",
+  parent_name: s.parent_name || "",
+  notes: s.notes || "",
+});
+
 export const StudentForm = ({ open, onClose, initial, batches, defaultBatchId, onSave }) => {
-  const [name, setName] = useState("");
-  const [phone, setPhone] = useState("");
-  const [batchId, setBatchId] = useState("");
-  const [fee, setFee] = useState("");
-  const [parent, setParent] = useState("");
-  const [notes, setNotes] = useState("");
+  const [form, setForm] = useState(EMPTY_FORM);
 
   useEffect(() => {
-    if (open) {
-      setName(initial?.name || "");
-      setPhone(initial?.phone || "");
-      setBatchId(initial?.batch_id || defaultBatchId || (batches[0]?.id ?? ""));
-      setFee(initial?.monthly_fee ? String(initial.monthly_fee) : "");
-      setParent(initial?.parent_name || "");
-      setNotes(initial?.notes || "");
-    }
+    if (!open) return;
+    setForm(initial ? formFromStudent(initial) : { ...EMPTY_FORM, batch_id: defaultBatchId || batches[0]?.id || "" });
   }, [open, initial, defaultBatchId, batches]);
 
-  useEffect(() => {
-    // Auto-fill fee from batch if empty
-    if (!fee && batchId) {
-      const b = batches.find((x) => x.id === batchId);
-      if (b?.monthly_fee) setFee(String(b.monthly_fee));
-    }
-    // eslint-disable-next-line
-  }, [batchId]);
+  const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }));
+
+  const onBatchChange = (batchId) => {
+    const batch = batches.find((x) => x.id === batchId);
+    setForm((f) => ({
+      ...f,
+      batch_id: batchId,
+      monthly_fee: f.monthly_fee || (batch?.monthly_fee ? String(batch.monthly_fee) : ""),
+    }));
+  };
 
   const submit = async () => {
-    if (!name.trim()) return toast.error("Student name is required");
-    if (!batchId) return toast.error("Please select a batch");
+    if (!form.name.trim()) return toast.error("Student name is required");
+    if (!form.batch_id) return toast.error("Please select a batch");
     await onSave({
-      name: name.trim(),
-      phone: phone.trim(),
-      batch_id: batchId,
-      monthly_fee: Number(fee) || 0,
-      parent_name: parent.trim(),
-      notes: notes.trim(),
+      name: form.name.trim(),
+      phone: form.phone.trim(),
+      batch_id: form.batch_id,
+      monthly_fee: Number(form.monthly_fee) || 0,
+      parent_name: form.parent_name.trim(),
+      notes: form.notes.trim(),
     });
     onClose();
   };
@@ -58,15 +60,15 @@ export const StudentForm = ({ open, onClose, initial, batches, defaultBatchId, o
         <div className="space-y-3">
           <div>
             <Label>Student Name</Label>
-            <Input data-testid="student-name-input" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Sejati" />
+            <Input data-testid="student-name-input" value={form.name} onChange={set("name")} placeholder="e.g. Sejati" />
           </div>
           <div>
             <Label>Phone Number</Label>
-            <Input data-testid="student-phone-input" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="9876543210" />
+            <Input data-testid="student-phone-input" value={form.phone} onChange={set("phone")} placeholder="9876543210" />
           </div>
           <div>
             <Label>Batch</Label>
-            <Select value={batchId} onValueChange={setBatchId}>
+            <Select value={form.batch_id} onValueChange={onBatchChange}>
               <SelectTrigger data-testid="student-batch-select"><SelectValue placeholder="Select batch" /></SelectTrigger>
               <SelectContent>
                 {batches.map((b) => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
@@ -75,15 +77,15 @@ export const StudentForm = ({ open, onClose, initial, batches, defaultBatchId, o
           </div>
           <div>
             <Label>Monthly Fee (₹)</Label>
-            <Input data-testid="student-fee-input" type="number" value={fee} onChange={(e) => setFee(e.target.value)} />
+            <Input data-testid="student-fee-input" type="number" value={form.monthly_fee} onChange={set("monthly_fee")} />
           </div>
           <div>
             <Label>Parent / Guardian Name (optional)</Label>
-            <Input data-testid="student-parent-input" value={parent} onChange={(e) => setParent(e.target.value)} />
+            <Input data-testid="student-parent-input" value={form.parent_name} onChange={set("parent_name")} />
           </div>
           <div>
             <Label>Notes (optional)</Label>
-            <Textarea data-testid="student-notes-input" value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} />
+            <Textarea data-testid="student-notes-input" value={form.notes} onChange={set("notes")} rows={2} />
           </div>
         </div>
         <DialogFooter>

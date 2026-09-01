@@ -28,6 +28,7 @@ Single tutor persona; iPad landscape primary; mobile & desktop supported.
 
 ## Bug Fixes (2026-02)
 - Import JSON: fixed silent failure — backend `/api/import` now sanitizes malformed payloads (200 + counts instead of 422), frontend validates files with clear error toasts, file input switched from display:none to visually-hidden for iPad Safari compatibility; frontend export now includes calendar events (verified by testing_agent iteration 2, 100% pass)
+- Code-review refactor (2026-02): extracted `useOperations` (lib/operations.js), `useBackup` (lib/useBackup.js), `StatCard`, `PaymentOverview`, `StudentCard`, `DayCell`, `EventDialog` components; `filterStudents`/`reminderMessage`/`openWhatsApp` helpers in calc.js; StudentForm single-state rewrite; MoveStudentModal useMemo; seed() split into `_seed_batch_docs`/`_seed_student_docs`/`_prev_month`; seed error now logged via console.error. Note: `is not None` in server.py update_student kept intentionally (correct Python idiom; linter false positive).
 
 ## Deferred / Backlog
 - Persistent undo/redo across sessions
