@@ -10,6 +10,7 @@ export const DataProvider = ({ children }) => {
   const [payments, setPayments] = useState([]);
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(null);
 
   // undo/redo stacks: entries = { undo: async ()=>{}, redo: async ()=>{}, label }
   const [undoStack, setUndoStack] = useState([]);
@@ -28,17 +29,23 @@ export const DataProvider = ({ children }) => {
     setEvents(e);
   }, []);
 
-  useEffect(() => {
-    (async () => {
-      try {
-        await api.seed();
-      } catch (err) {
-        console.error("Failed to seed demo data", err);
-      }
+  const retryLoad = useCallback(async () => {
+    setLoading(true);
+    setLoadError(null);
+    try {
+      await api.seed();
       await refresh();
+    } catch (err) {
+      console.error("Initial data load failed", err);
+      setLoadError(err);
+    } finally {
       setLoading(false);
-    })();
+    }
   }, [refresh]);
+
+  useEffect(() => {
+    retryLoad();
+  }, [retryLoad]);
 
   const record = (entry) => {
     setUndoStack((s) => [...s, entry].slice(-30));
@@ -75,7 +82,7 @@ export const DataProvider = ({ children }) => {
   return (
     <DataCtx.Provider
       value={{
-        batches, students, payments, events, loading,
+        batches, students, payments, events, loading, loadError, retryLoad,
         refresh,
         ...ops,
         canUndo: undoStack.length > 0,

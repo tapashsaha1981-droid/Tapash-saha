@@ -19,9 +19,27 @@ const LoadingScreen = () => (
   </div>
 );
 
+const ErrorScreen = ({ onRetry }) => (
+  <div className="min-h-screen flex items-center justify-center bg-[#F5F6FA] px-6">
+    <div className="text-center max-w-sm">
+      <div className="h-12 w-12 mx-auto rounded-2xl bg-rose-100 flex items-center justify-center text-2xl">⚠️</div>
+      <div className="mt-3 font-bold text-slate-900 text-lg">Could not load data</div>
+      <p className="mt-1 text-sm text-slate-500">Please check your internet connection and try again.</p>
+      <button
+        data-testid="retry-load-btn"
+        onClick={onRetry}
+        className="btn-press mt-4 px-6 h-11 rounded-2xl bg-indigo-600 text-white font-semibold hover:bg-indigo-700"
+      >
+        Retry
+      </button>
+    </div>
+  </div>
+);
+
 const Shell = () => {
-  const { loading } = useData();
+  const { loading, loadError, retryLoad } = useData();
   if (loading) return <LoadingScreen />;
+  if (loadError) return <ErrorScreen onRetry={retryLoad} />;
   return (
     <Layout>
       <Routes>

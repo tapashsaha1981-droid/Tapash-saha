@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="3" skipped="0" tests="18" time="2.492" timestamp="2026-09-01T16:31:35.277640+00:00" hostname="agent-env-34b07754-276f-4f1b-ab76-298ecb44fd31"><testcase classname="tests.test_core_api" name="test_list_batches" time="0.229"><failure message="AssertionError: expected 6 batches, got 0&#10;assert 0 == 6&#10; +  where 0 = len([])">client = &lt;requests.sessions.Session object at 0xf821fa6105d0&gt;
+
+    def test_list_batches(client):
+        r = client.get(f"{BASE_URL}/api/batches", timeout=30)
+        assert r.status_code == 200
+        data = r.json()
+        assert isinstance(data, list)
+&gt;       assert len(data) == 6, f"expected 6 batches, got {len(data)}"
+E       AssertionError: expected 6 batches, got 0
+E       assert 0 == 6
+E        +  where 0 = len([])
+
+tests/test_core_api.py:27: AssertionError</failure></testcase><testcase classname="tests.test_core_api" name="test_list_students" time="0.096" /><testcase classname="tests.test_import_export.TestImport" name="test_import_valid_roundtrip" time="0.606" /><testcase classname="tests.test_core_api" name="test_list_payments" time="0.112" /><testcase classname="tests.test_core_api" name="test_list_events" time="0.097" /><testcase classname="tests.test_core_api" name="test_seed_idempotent" time="0.191"><failure message="AssertionError: assert 1 == 6&#10; +  where 1 = len([{'id': 'ecc7f487-9b3b-4f29-a390-a4ad70013b9b', 'name': 'TEST_B', 'subject': 'Math', 'class_time': '5 PM', ...}])">client = &lt;requests.sessions.Session object at 0xf821fa6105d0&gt;
+
+    def test_seed_idempotent(client):
+        r = client.post(f"{BASE_URL}/api/seed", timeout=30)
+        assert r.status_code == 200
+        b = client.get(f"{BASE_URL}/api/batches", timeout=30).json()
+&gt;       assert len(b) == 6
+E       AssertionError: assert 1 == 6
+E        +  where 1 = len([{'id': 'ecc7f487-9b3b-4f29-a390-a4ad70013b9b', 'name': 'TEST_B', 'subject': 'Math', 'class_time': '5 PM', ...}])
+
+tests/test_core_api.py:59: AssertionError</failure></testcase><testcase classname="tests.test_import_export.TestImport" name="test_import_malformed_types_sanitized" time="0.190" /><testcase classname="tests.test_core_api" name="test_export_shape" time="0.105" /><testcase classname="tests.test_import_export.TestImport" name="test_import_strips_mongo_id" time="0.189" /><testcase classname="tests.test_core_api" name="test_delete_unknown_student" time="0.091" /><testcase classname="tests.test_core_api" name="test_create_batch_validation" time="0.104" /><testcase classname="tests.test_import_export.TestImport" name="test_import_empty_payload" time="0.094" /><testcase classname="tests.test_import_export.TestImport" name="test_import_non_object_body" time="0.082" /><testcase classname="tests.test_import_export.TestExport" name="test_export_shape" time="0.507"><failure message="assert 0 == 6&#10; +  where 0 = len([])">self = &lt;test_import_export.TestExport object at 0xfaae24beb090&gt;
+client = &lt;requests.sessions.Session object at 0xfaae25561d50&gt;
+
+    def test_export_shape(self, client):
+        r = client.get(f"{BASE_URL}/api/export", timeout=30)
+        assert r.status_code == 200, r.text[:400]
+        d = r.json()
+        for key in ("exported_at", "batches", "students", "payments", "events"):
+            assert key in d, f"missing {key}"
+        assert isinstance(d["batches"], list) and isinstance(d["students"], list)
+&gt;       assert len(d["batches"]) == 6
+E       assert 0 == 6
+E        +  where 0 = len([])
+
+tests/test_import_export.py:42: AssertionError</failure></testcase><testcase classname="tests.test_import_export.TestCoreEndpoints" name="test_list_endpoints[/api/batches]" time="0.396" /><testcase classname="tests.test_import_export.TestCoreEndpoints" name="test_list_endpoints[/api/students]" time="0.083" /><testcase classname="tests.test_import_export.TestCoreEndpoints" name="test_list_endpoints[/api/payments]" time="0.103" /><testcase classname="tests.test_import_export.TestCoreEndpoints" name="test_list_endpoints[/api/events]" time="0.284" /></testsuite></testsuites>
