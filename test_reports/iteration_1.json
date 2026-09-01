@@ -1,0 +1,36 @@
+{
+  "summary": "First-finish smoke test of TAPASH SIR tuition-fee app. Backend and frontend both healthy. All critical CRUD, cascade-delete, undo/redo, payment, calendar and navigation flows verified end-to-end against the public preview URL.",
+  "tested_scope": ["backend", "frontend", "integration"],
+  "passed": [
+    "GET /api/batches returns 6 seeded batches (200)",
+    "GET /api/students returns 12 seeded students (200)",
+    "GET /api/payments returns list (200); filtered by student_id+month works",
+    "GET /api/events returns list (200)",
+    "GET /api/export returns {exported_at,batches,students,payments,events}",
+    "POST /api/batches creates batch; PUT /api/batches/{id} updates",
+    "POST /api/students creates student; POST /api/students/{id}/move changes batch_id",
+    "POST /api/payments creates payment (student_id, month YYYY-MM, amount)",
+    "DELETE /api/batches/{id} cascades: removes students and their payments (verified removed_students=1, payments=0)",
+    "Frontend loads dashboard by default; header (app-title, license-pill, undo-btn, redo-btn) visible",
+    "Bottom nav renders all 5 items (dashboard/batches/students/overview/calendar)",
+    "Dashboard: 4 stat cards populated (Students=12, Batches=6, Collected=₹0, Pending=₹10,400); month prev/next changes label; Monthly/Overall toggle works; ov-paid/partial/unpaid visible",
+    "Batches page: add-batch-btn opens modal, save persists and new batch appears in list",
+    "Undo: after adding batch, undo-btn removes the newly added batch from list",
+    "Students page: batch filter chips, search, 4 status filters and 12 student cards render",
+    "Mark Paid flow: pay-full auto-fills amount, payment-save records payment, toast 'Payment of ₹700 recorded' shown, student moves to paid filter",
+    "History modal opens on history-{id} click (role=dialog visible)",
+    "Overview page: total-overdue and remind-all-overdue visible",
+    "Calendar page: cal-prev/next/today visible; clicking a day opens event dialog; event-save creates event 'UITEST_EVT' visible on the day cell",
+    "No JS pageerrors or console errors observed during flow"
+  ],
+  "failed": [],
+  "action_items": [],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "retest_needed": false,
+  "full_testing_deferred": true,
+  "notes": [
+    "Seed produced 44 payments (task note said ~76 — informational only, not a bug).",
+    "WhatsApp Remind buttons were not click-tested (window.open flow, per instructions no assertion beyond clickability required); import/export JSON not exercised in UI script but backend export verified.",
+    "test_credentials.md: not required — app has no authentication."
+  ]
+}

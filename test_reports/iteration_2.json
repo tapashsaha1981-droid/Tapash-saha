@@ -1,0 +1,32 @@
+{
+  "summary": "Iteration 2 focused on the Import JSON bug fix + light regression. Backend: 10/10 pytest cases pass (export shape, valid round-trip import with persistence check, malformed types sanitized to 200 instead of 422, _id stripping, empty payload, non-JSON body rejected, list endpoints). Frontend: full Playwright verification of the Import flow — import-json button opens the native file chooser (file input is now visually hidden, not display:none), invalid text file shows 'Invalid JSON file — please choose a backup exported from this app', wrong-structure JSON ({foo:1}) shows 'Backup file has no batches, students or payments to import' and does NOT open the confirm dialog, valid backup opens ConfirmDialog 'Import Backup?' with the expected description, confirm-ok imports and shows success toast 'Imported 6 batches, 12 students, 44 payments'. Export JSON download works and the downloaded file re-imports successfully. Undo/redo header buttons present, all 5 bottom-nav routes render. Data left in clean seeded state (6 batches / 12 students / 44 payments).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/export vs Dashboard exportJSON", "issue": "Dashboard export writes only {batches,students,payments} (no events). Re-importing such a file wipes all calendar events because /api/import replaces the events collection with an empty list. Suggest including events in the exported payload."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_import_export.py",
+    "/app/test_reports/pytest/iter2_results.xml"
+  ],
+  "action_items": [
+    "Optional: include `events` in Dashboard exportJSON payload so re-importing a backup does not silently delete calendar events."
+  ],
+  "critical_code_review_comments": [
+    "Import is destructive (delete_many on all 4 collections) and clears undo/redo stacks — no rollback if insert_many fails midway. Consider staging inserts or a transaction/backup snapshot.",
+    "Dashboard exportJSON/import shapes are asymmetric (export omits events) — keep the two payload shapes in sync."
+  ],
+  "updated_files": ["/app/backend/tests/test_import_export.py"],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "seed_data_creation": "POST /api/reset + POST /api/seed used before and after tests; final state is clean seeded data (6 batches, 12 students, 44 payments). Test fixtures /tmp/fe_backup2.json (valid), /tmp/bad.txt.json (invalid), /tmp/wrong.json (wrong structure).",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Import/export bug fix fully verified in iteration 2; iteration 1 covered CRUD/payments/calendar/undo-redo. Reusable pytest suite: /app/backend/tests/test_import_export.py (it resets+seeds around the module, so don't run it while other data-sensitive tests run). Only open item: export payload omits events.",
+  "rca_of_the_issue": "Original silent failure was caused by strict ImportPayload typing returning 422 (unhandled in the UI) plus a display:none file input that iPad Safari refuses to open programmatically. Fix verified: backend now sanitizes/coerces input and returns 200 with counts; frontend validates the file, surfaces errors via toasts, and the input is visually hidden rather than display:none."
+}
