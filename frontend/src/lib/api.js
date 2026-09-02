@@ -1,6 +1,6 @@
 import axios from "axios";
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
+const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || "https://tapash-saha.onrender.com";
 export const API = `${BACKEND_URL}/api`;
 
 const client = axios.create({ baseURL: API, timeout: 20000 });
