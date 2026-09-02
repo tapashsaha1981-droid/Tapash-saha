@@ -5,7 +5,7 @@ import { toast } from "sonner";
 export const OrganisationCard = ({ value, onSave }) => {
   const [name, setName] = useState(value || "TAPASH SIR");
 
-  useEffect(() => { setName(value || "TAPASH SIR"); }, [value]);
+  useEffect(() => { setName(value || "TAPASH SIR"); }, [value, setName]);
 
   const save = async () => {
     await onSave({ org_name: name.trim() || "TAPASH SIR" });
@@ -33,7 +33,7 @@ export const OrganisationCard = ({ value, onSave }) => {
 export const AutoAdvanceCard = ({ value, onSave, onPreview }) => {
   const [day, setDay] = useState(value ? String(value) : "");
 
-  useEffect(() => { setDay(value ? String(value) : ""); }, [value]);
+  useEffect(() => { setDay(value ? String(value) : ""); }, [value, setDay]);
 
   const save = async () => {
     const d = Number(day);

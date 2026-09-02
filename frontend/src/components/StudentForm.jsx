@@ -24,7 +24,7 @@ export const StudentForm = ({ open, onClose, initial, batches, defaultBatchId, o
   useEffect(() => {
     if (!open) return;
     setForm(initial ? formFromStudent(initial) : { ...EMPTY_FORM, batch_id: defaultBatchId || batches[0]?.id || "" });
-  }, [open, initial, defaultBatchId, batches]);
+  }, [open, initial, defaultBatchId, batches, setForm]);
 
   const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }));
 
@@ -53,7 +53,7 @@ export const StudentForm = ({ open, onClose, initial, batches, defaultBatchId, o
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="rounded-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="rounded-2xl max-h-[90vh] overflow-y-auto" aria-describedby={undefined}>
         <DialogHeader>
           <DialogTitle>{initial ? "Edit Student" : "Add Student"}</DialogTitle>
         </DialogHeader>

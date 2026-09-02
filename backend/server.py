@@ -33,6 +33,8 @@ class Batch(BaseModel):
 
 
 class BatchIn(BaseModel):
+    id: Optional[str] = None
+    created_at: Optional[str] = None
     name: str
     subject: Optional[str] = ""
     class_time: Optional[str] = ""
@@ -53,6 +55,8 @@ class Student(BaseModel):
 
 
 class StudentIn(BaseModel):
+    id: Optional[str] = None
+    created_at: Optional[str] = None
     name: str
     phone: Optional[str] = ""
     batch_id: str
@@ -84,6 +88,8 @@ class Payment(BaseModel):
 
 
 class PaymentIn(BaseModel):
+    id: Optional[str] = None
+    created_at: Optional[str] = None
     student_id: str
     month: str
     amount: float
@@ -145,7 +151,7 @@ async def list_batches():
 
 @api_router.post("/batches")
 async def create_batch(payload: BatchIn):
-    batch = Batch(**payload.model_dump())
+    batch = Batch(**payload.model_dump(exclude_none=True))
     await db.batches.insert_one(batch.model_dump())
     await log_activity(f"Added batch: {batch.name}")
     return batch.model_dump()
@@ -153,7 +159,10 @@ async def create_batch(payload: BatchIn):
 
 @api_router.put("/batches/{batch_id}")
 async def update_batch(batch_id: str, payload: BatchIn):
-    result = await db.batches.update_one({"id": batch_id}, {"$set": payload.model_dump()})
+    result = await db.batches.update_one(
+        {"id": batch_id},
+        {"$set": payload.model_dump(exclude_unset=True, exclude_none=True, exclude={"id", "created_at"})},
+    )
     if result.matched_count == 0:
         raise HTTPException(404, "Batch not found")
     doc = await db.batches.find_one({"id": batch_id}, {"_id": 0})
@@ -163,6 +172,8 @@ async def update_batch(batch_id: str, payload: BatchIn):
 @api_router.delete("/batches/{batch_id}")
 async def delete_batch(batch_id: str):
     batch = await db.batches.find_one({"id": batch_id}, {"_id": 0, "name": 1})
+    if not batch:
+        raise HTTPException(404, "Batch not found")
     students = await db.students.find({"batch_id": batch_id}, {"_id": 0}).to_list(10000)
     student_ids = [s["id"] for s in students]
     await db.batches.delete_one({"id": batch_id})
@@ -183,7 +194,7 @@ async def list_students():
 
 @api_router.post("/students")
 async def create_student(payload: StudentIn):
-    data = payload.model_dump()
+    data = payload.model_dump(exclude_none=True)
     if not data.get("join_month"):
         data["join_month"] = datetime.now(timezone.utc).strftime("%Y-%m")
     student = Student(**data)
@@ -194,7 +205,7 @@ async def create_student(payload: StudentIn):
 
 @api_router.put("/students/{student_id}")
 async def update_student(student_id: str, payload: StudentUpdate):
-    updates = {k: v for k, v in payload.model_dump().items() if v is not None}
+    updates = payload.model_dump(exclude_unset=True, exclude_none=True)
     if not updates:
         doc = await db.students.find_one({"id": student_id}, {"_id": 0})
         return doc
@@ -217,6 +228,8 @@ async def move_student(student_id: str, payload: MoveIn):
 @api_router.delete("/students/{student_id}")
 async def delete_student(student_id: str):
     st = await db.students.find_one({"id": student_id}, {"_id": 0, "name": 1})
+    if not st:
+        raise HTTPException(404, "Student not found")
     await db.students.delete_one({"id": student_id})
     await db.payments.delete_many({"student_id": student_id})
     if st:
@@ -238,7 +251,7 @@ async def list_payments(student_id: Optional[str] = None, month: Optional[str] =
 
 @api_router.post("/payments")
 async def create_payment(payload: PaymentIn):
-    data = payload.model_dump()
+    data = payload.model_dump(exclude_none=True)
     if not data.get("payment_date"):
         data["payment_date"] = datetime.now(timezone.utc).date().isoformat()
     payment = Payment(**data)
@@ -256,7 +269,9 @@ async def create_payment(payload: PaymentIn):
 
 @api_router.delete("/payments/{payment_id}")
 async def delete_payment(payment_id: str):
-    await db.payments.delete_one({"id": payment_id})
+    result = await db.payments.delete_one({"id": payment_id})
+    if result.deleted_count == 0:
+        raise HTTPException(404, "Payment not found")
     return {"ok": True}
 
 
@@ -276,7 +291,9 @@ async def create_event(payload: CalendarEventIn):
 
 @api_router.delete("/events/{event_id}")
 async def delete_event(event_id: str):
-    await db.events.delete_one({"id": event_id})
+    result = await db.events.delete_one({"id": event_id})
+    if result.deleted_count == 0:
+        raise HTTPException(404, "Event not found")
     return {"ok": True}
 
 
@@ -296,7 +313,7 @@ async def get_settings():
 
 @api_router.put("/settings")
 async def update_settings(payload: SettingsIn):
-    updates = {k: v for k, v in payload.model_dump().items() if v is not None}
+    updates = payload.model_dump(exclude_none=True)
     if updates:
         await db.settings.update_one({"id": "settings"}, {"$set": updates}, upsert=True)
     return await get_settings()
@@ -328,6 +345,12 @@ async def export_all():
     }
 
 
+async def _replace_collection(name, docs):
+    await db[name].delete_many({})
+    if docs:
+        await db[name].insert_many(docs)
+
+
 @api_router.post("/import")
 async def import_all(payload: ImportPayload):
     def sanitize(items):
@@ -342,21 +365,11 @@ async def import_all(payload: ImportPayload):
     activities = sanitize(payload.activities)
     settings = payload.settings if isinstance(payload.settings, dict) else None
 
-    await db.batches.delete_many({})
-    await db.students.delete_many({})
-    await db.payments.delete_many({})
-    await db.events.delete_many({})
-    await db.activities.delete_many({})
-    if batches:
-        await db.batches.insert_many(batches)
-    if students:
-        await db.students.insert_many(students)
-    if payments:
-        await db.payments.insert_many(payments)
-    if events:
-        await db.events.insert_many(events)
-    if activities:
-        await db.activities.insert_many(activities)
+    await _replace_collection("batches", batches)
+    await _replace_collection("students", students)
+    await _replace_collection("payments", payments)
+    await _replace_collection("events", events)
+    await _replace_collection("activities", activities)
     if settings:
         settings.pop("_id", None)
         settings["id"] = "settings"

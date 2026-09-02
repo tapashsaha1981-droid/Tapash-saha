@@ -35,7 +35,7 @@ export const EventDialog = ({ open, onClose, date, onSave }) => {
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="rounded-2xl">
+      <DialogContent className="rounded-2xl" aria-describedby={undefined}>
         <DialogHeader>
           <DialogTitle>Add Event · {date && dayjs(date).format("MMM D, YYYY")}</DialogTitle>
         </DialogHeader>

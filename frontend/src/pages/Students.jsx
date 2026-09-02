@@ -1,24 +1,12 @@
 import React, { useMemo, useState, useEffect, useRef } from "react";
 import { useData } from "@/lib/store";
-import { Plus, Search, ChevronLeft, ChevronRight, Download } from "lucide-react";
+import { Plus, Download } from "lucide-react";
 import dayjs from "dayjs";
-import { Input } from "@/components/ui/input";
-import { StudentForm } from "@/components/StudentForm";
-import { PaymentModal } from "@/components/PaymentModal";
-import { PaymentHistoryModal } from "@/components/PaymentHistoryModal";
-import { MoveStudentModal } from "@/components/MoveStudentModal";
-import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { StudentCard } from "@/components/StudentCard";
+import { StudentsToolbar } from "@/components/StudentsToolbar";
+import { StudentModals } from "@/components/StudentModals";
 import { monthLabel, shiftMonth, currentMonth, studentMonthStats, filterStudents, reminderMessage, paymentConfirmationMessage, openWhatsApp, indexPayments, paysFor } from "@/lib/calc";
 import { toast } from "sonner";
-import { cn } from "@/lib/utils";
-
-const STATUS_CHIP_ACTIVE = {
-  all: "bg-indigo-600",
-  unpaid: "bg-rose-500",
-  partial: "bg-amber-500",
-  paid: "bg-emerald-600",
-};
 
 export const Students = () => {
   const { batches, students, payments, settings, addStudent, editStudent, removeStudent, moveStudent, addPayment } = useData();
@@ -39,19 +27,19 @@ export const Students = () => {
 
   const baseList = useMemo(
     () => filterStudents(students, batches, { batchFilter, query }),
-    [students, batches, batchFilter, query]
+    [students, batches, batchFilter, query, filterStudents]
   );
 
-  const paymentsIndex = useMemo(() => indexPayments(payments), [payments]);
+  const paymentsIndex = useMemo(() => indexPayments(payments), [payments, indexPayments]);
 
   const list = useMemo(() => {
     const withStats = baseList.map((s) => ({ s, st: studentMonthStats(s, paysFor(paymentsIndex, s.id), month) }));
     return statusFilter === "all" ? withStats : withStats.filter(({ st }) => st.status === statusFilter);
-  }, [baseList, paymentsIndex, month, statusFilter]);
+  }, [baseList, paymentsIndex, month, statusFilter, studentMonthStats, paysFor]);
 
   const visible = list.slice(0, limit);
 
-  useEffect(() => { setLimit(60); }, [batchFilter, query, statusFilter, month]);
+  useEffect(() => { setLimit(60); }, [batchFilter, query, statusFilter, month, setLimit]);
 
   const advancedRef = useRef(null);
   useEffect(() => {
@@ -114,41 +102,17 @@ export const Students = () => {
         </div>
       </div>
 
-      {/* Month nav */}
-      <div className="inline-flex items-center gap-1 bg-white rounded-2xl border border-slate-200 p-1">
-        <button data-testid="stu-month-prev" onClick={() => setMonth(shiftMonth(month, -1))} className="btn-press h-9 w-9 rounded-xl flex items-center justify-center hover:bg-slate-100"><ChevronLeft size={18} /></button>
-        <div className="px-3 font-semibold text-slate-900 min-w-[140px] text-center">{monthLabel(month)}</div>
-        <button data-testid="stu-month-next" onClick={() => setMonth(shiftMonth(month, 1))} className="btn-press h-9 w-9 rounded-xl flex items-center justify-center hover:bg-slate-100"><ChevronRight size={18} /></button>
-      </div>
-
-      {/* Batch filters */}
-      <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
-        <FilterChip active={batchFilter === "all"} onClick={() => setBatchFilter("all")} label="All Batches" testid="batch-filter-all" />
-        {batches.map((b) => (
-          <FilterChip key={b.id} active={batchFilter === b.id} onClick={() => setBatchFilter(b.id)} label={b.name} testid={`batch-filter-${b.id}`} />
-        ))}
-      </div>
-
-      {/* Search + status */}
-      <div className="flex flex-col sm:flex-row gap-3">
-        <div className="relative flex-1">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-          <Input data-testid="student-search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search students..." className="pl-9 rounded-xl" />
-        </div>
-        <div className="flex gap-2">
-          {["all", "unpaid", "partial", "paid"].map((s) => (
-            <button
-              key={s}
-              data-testid={`status-filter-${s}`}
-              onClick={() => setStatusFilter(s)}
-              className={cn(
-                "btn-press px-3.5 h-10 rounded-xl text-sm font-semibold capitalize text-white",
-                statusFilter === s ? STATUS_CHIP_ACTIVE[s] : "bg-white border border-slate-200 !text-slate-700 hover:bg-slate-50"
-              )}
-            >{s}</button>
-          ))}
-        </div>
-      </div>
+      <StudentsToolbar
+        month={month}
+        onShiftMonth={(d) => setMonth(shiftMonth(month, d))}
+        batches={batches}
+        batchFilter={batchFilter}
+        onBatchFilter={setBatchFilter}
+        query={query}
+        onQuery={setQuery}
+        statusFilter={statusFilter}
+        onStatusFilter={setStatusFilter}
+      />
 
       {/* Student cards */}
       <div className="grid gap-4 md:grid-cols-2" data-testid="student-list">
@@ -181,71 +145,32 @@ export const Students = () => {
         </button>
       )}
 
-      <StudentForm
-        open={formOpen}
-        onClose={() => setFormOpen(false)}
-        initial={editing}
+      <StudentModals
+        formOpen={formOpen}
+        editing={editing}
         batches={batches}
-        defaultBatchId={batchFilter !== "all" ? batchFilter : undefined}
-        onSave={async (data) => {
+        batchFilter={batchFilter}
+        onCloseForm={() => setFormOpen(false)}
+        onSaveStudent={async (data) => {
           if (editing) await editStudent(editing.id, data);
           else await addStudent(data);
         }}
-      />
-
-      {payFor && (
-        <PaymentModal
-          open={!!payFor}
-          onClose={() => setPayFor(null)}
-          student={payFor.s}
-          month={payFor.month}
-          paidThisMonth={payFor.paidThisMonth}
-          fee={payFor.fee}
-          onSave={confirmPayment}
-        />
-      )}
-
-      {historyFor && (
-        <PaymentHistoryModal
-          open={!!historyFor}
-          onClose={() => setHistoryFor(null)}
-          student={historyFor}
-          payments={payments}
-          onMarkPaid={(row) => setPayFor({ s: historyFor, fee: row.fee, paidThisMonth: row.paid, month: row.month })}
-        />
-      )}
-
-      {moveFor && (
-        <MoveStudentModal
-          open={!!moveFor}
-          onClose={() => setMoveFor(null)}
-          student={moveFor}
-          batches={batches}
-          onMove={moveStudent}
-        />
-      )}
-
-      <ConfirmDialog
-        open={!!toDelete}
-        onClose={() => setToDelete(null)}
-        title="Delete this student?"
-        description="This student and their associated payment records will be removed. This can be undone."
-        confirmLabel="Delete"
-        danger
-        onConfirm={async () => { await removeStudent(toDelete.id); }}
+        payFor={payFor}
+        onClosePay={() => setPayFor(null)}
+        onConfirmPayment={confirmPayment}
+        historyFor={historyFor}
+        payments={payments}
+        onCloseHistory={() => setHistoryFor(null)}
+        onHistoryMarkPaid={(row) => setPayFor({ s: historyFor, fee: row.fee, paidThisMonth: row.paid, month: row.month })}
+        moveFor={moveFor}
+        onCloseMove={() => setMoveFor(null)}
+        onMove={moveStudent}
+        toDelete={toDelete}
+        onCloseDelete={() => setToDelete(null)}
+        onDelete={async () => { await removeStudent(toDelete.id); }}
       />
     </div>
   );
 };
 
-const FilterChip = ({ active, onClick, label, testid }) => (
-  <button
-    data-testid={testid}
-    onClick={onClick}
-    className={cn(
-      "btn-press whitespace-nowrap px-4 h-10 rounded-full text-sm font-semibold",
-      active ? "bg-indigo-600 text-white" : "bg-white border border-slate-200 text-slate-700 hover:bg-slate-50"
-    )}
-  >{label}</button>
-);
 

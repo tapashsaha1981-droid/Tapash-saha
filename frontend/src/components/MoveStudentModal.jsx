@@ -20,7 +20,7 @@ export const MoveStudentModal = ({ open, onClose, student, batches, onMove }) =>
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="rounded-2xl">
+      <DialogContent className="rounded-2xl" aria-describedby={undefined}>
         <DialogHeader>
           <DialogTitle>Move {student?.name}</DialogTitle>
         </DialogHeader>

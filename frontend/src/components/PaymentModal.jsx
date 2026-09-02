@@ -5,6 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { monthLabel, inr } from "@/lib/calc";
+import { FeeSummary } from "@/components/FeeSummary";
 import { toast } from "sonner";
 import dayjs from "dayjs";
 
@@ -24,7 +25,7 @@ export const PaymentModal = ({ open, onClose, student, month, paidThisMonth, fee
       setDate(today());
       setSaving(false);
     }
-  }, [open, remaining]);
+  }, [open, remaining, setAmount, setNote, setDate, setSaving]);
 
   const submit = async () => {
     const amt = Number(amount);
@@ -49,29 +50,12 @@ export const PaymentModal = ({ open, onClose, student, month, paidThisMonth, fee
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="rounded-2xl">
+      <DialogContent className="rounded-2xl" aria-describedby={undefined}>
         <DialogHeader>
           <DialogTitle>Record Payment</DialogTitle>
         </DialogHeader>
         <div className="space-y-3">
-          <div className="rounded-xl bg-indigo-50 p-4">
-            <div className="font-bold text-slate-900">{student?.name}</div>
-            <div className="text-sm text-slate-600">{monthLabel(month)}</div>
-            <div className="grid grid-cols-3 gap-2 mt-3 text-center">
-              <div className="rounded-lg bg-white p-2">
-                <div className="text-[11px] text-slate-500">Fee</div>
-                <div className="font-bold">{inr(fee)}</div>
-              </div>
-              <div className="rounded-lg bg-white p-2">
-                <div className="text-[11px] text-slate-500">Paid</div>
-                <div className="font-bold text-emerald-600">{inr(paidThisMonth)}</div>
-              </div>
-              <div className="rounded-lg bg-white p-2">
-                <div className="text-[11px] text-slate-500">Remaining</div>
-                <div className="font-bold text-rose-600">{inr(remaining)}</div>
-              </div>
-            </div>
-          </div>
+          <FeeSummary student={student} month={month} fee={fee} paidThisMonth={paidThisMonth} remaining={remaining} />
           <div>
             <Label>Amount (₹)</Label>
             <Input data-testid="payment-amount-input" type="number" value={amount} onChange={(e) => setAmount(e.target.value)} />

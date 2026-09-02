@@ -33,7 +33,7 @@ export const BatchForm = ({ open, onClose, initial, onSave }) => {
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="rounded-2xl">
+      <DialogContent className="rounded-2xl" aria-describedby={undefined}>
         <DialogHeader>
           <DialogTitle>{initial ? "Edit Batch" : "Add Batch"}</DialogTitle>
         </DialogHeader>

@@ -1,9 +1,10 @@
 import React, { useMemo, useState } from "react";
 import { useData } from "@/lib/store";
 import { lifetimeOverdue, inr, currentMonth, monthLabel, indexPayments, openWhatsApp, paymentConfirmationMessage } from "@/lib/calc";
-import { Megaphone, Phone } from "lucide-react";
+import { Megaphone } from "lucide-react";
 import { PaymentHistoryModal } from "@/components/PaymentHistoryModal";
 import { PaymentModal } from "@/components/PaymentModal";
+import { OverdueTable } from "@/components/OverdueTable";
 import { toast } from "sonner";
 
 export const Overview = () => {
@@ -23,8 +24,8 @@ export const Overview = () => {
     }
   };
 
-  const paymentsIndex = useMemo(() => indexPayments(payments), [payments]);
-  const rows = useMemo(() => lifetimeOverdue(students, paymentsIndex, month).filter((r) => r.overdue > 0), [students, paymentsIndex, month]);
+  const paymentsIndex = useMemo(() => indexPayments(payments), [payments, indexPayments]);
+  const rows = useMemo(() => lifetimeOverdue(students, paymentsIndex, month).filter((r) => r.overdue > 0), [students, paymentsIndex, month, lifetimeOverdue]);
   const visibleRows = rows.slice(0, limit);
   const total = rows.reduce((s, r) => s + r.overdue, 0);
 
@@ -66,42 +67,13 @@ export const Overview = () => {
         </div>
       </div>
 
-      <div className="rounded-3xl bg-white soft-shadow overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left text-slate-500 bg-slate-50">
-                <th className="px-5 py-3 font-semibold">Student Name</th>
-                <th className="px-5 py-3 font-semibold">Phone</th>
-                <th className="px-5 py-3 font-semibold text-right">Overdue</th>
-              </tr>
-            </thead>
-            <tbody>
-              {visibleRows.map((r) => (
-                <tr key={r.student.id} className="border-t border-slate-100 hover:bg-slate-50 cursor-pointer" onClick={() => setHistoryFor(r.student)} data-testid={`overdue-row-${r.student.id}`}>
-                  <td className="px-5 py-3 font-semibold text-slate-900">{r.student.name}</td>
-                  <td className="px-5 py-3 text-slate-600">
-                    <a href={`tel:${r.student.phone}`} onClick={(e) => e.stopPropagation()} className="inline-flex items-center gap-1 hover:text-indigo-600"><Phone size={12} /> {r.student.phone || "—"}</a>
-                  </td>
-                  <td className="px-5 py-3 text-right font-extrabold text-rose-600">{inr(r.overdue)}</td>
-                </tr>
-              ))}
-              {visibleRows.length === 0 && (
-                <tr><td colSpan={3} className="text-center py-8 text-slate-500">Nothing overdue. Excellent!</td></tr>
-              )}
-            </tbody>
-          </table>
-          {rows.length > limit && (
-            <button
-              data-testid="show-more-overview"
-              onClick={() => setLimit((l) => l + 100)}
-              className="btn-press w-full py-3 font-semibold text-slate-600 hover:bg-slate-50 border-t border-slate-100"
-            >
-              Show more ({rows.length - limit} remaining)
-            </button>
-          )}
-        </div>
-      </div>
+      <OverdueTable
+        rows={rows}
+        visibleRows={visibleRows}
+        limit={limit}
+        onShowMore={() => setLimit((l) => l + 100)}
+        onRowClick={setHistoryFor}
+      />
 
       {historyFor && (
         <PaymentHistoryModal

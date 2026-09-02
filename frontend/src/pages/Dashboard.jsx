@@ -19,8 +19,8 @@ export const Dashboard = () => {
   const [mode, setMode] = useState("monthly");
   const { fileRef, importOpen, setImportOpen, exportJSON, onImportPick, doImport } = useBackup({ batches, students, payments, events, importAll });
 
-  const paymentsIndex = useMemo(() => indexPayments(payments), [payments]);
-  const stats = useMemo(() => dashboardStats(students, batches, paymentsIndex, month), [students, batches, paymentsIndex, month]);
+  const paymentsIndex = useMemo(() => indexPayments(payments), [payments, indexPayments]);
+  const stats = useMemo(() => dashboardStats(students, batches, paymentsIndex, month), [students, batches, paymentsIndex, month, dashboardStats]);
 
   const remindAllUnpaid = () => {
     const unpaid = students.filter((s) => {

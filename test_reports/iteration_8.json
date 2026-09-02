@@ -1,0 +1,39 @@
+{
+  "summary": "Iteration 8 verified the 2 undo-logic fixes + the 404/a11y changes on the live dataset (16/630/2094/0 events). ALL THREE CRITICAL UI UNDO FLOWS PASS: (1) Stale-id undo-after-redo on /api/batches with response interception: add=1 POST (id A), undo=1 DELETE targeting A (card gone), redo=1 POST creating NEW id B (exactly 1 card), undo again = EXACTLY 1 DELETE targeting B (status 200) and card count returned to baseline 16 -> liveId fix confirmed, no survivor/duplicate. (2) delete-batch undo id-preservation: API-seeded batch B + student S + payment P, deleted batch via UI confirm, clicked undo -> restored batch has ORIGINAL id, student has ORIGINAL id AND original batch_id, payment has ORIGINAL id AND original student_id; counts 17/631/2095; ZERO orphan payments and ZERO orphan students. (3) delete-student undo: student restored with same id and batch_id, payment restored with same id/student_id/month/amount, 0 orphans. Regression sweep clean: Dashboard (630 students / 16 batches), Students 60 -> 120 via show-more, Overview 100 rows, Calendar Sept 2026 35 cells, and BatchForm/StudentForm/MoveStudentModal/EventDialog open with ZERO Radix 'Missing Description' warnings and zero console errors/pageerrors. Backend: added /app/backend/tests/test_undo_fixes.py - DELETE unknown id returns 404 for batches/students/payments/events (4/4), id+created_at passthrough works for batch/student/payment, omitted id still auto-generates uuid, orphan/FK integrity check passes. Suite total: 44 passed / 1 skipped / 1 FAILED. The single failure exposes a NEW CRITICAL data-destroying regression introduced by adding optional id/created_at to BatchIn: PUT /api/batches/{id} still uses payload.model_dump() (no exclude_none) so it $sets id=None and created_at=None, wiping the batch's id. Reproduced end-to-end through the UI: editing a batch via the pencil icon + Save Batch leaves a doc {id: null, created_at: null} -> the batch disappears from React (keyed by id), all its students become orphans (batch_id points to a non-existent batch), and the batch can no longer be edited or deleted (DELETE returns 404). On the real dataset this would silently orphan up to 81 students per edited batch. All test artifacts (incl. the null-id docs my tests produced) were removed; dataset restored EXACTLY to 16 batches / 630 students / 2094 payments / 0 events / 0 orphans.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "PUT /api/batches/{batch_id}", "issue": "Uses payload.model_dump() on BatchIn which now carries optional id/created_at defaulting to None, so $set writes id=null and created_at=null and destroys the batch document identity. Batch vanishes from UI, its students are orphaned (batch_id dangling), and the batch becomes un-editable/un-deletable (DELETE -> 404). Also breaks undo of Edit batch. Fix: result = await db.batches.update_one({'id': batch_id}, {'$set': payload.model_dump(exclude_none=True, exclude={'id','created_at'})}) (or exclude_unset). Reproduced via UI edit and via tests/test_refactor_regression.py::test_batch_crud_lifecycle.", "priority": "CRITICAL"}
+    ],
+    "minor": [
+      {"endpoint": "POST /api/payments", "issue": "PaymentIn accepts optional id but NOT created_at, unlike BatchIn/StudentIn. Payment model has no created_at so undo currently restores fine, but the asymmetry is a trap if created_at is added later."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "Edit batch (Batches page -> pencil -> Save Batch)", "issue": "After save the batch card disappears from the grid because the backend nulled the id (see backend critical). Users lose the batch and its student linkage silently - no error toast shown.", "affected_selectors": ["[data-testid=\"edit-batch-{id}\"]", "[data-testid=\"batch-save\"]", "[data-testid=\"batch-card-{id}\"]"]}
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_undo_fixes.py",
+    "/app/test_reports/pytest/iteration_8.xml"
+  ],
+  "action_items": [
+    "CRITICAL: stop PUT /api/batches from writing null id/created_at - use payload.model_dump(exclude_none=True, exclude={'id','created_at'}) (or a dedicated BatchUpdate model). Any batch already edited in production would be corrupted; consider a guard/repair check for docs with id:null.",
+    "Consider adding created_at to PaymentIn for symmetry with BatchIn/StudentIn.",
+    "Optional: surface an error toast when a save/PUT returns a doc whose id no longer matches, so silent data corruption is visible."
+  ],
+  "critical_code_review_comments": [
+    "server.py: reusing the create-input model (BatchIn) for PUT is the root cause - optional None fields get $set. Update endpoints must use exclude_none/exclude_unset or a separate *Update model (update_student/update_settings already do this correctly).",
+    "operations.js: removeBatch/removeStudent restore children with sequential awaits in a loop; for a batch with 81 students + payments this is 100+ serial requests on undo. Consider Promise.all batches or a bulk restore endpoint.",
+    "operations.js: addEvent/removeEvent are not recorded in the undo stack while every other mutation is - inconsistent UX."
+  ],
+  "updated_files": ["/app/backend/tests/test_undo_fixes.py"],
+  "success_rate": {"backend": "97% (44/45 non-destructive tests; 1 critical failure on batch PUT)", "frontend": "100% of the 3 critical undo flows + full regression sweep passed"},
+  "seed_data_creation": "All temporary: 3 test batches (TEST_QA_STALEID via UI, TEST_QA_ORPHAN, TEST_QA_EDIT), 2 test students, 2 test payments, plus pytest TEST_QA fixtures. All deleted; null-id docs produced by the PUT bug were removed directly from MongoDB. Verified final state 16/630/2094/0 events, 0 orphans.",
+  "should_call_test_agent_after_fix": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Both undo bugs from iteration 7 are FIXED and verified at UI level (stale-id after redo; id-preserving restore of batch/student/payment with no orphans). The StrictMode single-fire behaviour still holds (1 POST / 1 DELETE / 1 POST). NEW critical bug: PUT /api/batches nulls id+created_at -> reproduce with tests/test_refactor_regression.py::test_batch_crud_lifecycle or by editing a batch in the UI. After the fix, re-run that test, re-test UI Edit batch + undo of Edit batch, and check MongoDB for any batches with id:null (db.batches.count_documents({'id': None})). Baseline to restore: 16/630/2094/0 events. Never run test_import_export.py or POST /api/reset|/api/seed.",
+  "rca_of_the_issue": "Adding `id: Optional[str] = None` and `created_at: Optional[str] = None` to BatchIn (to enable id passthrough on create) also changed the payload shape consumed by PUT /api/batches, which still calls payload.model_dump() without exclude_none. Mongo therefore $sets id=None/created_at=None on every batch edit, destroying the document key. create_batch was correctly updated to exclude_none but update_batch was not. update_student escapes this because it uses a separate StudentUpdate model with exclude_none."
+}

@@ -1,19 +1,21 @@
+import { useCallback, useMemo } from "react";
 import { api } from "./api";
 
 // CRUD operations wrapped with undo/redo recording.
 export const useOperations = ({ batches, students, payments, refresh, record, clearStacks }) => {
-  const addBatch = async (data) => {
+  const addBatch = useCallback(async (data) => {
     const created = await api.createBatch(data);
+    const liveId = { id: created.id };
     record({
       label: "Add batch",
-      undo: async () => { await api.deleteBatch(created.id); },
-      redo: async () => { await api.createBatch({ ...data }); },
+      undo: async () => { await api.deleteBatch(liveId.id); },
+      redo: async () => { const recreated = await api.createBatch({ ...data }); liveId.id = recreated.id; },
     });
     await refresh();
     return created;
-  };
+  }, [record, refresh]);
 
-  const editBatch = async (id, data) => {
+  const editBatch = useCallback(async (id, data) => {
     const before = batches.find((b) => b.id === id);
     await api.updateBatch(id, data);
     record({
@@ -22,9 +24,9 @@ export const useOperations = ({ batches, students, payments, refresh, record, cl
       redo: async () => { await api.updateBatch(id, data); },
     });
     await refresh();
-  };
+  }, [batches, record, refresh]);
 
-  const removeBatch = async (id) => {
+  const removeBatch = useCallback(async (id) => {
     const before = batches.find((b) => b.id === id);
     const studentsInBatch = students.filter((s) => s.batch_id === id);
     const paymentsInBatch = payments.filter((p) => studentsInBatch.some((s) => s.id === p.student_id));
@@ -32,27 +34,28 @@ export const useOperations = ({ batches, students, payments, refresh, record, cl
     record({
       label: "Delete batch",
       undo: async () => {
-        await api.createBatch({ name: before.name, subject: before.subject, class_time: before.class_time, monthly_fee: before.monthly_fee });
+        await api.createBatch(before);
         for (const s of studentsInBatch) await api.createStudent(s);
         for (const p of paymentsInBatch) await api.createPayment(p);
       },
       redo: async () => { await api.deleteBatch(id); },
     });
     await refresh();
-  };
+  }, [batches, students, payments, record, refresh]);
 
-  const addStudent = async (data) => {
+  const addStudent = useCallback(async (data) => {
     const created = await api.createStudent(data);
+    const liveId = { id: created.id };
     record({
       label: "Add student",
-      undo: async () => { await api.deleteStudent(created.id); },
-      redo: async () => { await api.createStudent(data); },
+      undo: async () => { await api.deleteStudent(liveId.id); },
+      redo: async () => { const recreated = await api.createStudent(data); liveId.id = recreated.id; },
     });
     await refresh();
     return created;
-  };
+  }, [record, refresh]);
 
-  const editStudent = async (id, data) => {
+  const editStudent = useCallback(async (id, data) => {
     const before = students.find((s) => s.id === id);
     await api.updateStudent(id, data);
     record({
@@ -61,9 +64,9 @@ export const useOperations = ({ batches, students, payments, refresh, record, cl
       redo: async () => { await api.updateStudent(id, data); },
     });
     await refresh();
-  };
+  }, [students, record, refresh]);
 
-  const removeStudent = async (id) => {
+  const removeStudent = useCallback(async (id) => {
     const before = students.find((s) => s.id === id);
     const beforePayments = payments.filter((p) => p.student_id === id);
     await api.deleteStudent(id);
@@ -76,9 +79,9 @@ export const useOperations = ({ batches, students, payments, refresh, record, cl
       redo: async () => { await api.deleteStudent(id); },
     });
     await refresh();
-  };
+  }, [students, payments, record, refresh]);
 
-  const moveStudent = async (id, newBatchId) => {
+  const moveStudent = useCallback(async (id, newBatchId) => {
     const before = students.find((s) => s.id === id);
     await api.moveStudent(id, newBatchId);
     record({
@@ -87,42 +90,43 @@ export const useOperations = ({ batches, students, payments, refresh, record, cl
       redo: async () => { await api.moveStudent(id, newBatchId); },
     });
     await refresh();
-  };
+  }, [students, record, refresh]);
 
-  const addPayment = async (data) => {
+  const addPayment = useCallback(async (data) => {
     const created = await api.createPayment(data);
+    const liveId = { id: created.id };
     record({
       label: "Payment",
-      undo: async () => { await api.deletePayment(created.id); },
-      redo: async () => { await api.createPayment(data); },
+      undo: async () => { await api.deletePayment(liveId.id); },
+      redo: async () => { const recreated = await api.createPayment(data); liveId.id = recreated.id; },
     });
     await refresh();
     return created;
-  };
+  }, [record, refresh]);
 
-  const addEvent = async (data) => {
+  const addEvent = useCallback(async (data) => {
     const created = await api.createEvent(data);
     await refresh();
     return created;
-  };
+  }, [refresh]);
 
-  const removeEvent = async (id) => {
+  const removeEvent = useCallback(async (id) => {
     await api.deleteEvent(id);
     await refresh();
-  };
+  }, [refresh]);
 
-  const importAll = async (data) => {
+  const importAll = useCallback(async (data) => {
     const res = await api.importAll(data);
     clearStacks();
     await refresh();
     return res;
-  };
+  }, [clearStacks, refresh]);
 
-  return {
+  return useMemo(() => ({
     addBatch, editBatch, removeBatch,
     addStudent, editStudent, removeStudent, moveStudent,
     addPayment,
     addEvent, removeEvent,
     importAll,
-  };
+  }), [addBatch, editBatch, removeBatch, addStudent, editStudent, removeStudent, moveStudent, addPayment, addEvent, removeEvent, importAll]);
 };

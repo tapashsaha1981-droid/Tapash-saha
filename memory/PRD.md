@@ -41,6 +41,12 @@ Single tutor persona; iPad landscape primary; mobile & desktop supported.
 - Verified by testing_agent iteration 5: backend 21/22, frontend 100% (incl. stubbed wa.me link capture, double-click guard, no-phone toast, reload persistence)
 - Cleanup: removed 19 TEST activity entries + duplicate "Diya majumdar" record from test rounds
 
+## Code Quality Round 2 (2026-09)
+- Hook deps completed across Students/Overview/Dashboard/StudentForm/SettingsCards/PaymentModal/store; server.py `is not None` → `model_dump(exclude_none=True)`; console statements dev-gated (store.js, craco.config.js)
+- Splits: store.js → +useStacks.js with useMemo context value; operations.js all useCallback/useMemo; Students.jsx → StudentsToolbar + StudentModals; Overview.jsx → OverdueTable; CalendarPage → CalendarHeader; PaymentModal → FeeSummary; server.py import_all → _replace_collection helper
+- Left as-is (with reason): test-file complexity (test scaffolding, suites passing), operations.js kept as one cohesive hook file (11 related ops)
+- Iteration 6-9 hardening loop (2026-09): fixed StrictMode undo/redo double-fire (side effects moved out of setState updaters in useStacks.js); fixed stale-id undo-after-redo (liveId ref in addBatch/addStudent/addPayment); fixed orphaned children on delete-undo (id/created_at passthrough on create endpoints, restore with original ids); fixed PUT /api/batches null-id corruption (exclude_none + exclude id/created_at); delete endpoints return 404 for unknown ids; partial PUTs hardened with exclude_unset; created_at backfilled on 16 imported batches; aria-describedby added to all dialogs. Verified across iterations 7-9 (final: 49 backend tests passed, frontend 100%, 0 orphans, baseline 16/630/2094).
+
 ## Deferred / Backlog
 - Persistent undo/redo across sessions
 - Recurring class schedule generation on calendar

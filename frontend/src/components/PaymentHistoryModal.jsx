@@ -30,7 +30,7 @@ export const PaymentHistoryModal = ({ open, onClose, student, payments, onMarkPa
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="rounded-2xl max-h-[85vh] overflow-y-auto">
+      <DialogContent className="rounded-2xl max-h-[85vh] overflow-y-auto" aria-describedby={undefined}>
         <DialogHeader>
           <DialogTitle>Payment History — {student.name}</DialogTitle>
         </DialogHeader>

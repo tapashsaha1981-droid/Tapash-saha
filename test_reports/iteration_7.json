@@ -1,0 +1,59 @@
+{
+  "summary": "Iteration 7 = targeted verification of the useStacks.js undo/redo double-fire fix + regression sweep, using network interception on the live dataset. CRITICAL FIX CONFIRMED FIXED: (a) add batch via UI = 1 POST /api/batches, undo = EXACTLY 1 DELETE (card disappears), redo = EXACTLY 1 POST and exactly ONE card reappears (no duplicates); (b) destructive path - API-seeded TEST_QA batch + 1 student + 1 payment, deleted batch via UI confirm dialog then undo = EXACTLY 1 POST /api/batches + 1 POST /api/students + 1 POST /api/payments (counts went 16/630/2094 -> 17/631/2095, no duplicates); (c) rapid double-click on undo-btn: first click fires 1 DELETE, second click is a graceful no-op (button becomes disabled, Playwright click times out) - no duplicate deletes, stacks intact; (d) redo stack clears on new action - after add A, undo, add B the redo-btn is disabled. Regression: payment undo on a temp student = 1 POST on Mark Paid, EXACTLY 1 DELETE /api/payments on undo (card flips Paid -> Unpaid), EXACTLY 1 POST on redo (flips back to Paid); PaymentModal + PaymentHistoryModal no longer emit the Radix aria-describedby warning; Dashboard (630 students / 16 batches / Rs14,700 collected / Rs5,36,100 pending, 18 paid / 0 partial / 612 unpaid), Students (60 cards -> 120 via show-more), Overview (101 rows + show-more), Calendar (Sept 2026, 35 cells) all render with ZERO console errors/warnings. Backend: 4 non-destructive pytest suites = 38 passed / 1 skipped; GET /api/batches (16), /api/students (630), /api/payments (2094), /api/activities (50) all 200. ALL test entities deleted - dataset restored EXACTLY to 16 / 630 / 2094 with 0 orphan payments. Two PRE-EXISTING undo-correctness bugs (not the double-fire) were found and are reported below.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "DELETE /api/batches/{id}", "issue": "Deleting a non-existent id returns 200 instead of 404 (verified with id 'does-not-exist'). This silently masks the stale-id undo bug below."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {
+        "flow": "Undo after Redo (operations.js addBatch/addStudent/addPayment)",
+        "issue": "PRE-EXISTING (not the StrictMode double-fire): redo re-creates the entity via api.createBatch({...data}) which mints a NEW id, but the stack entry's undo still targets the ORIGINAL created.id. So add -> undo -> redo -> undo issues a DELETE for a dead id (backend answers 200) and the redone batch stays in the DB forever. Reproduced: 'TEST_QA NET BATCH' survived a second undo (card count stayed 17); I removed it via API. Fix: have redo capture the newly created id (e.g. re-record the entry / mutate created.id after redo) or make the backend restore with the same id.",
+        "affected_selectors": ["[data-testid=\"undo-btn\"]", "[data-testid=\"redo-btn\"]"]
+      },
+      {
+        "flow": "Undo of Delete Batch / Delete Student (operations.js removeBatch/removeStudent)",
+        "issue": "PRE-EXISTING data-integrity bug: undo of a batch delete does api.createBatch(...) (new batch id) and then createStudent(s) with the student's OLD batch_id, and createStudent also mints a NEW student id while the payments are re-created with the OLD student_id. Verified on real data: restored batch id c3357c0a..., restored student still carried batch_id fa89d780... (dead batch) and the restored payment referenced student ccbe9025... (dead student) -> orphan payment left in the collection (I cleaned it up manually). On the live 630-student data, undoing a batch deletion would silently orphan every student and payment in that batch. Fix: preserve ids on restore (idempotent upsert with supplied id) or remap old->new ids before re-creating children.",
+        "affected_selectors": ["[data-testid=\"undo-btn\"]", "[data-testid^=\"delete-batch-\"]"]
+      }
+    ],
+    "design_issues": [
+      {
+        "screen": "Dialogs still missing aria-describedby (a11y warning)",
+        "issues": [
+          "PaymentModal + PaymentHistoryModal are FIXED, but BatchForm.jsx:36, StudentForm.jsx:56, MoveStudentModal.jsx:23 and calendar/EventDialog.jsx:38 DialogContent still lack aria-describedby={undefined} - the Radix 'Missing Description or aria-describedby' warning still fires (observed twice on the Batches page).",
+          "index.css body pastel gradient still covered by Layout root bg-[#F5F6FA] (carried over from iteration 5, unverified this run)."
+        ]
+      }
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_refactor_regression.py",
+    "/app/backend/tests/test_core_api.py",
+    "/app/backend/tests/test_settings_activities.py",
+    "/app/backend/tests/test_payment_backdate.py",
+    "/app/test_reports/pytest/iteration_7.xml"
+  ],
+  "action_items": [
+    "Fix stale-id undo after redo in operations.js (add* entries must re-point undo at the id returned by the redo POST).",
+    "Fix orphaned children on undo of delete (removeBatch/removeStudent) - preserve/remap batch_id and student_id so restored students/payments link to the restored parents.",
+    "Add aria-describedby={undefined} to DialogContent in BatchForm, StudentForm, MoveStudentModal, calendar/EventDialog.",
+    "Optional: make DELETE /api/{collection}/{id} return 404 for unknown ids so silent no-op undos surface."
+  ],
+  "critical_code_review_comments": [
+    "useStacks.js doUndo/doRedo are now correct: entry is read from state, both stacks updated with pure updaters, side effect awaited outside the updater, refresh in finally - StrictMode double-invocation no longer duplicates network calls (verified by interception).",
+    "doUndo/doRedo depend on the whole undoStack/redoStack arrays, so they are re-created on every stack change; harmless but Layout buttons re-render - consider a ref-based stack if churn matters.",
+    "operations.js undo closures capture ids at record time; any operation whose redo re-creates a row must refresh those captured ids, otherwise undo/redo beyond one cycle is incorrect (see integration_issues)."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100%", "frontend": "100% for the 6 requested fix/regression checks (2 pre-existing undo-correctness bugs found outside the fix scope)"},
+  "seed_data_creation": "Temporary only: TEST_QA NET BATCH, TEST_QA RAPID, TEST_QA CLEARCHK, TEST_QA DESTRUCT (+TEST_QA DKid student +1 payment), TEST_QA PayUndo student (+1 payment). ALL deleted via API; final GET counts verified = 16 batches / 630 students / 2094 payments, 0 orphan payments. No /api/reset or /api/seed was ever called; test_import_export.py was NOT run.",
+  "should_call_test_agent_after_fix": true,
+  "should_main_agent_self_test": false,
+  "test_credentials": "none required (no auth in app)",
+  "context_for_next_testing_agent": "The StrictMode undo/redo double-fire is fixed - verified with request interception on /api/batches and /api/payments (1 POST / 1 DELETE / 1 POST). Remaining undo bugs are logic bugs in /app/frontend/src/lib/operations.js, NOT in useStacks.js: (1) add->undo->redo->undo leaves the entity because undo deletes the pre-redo id; (2) undo of delete-batch/delete-student re-creates parents with new ids while children keep old foreign keys -> orphans. When retesting, always check for orphan payments with: payments whose student_id is not in the students list. Baseline to restore: 16 / 630 / 2094.",
+  "rca_of_the_issue": "Original bug: entry.undo()/entry.redo() were invoked inside setState updater callbacks, which React.StrictMode double-invokes, firing every API call twice. Current code reads the top entry from state, pops/pushes with pure updaters, then awaits the side effect outside the updater - measured request counts are now exactly 1 per undo/redo across add, delete-cascade and payment flows."
+}

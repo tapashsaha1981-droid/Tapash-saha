@@ -1,0 +1,51 @@
+{
+  "summary": "Iteration 6 = pure regression testing of the code-quality refactor (useStacks extraction, useMemo/useCallback additions, component splits, server.py exclude_none + _replace_collection). Backend: created a new non-destructive suite /app/backend/tests/test_refactor_regression.py; full run of 4 suites = 38 passed, 1 skipped (100% pass). Verified PUT /api/settings partial update (org_name persists, other keys untouched, restored afterwards), PUT /api/students/{id} partial update (only phone changed, name/fee/batch_id unchanged, verified by GET), empty-payload no-ops, 404 on unknown student, GET /api/export contains batches/students/payments/events/activities/settings with no mongo _id, cumulative-total 'Marked paid' activity wording, batch/event CRUD lifecycles (all test data deleted). Frontend: Dashboard boots past loading with 630 students / 16 batches / Rs14,700 collected / Rs5,36,100 pending, PaymentOverview 18 paid / 0 partial / 612 unpaid, check-monthly-overview + settings cards + Recent Activity all render. Students page: 60 cards -> 120 via show-more, month prev/next, batch chips, search, all 4 status chips, and every card action (Edit / Mark Paid / Remind / Move / History / Delete) open and function through the new StudentModals. Mark Paid on a temp student wrote exactly 1 POST /api/payments, flipped card to Paid, logged 'Marked paid: TEST_QA PayFlow', and WhatsApp deep link (wa.me/91...) was captured via stubbed window.open. Payment History modal lists 3 rows with history-mark-paid-YYYY-MM buttons that open PaymentModal. Overview: 100 overdue rows -> 200 via show-more, total-overdue Rs9,49,500, row click opens history, Remind All Overdue present. Calendar: CalendarHeader (cal-prev/next/today) + legend + 35 day cells, EventDialog add + delete works. Batches: add/edit/delete lifecycle works. FOUND ONE CRITICAL REGRESSION: undo/redo now executes its API side-effect TWICE (see backend_issues/frontend_issues + RCA).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {
+        "flow": "Undo / Redo (useStacks.js)",
+        "issue": "CRITICAL REGRESSION introduced by the useStacks extraction: doUndo/doRedo call entry.undo()/entry.redo() INSIDE the setState updater function. Under React.StrictMode (enabled in src/index.js) React double-invokes updaters, so every undo/redo fires its API calls twice. Measured via network interception: add batch = 1 POST; click undo-btn = 2x DELETE /api/batches; click redo-btn = 2x POST /api/batches -> batch count went 16 -> 17 -> 16 -> 18 with TWO duplicate 'TEST_QA NET BATCH' cards. Also reproduced for the destructive-undo path: deleting a batch then clicking undo re-created the batch TWICE and duplicated its student (2x 'TEST_QA DupKid' rows) - this is a real DATA-DUPLICATION risk on the live 630-student dataset because removeBatch/removeStudent undo loops over createStudent/createPayment. Undo of an add/payment happens to look correct only because DELETE is idempotent (still 2 DELETE requests observed).",
+        "affected_selectors": ["[data-testid=\"undo-btn\"]", "[data-testid=\"redo-btn\"]"]
+      }
+    ],
+    "design_issues": [
+      {"screen": "Calendar day panel", "issues": ["The per-event remove (X) button had no data-testid/aria-label - ADDED by testing agent as data-testid=delete-event-{id} + aria-label='Delete event' (only change made to app code)."]},
+      {"screen": "Still open from iteration 5 (not re-verified this run)", "issues": ["index.css body pastel gradient is covered by Layout root bg-[#F5F6FA]", "Radix 'Missing Description or aria-describedby' warning on PaymentModal/PaymentHistoryModal"]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_refactor_regression.py",
+    "/app/backend/tests/test_core_api.py",
+    "/app/backend/tests/test_settings_activities.py",
+    "/app/backend/tests/test_payment_backdate.py",
+    "/app/test_reports/pytest/iter6_all.xml"
+  ],
+  "action_items": [
+    "HIGH: Fix /app/frontend/src/lib/useStacks.js - move the side effect out of the setState updater. e.g. const doUndo = useCallback(async () => { const entry = undoStack[undoStack.length-1]; if (!entry) return; setUndoStack(p => p.slice(0,-1)); setRedoStack(p => [...p, entry].slice(-MAX_STACK)); await entry.undo(); await refresh(); }, [undoStack, refresh]);  (same shape for doRedo). Updaters passed to setState MUST be pure - StrictMode double-invokes them.",
+    "After the fix, re-verify: add batch -> undo (exactly 1 DELETE) -> redo (exactly 1 POST, exactly 1 card); and delete-batch -> undo restores exactly one batch + one copy of each student/payment."
+  ],
+  "critical_code_review_comments": [
+    "useStacks.js doUndo/doRedo perform impure side effects (network calls) inside setUndoStack/setRedoStack updaters -> double execution under StrictMode. This is the single defect of this refactor and it can duplicate real data.",
+    "store.js refresh/retryLoad dependency arrays list the module-level `api` singleton and useState setters (stable by contract) - harmless but noise; same for Students.jsx useMemo deps listing imported pure helpers (filterStudents/indexPayments/studentMonthStats/paysFor). Consider trimming so the arrays document real reactive inputs.",
+    "server.py update_settings/update_student use model_dump(exclude_none=True): correct for partial updates, but a field can no longer be explicitly cleared to null. Acceptable today (no nullable settings) - if a nullable field is added, switch to exclude_unset=True.",
+    "operations.js addEvent/removeEvent are the only ops NOT pushed onto the undo stack (calendar events can't be undone) - intentional? Worth confirming.",
+    "Pre-existing eslint errors remain in shadcn vendor files only: components/ui/calendar.jsx (no-unstable-nested-components x2), components/ui/command.jsx (no-unknown-property). Not introduced by this refactor."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_refactor_regression.py (new, non-destructive)",
+    "/app/backend/tests/test_settings_activities.py (relaxed order-strict msgs[0] assertions that were flaky under parallel workers; corrected stale TEST_STU_ACT/TEST_BATCH_ACT names and the now-obsolete 'logged as partial' expectation in the top-up test)",
+    "/app/frontend/src/pages/CalendarPage.jsx (added data-testid=delete-event-{id} + aria-label to the event remove button)"
+  ],
+  "success_rate": {"backend": "100% (38 passed, 1 skipped)", "frontend": "92% - all pages/flows pass except undo/redo double-execution"},
+  "seed_data_creation": "All temporary data created via API/UI was deleted. Final verified state: 16 batches, 630 students, 2094 payments, 0 events, 0 orphan payments, settings restored to org_name='TAPASH SIR', auto_advance_day=1. Temp artefacts used and removed: batches 'TEST_QA UNDO BATCH', 'TEST_QA NET BATCH', 'TEST_QA DUP DEMO' (incl. StrictMode duplicates), students 'TEST_QA DupKid' x2, 'TEST_QA PayFlow', 'TEST_Refactor QA', 'TEST_Cumulative QA', calendar event 'TEST_QA Calendar Event'. No real student's month was paid; the one payment made was on the temp student and reverted via undo. POST /api/reset and /api/seed were never called; test_import_export.py was never run.",
+  "should_call_test_agent_after_fix": true,
+  "should_main_agent_self_test": false,
+  "test_credentials": "none required (no auth in app); /app/memory/test_credentials.md not needed",
+  "context_for_next_testing_agent": "Env month September 2026. Real data: 16 batches / 630 students / 2094 payments - NEVER call POST /api/reset or /api/seed, never run test_import_export.py, always delete anything you create. Use the new non-destructive suite /app/backend/tests/test_refactor_regression.py. Always stub window.open via page.add_init_script before clicking Remind/payment-save. To reproduce the undo/redo double-fire: intercept requests on /api/batches, add a batch, then click undo-btn (expect 1 DELETE, currently 2) and redo-btn (expect 1 POST, currently 2). Calendar event delete button now has data-testid=delete-event-{id}.",
+  "rca_of_the_issue": "Root cause: /app/frontend/src/lib/useStacks.js performs network side effects inside React state updater callbacks (entry.undo()/entry.redo() are invoked within setUndoStack/setRedoStack updaters). src/index.js wraps the app in React.StrictMode, and React 18 intentionally double-invokes state updater functions to surface impurity, so each undo/redo issues its API call twice. Reproduction: /batches -> add-batch-btn -> save (1 POST) -> undo-btn (2 DELETE) -> redo-btn (2 POST, 2 duplicate cards). Impact: undo of 'Delete batch'/'Delete student' re-creates the batch/student and all its payments twice, duplicating real records; redo of add/payment duplicates records. Mitigation: read the top stack entry from state, update both stacks with pure updaters, then await the side effect outside the updater."
+}

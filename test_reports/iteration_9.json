@@ -1,0 +1,38 @@
+{
+  "summary": "Iteration 9 verified the PUT /api/batches null-id corruption fix. Full non-destructive pytest suite (test_core_api, test_settings_activities, test_payment_backdate, test_refactor_regression, test_undo_fixes) = 45 passed / 1 skipped, including the previously failing test_refactor_regression.py::test_batch_crud_lifecycle which now PASSES. Added new suite tests/test_batch_put_nullid.py (5 tests) covering full-object edit, explicit id=null/created_at=null payload, student partial edit, and payment created_at passthrough/autogen; combined run = 49 passed / 1 skipped / 1 xfailed. UI verified end-to-end: created TEST batch -> pencil edit -> card stays visible with new name, id and created_at unchanged, undo reverts name (id intact), redo re-applies, UI delete removes it; student create -> edit (name only) -> other fields (phone/fee/batch/join_month/created_at) unchanged -> undo reverts. Quick sweep: Dashboard shows 630 students / 16 batches / September 2026, Students 60 cards then 120 after show-more, Overview and Calendar render, ZERO console errors. Final Mongo integrity: 16 batches / 630 students / 2094 payments / 0 events, 0 null-or-missing ids anywhere, 0 orphan students, 0 orphan payments, 0 leftover TEST_ entities.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "PUT /api/batches/{id}", "issue": "Partial edits clobber omitted optional fields with BatchIn defaults (subject='', class_time='', monthly_fee=0) because exclude_none cannot distinguish 'unset' from default. Sending only {name, monthly_fee} wiped subject/class_time. No user impact today (UI always sends the full batch object), but any future partial-PUT client will lose data. Recommend model_dump(exclude_unset=True, exclude_none=True, exclude={'id','created_at'}). Documented as xfail in tests/test_batch_put_nullid.py::test_batch_partial_edit_single_field."},
+      {"endpoint": "GET /api/batches", "issue": "All 16 real (imported) batches have no created_at field at all (pre-existing from import, NOT corruption - value is missing, not null). Harmless: frontend never reads batch.created_at and no endpoint sorts batches by it. Optional cleanup/backfill."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_batch_put_nullid.py",
+    "/app/test_reports/pytest/iteration9.xml",
+    "/app/scripts/integrity_check.py"
+  ],
+  "action_items": [
+    "OPTIONAL (minor): switch update_batch to model_dump(exclude_unset=True, exclude_none=True, exclude={'id','created_at'}) so partial PUTs don't reset subject/class_time/monthly_fee to defaults; same consideration for update_student.",
+    "OPTIONAL: backfill created_at on the 16 imported batches (currently field absent)."
+  ],
+  "critical_code_review_comments": [
+    "update_batch fix is correct and confirmed: exclude_none=True + exclude={'id','created_at'} prevents the null-id destruction even when the client explicitly posts id=null/created_at=null.",
+    "exclude_none is a fragile guard for PATCH-like semantics on non-None defaults; prefer exclude_unset for update payloads."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_batch_put_nullid.py",
+    "/app/scripts/integrity_check.py"
+  ],
+  "success_rate": {"backend": "100% (49 passed, 1 skipped, 1 documented xfail of a minor partial-update defect)", "frontend": "100% of tested flows"},
+  "seed_data_creation": "None persisted. Temporary entities TEST_UI_BATCH_9, TEST_UI_STU_9, TEST_UI_STU_10 and pytest TEST_B_*/TEST_S_* + 2 payments were all created and deleted; final DB counts match the 16/630/2094/0 baseline exactly.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Critical batch-PUT null-id regression is FIXED and verified at both API and UI level. Undo/redo (stale-id + id-preserving restore) still working. Only remaining known items are the two minor issues above (partial-PUT default clobbering; missing created_at on imported batches). Test suites: 6 files in /app/backend/tests (never run test_import_export.py - destructive). Student card action testids are 'edit-{id}', 'delete-{id}', 'mark-paid-{id}' (NOT 'edit-student-{id}'). Use /app/scripts/integrity_check.py for the Mongo baseline check.",
+  "rca_of_the_issue": "Original bug: BatchIn gained optional id/created_at, and update_batch used model_dump() without exclusion, so PUT $set id=null/created_at=null, making the doc unreachable by {'id': batch_id}. Fix (exclude_none=True, exclude={'id','created_at'}) verified: after an edit the doc retains its original id and created_at, remains in GET /api/batches, and DELETE still resolves it (200)."
+}

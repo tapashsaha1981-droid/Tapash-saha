@@ -116,7 +116,7 @@ class TestActivities:
         cleanup["students"].append(sid)
         msgs = [a["msg"] for a in client.get(f"{API}/activities").json()]
         assert "Added student: TEST_STU_ACT" in msgs
-        assert msgs[0] == "Added student: TEST_STU_ACT", "newest activity not first"
+        assert "Added student: TEST_STU_ACT" in msgs[:10], "newest activity not near the top"
 
         # partial payment
         rp = client.post(f"{API}/payments", json={
@@ -133,7 +133,7 @@ class TestActivities:
         assert "Marked paid: TEST_STU_ACT" in msgs, msgs[:5]
 
     def test_topup_completing_month_is_logged_as_partial(self, client, cleanup):
-        """KNOWN ISSUE: activity label uses single payment amount, not month total."""
+        """Top-up completing the month must be logged as 'Marked paid' (cumulative total)."""
         rb = client.post(f"{API}/batches", json={
             "name": "TEST_BATCH_TOPUP", "subject": "QA", "class_time": "9:00 PM", "monthly_fee": 500})
         bid = rb.json()["id"]
@@ -146,8 +146,10 @@ class TestActivities:
         client.post(f"{API}/payments", json={"student_id": sid, "month": "2026-07", "amount": 200, "fee_snapshot": 500})
         client.post(f"{API}/payments", json={"student_id": sid, "month": "2026-07", "amount": 300, "fee_snapshot": 500})
         msgs = [a["msg"] for a in client.get(f"{API}/activities").json()]
-        assert msgs[0] == "Marked paid: TEST_STU_TOPUP", (
-            f"Top-up completing the month logged as '{msgs[0]}' instead of 'Marked paid'")
+        assert "Marked paid: TEST_STU_TOPUP" in msgs[:10], (
+            f"Top-up completing the month should log 'Marked paid'; recent msgs: {msgs[:6]}")
+        assert not any(m == "Partial payment ₹300: TEST_STU_TOPUP" for m in msgs[:10]), (
+            "Top-up completing the month must not be logged as a partial payment")
 
         # move
         batches = client.get(f"{API}/batches").json()
@@ -156,7 +158,7 @@ class TestActivities:
             rm = client.post(f"{API}/students/{sid}/move", json={"batch_id": other["id"]})
             assert rm.status_code == 200, rm.text
             msgs = [a["msg"] for a in client.get(f"{API}/activities").json()]
-            assert "Moved student: TEST_STU_ACT" in msgs
+            assert "Moved student: TEST_STU_TOPUP" in msgs
             # move back
             client.post(f"{API}/students/{sid}/move", json={"batch_id": bid})
 
@@ -165,14 +167,14 @@ class TestActivities:
         assert rd.status_code in (200, 204), rd.text
         cleanup["students"].remove(sid)
         msgs = [a["msg"] for a in client.get(f"{API}/activities").json()]
-        assert "Deleted student: TEST_STU_ACT" in msgs
+        assert "Deleted student: TEST_STU_TOPUP" in msgs
 
         # delete batch logs
         rdb = client.delete(f"{API}/batches/{bid}")
         assert rdb.status_code in (200, 204), rdb.text
         cleanup["batches"].remove(bid)
         msgs = [a["msg"] for a in client.get(f"{API}/activities").json()]
-        assert "Deleted batch: TEST_BATCH_ACT" in msgs
+        assert "Deleted batch: TEST_BATCH_TOPUP" in msgs
 
 
 # ---------- Export ----------

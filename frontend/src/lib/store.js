@@ -1,6 +1,7 @@
-import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
+import React, { createContext, useContext, useEffect, useState, useCallback, useMemo } from "react";
 import { api } from "./api";
 import { useOperations } from "./operations";
+import { useStacks } from "./useStacks";
 
 const DataCtx = createContext(null);
 
@@ -13,10 +14,6 @@ export const DataProvider = ({ children }) => {
   const [activities, setActivities] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
-
-  // undo/redo stacks: entries = { undo: async ()=>{}, redo: async ()=>{}, label }
-  const [undoStack, setUndoStack] = useState([]);
-  const [redoStack, setRedoStack] = useState([]);
 
   const refresh = useCallback(async () => {
     const [b, s, p, e, st, ac] = await Promise.all([
@@ -33,7 +30,7 @@ export const DataProvider = ({ children }) => {
     setEvents(e);
     setSettings(st);
     setActivities(ac);
-  }, []);
+  }, [api, setBatches, setStudents, setPayments, setEvents, setSettings, setActivities]);
 
   const retryLoad = useCallback(async () => {
     setLoading(true);
@@ -42,70 +39,38 @@ export const DataProvider = ({ children }) => {
       await api.seed();
       await refresh();
     } catch (err) {
-      console.error("Initial data load failed", err);
+      if (process.env.NODE_ENV === "development") console.error("Initial data load failed", err);
       setLoadError(err);
     } finally {
       setLoading(false);
     }
-  }, [refresh]);
+  }, [refresh, api, setLoading, setLoadError]);
 
   useEffect(() => {
     retryLoad();
   }, [retryLoad]);
 
-  const record = (entry) => {
-    setUndoStack((s) => [...s, entry].slice(-30));
-    setRedoStack([]);
-  };
-
-  const doUndo = async () => {
-    setUndoStack((prev) => {
-      if (prev.length === 0) return prev;
-      const entry = prev[prev.length - 1];
-      entry.undo().then(refresh);
-      setRedoStack((r) => [...r, entry].slice(-30));
-      return prev.slice(0, -1);
-    });
-  };
-
-  const doRedo = async () => {
-    setRedoStack((prev) => {
-      if (prev.length === 0) return prev;
-      const entry = prev[prev.length - 1];
-      entry.redo().then(refresh);
-      setUndoStack((u) => [...u, entry].slice(-30));
-      return prev.slice(0, -1);
-    });
-  };
-
-  const clearStacks = useCallback(() => {
-    setUndoStack([]);
-    setRedoStack([]);
-  }, []);
+  const { undoStack, redoStack, record, clearStacks, doUndo, doRedo } = useStacks(refresh);
 
   const saveSettings = useCallback(async (data) => {
     const res = await api.updateSettings(data);
     await refresh();
     return res;
-  }, [refresh]);
+  }, [refresh, api]);
 
   const ops = useOperations({ batches, students, payments, refresh, record, clearStacks });
 
-  return (
-    <DataCtx.Provider
-      value={{
-        batches, students, payments, events, settings, activities,
-        loading, loadError, retryLoad,
-        refresh, saveSettings,
-        ...ops,
-        canUndo: undoStack.length > 0,
-        canRedo: redoStack.length > 0,
-        doUndo, doRedo,
-      }}
-    >
-      {children}
-    </DataCtx.Provider>
-  );
+  const value = useMemo(() => ({
+    batches, students, payments, events, settings, activities,
+    loading, loadError, retryLoad,
+    refresh, saveSettings,
+    ...ops,
+    canUndo: undoStack.length > 0,
+    canRedo: redoStack.length > 0,
+    doUndo, doRedo,
+  }), [batches, students, payments, events, settings, activities, loading, loadError, retryLoad, refresh, saveSettings, ops, undoStack, redoStack, doUndo, doRedo]);
+
+  return <DataCtx.Provider value={value}>{children}</DataCtx.Provider>;
 };
 
 export const useData = () => {
