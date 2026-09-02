@@ -112,11 +112,21 @@ class MoveIn(BaseModel):
     batch_id: str
 
 
+class SettingsIn(BaseModel):
+    org_name: Optional[str] = None
+    auto_advance_day: Optional[int] = None
+
+
+DEFAULT_SETTINGS = {"id": "settings", "org_name": "TAPASH SIR", "auto_advance_day": None}
+
+
 class ImportPayload(BaseModel):
     batches: Optional[Any] = None
     students: Optional[Any] = None
     payments: Optional[Any] = None
     events: Optional[Any] = None
+    activities: Optional[Any] = None
+    settings: Optional[Any] = None
 
 
 # ---------- Helpers ----------
@@ -137,6 +147,7 @@ async def list_batches():
 async def create_batch(payload: BatchIn):
     batch = Batch(**payload.model_dump())
     await db.batches.insert_one(batch.model_dump())
+    await log_activity(f"Added batch: {batch.name}")
     return batch.model_dump()
 
 
@@ -151,12 +162,15 @@ async def update_batch(batch_id: str, payload: BatchIn):
 
 @api_router.delete("/batches/{batch_id}")
 async def delete_batch(batch_id: str):
+    batch = await db.batches.find_one({"id": batch_id}, {"_id": 0, "name": 1})
     students = await db.students.find({"batch_id": batch_id}, {"_id": 0}).to_list(10000)
     student_ids = [s["id"] for s in students]
     await db.batches.delete_one({"id": batch_id})
     await db.students.delete_many({"batch_id": batch_id})
     if student_ids:
         await db.payments.delete_many({"student_id": {"$in": student_ids}})
+    if batch:
+        await log_activity(f"Deleted batch: {batch['name']}")
     return {"ok": True, "removed_students": len(student_ids)}
 
 
@@ -174,6 +188,7 @@ async def create_student(payload: StudentIn):
         data["join_month"] = datetime.now(timezone.utc).strftime("%Y-%m")
     student = Student(**data)
     await db.students.insert_one(student.model_dump())
+    await log_activity(f"Added student: {student.name}")
     return student.model_dump()
 
 
@@ -194,13 +209,18 @@ async def move_student(student_id: str, payload: MoveIn):
     result = await db.students.update_one({"id": student_id}, {"$set": {"batch_id": payload.batch_id}})
     if result.matched_count == 0:
         raise HTTPException(404, "Student not found")
-    return await db.students.find_one({"id": student_id}, {"_id": 0})
+    doc = await db.students.find_one({"id": student_id}, {"_id": 0})
+    await log_activity(f"Moved student: {doc['name']}")
+    return doc
 
 
 @api_router.delete("/students/{student_id}")
 async def delete_student(student_id: str):
+    st = await db.students.find_one({"id": student_id}, {"_id": 0, "name": 1})
     await db.students.delete_one({"id": student_id})
     await db.payments.delete_many({"student_id": student_id})
+    if st:
+        await log_activity(f"Deleted student: {st['name']}")
     return {"ok": True}
 
 
@@ -223,6 +243,14 @@ async def create_payment(payload: PaymentIn):
         data["payment_date"] = datetime.now(timezone.utc).date().isoformat()
     payment = Payment(**data)
     await db.payments.insert_one(payment.model_dump())
+    st = await db.students.find_one({"id": payment.student_id}, {"_id": 0, "name": 1, "monthly_fee": 1})
+    if st:
+        month_pays = await db.payments.find({"student_id": payment.student_id, "month": payment.month}, {"_id": 0, "amount": 1}).to_list(1000)
+        month_total = sum(p.get("amount", 0) for p in month_pays)
+        if month_total >= (st.get("monthly_fee") or 0):
+            await log_activity(f"Marked paid: {st['name']}")
+        else:
+            await log_activity(f"Partial payment ₹{int(payment.amount)}: {st['name']}")
     return payment.model_dump()
 
 
@@ -252,6 +280,34 @@ async def delete_event(event_id: str):
     return {"ok": True}
 
 
+# ---------- Settings & Activity ----------
+async def log_activity(msg):
+    await db.activities.insert_one({"id": str(uuid.uuid4()), "msg": msg, "time": datetime.now(timezone.utc).isoformat()})
+
+
+@api_router.get("/settings")
+async def get_settings():
+    doc = await db.settings.find_one({"id": "settings"}, {"_id": 0})
+    if not doc:
+        await db.settings.insert_one(dict(DEFAULT_SETTINGS))
+        return dict(DEFAULT_SETTINGS)
+    return doc
+
+
+@api_router.put("/settings")
+async def update_settings(payload: SettingsIn):
+    updates = {k: v for k, v in payload.model_dump().items() if v is not None}
+    if updates:
+        await db.settings.update_one({"id": "settings"}, {"$set": updates}, upsert=True)
+    return await get_settings()
+
+
+@api_router.get("/activities")
+async def list_activities():
+    docs = await db.activities.find({}, {"_id": 0}).sort("time", -1).to_list(50)
+    return docs
+
+
 # ---------- Export / Import ----------
 @api_router.get("/export")
 async def export_all():
@@ -259,12 +315,16 @@ async def export_all():
     students = await db.students.find({}, {"_id": 0}).to_list(10000)
     payments = await db.payments.find({}, {"_id": 0}).to_list(100000)
     events = await db.events.find({}, {"_id": 0}).to_list(10000)
+    activities = await db.activities.find({}, {"_id": 0}).sort("time", -1).to_list(200)
+    settings = await db.settings.find_one({"id": "settings"}, {"_id": 0})
     return {
         "exported_at": datetime.now(timezone.utc).isoformat(),
         "batches": batches,
         "students": students,
         "payments": payments,
         "events": events,
+        "activities": activities,
+        "settings": settings or dict(DEFAULT_SETTINGS),
     }
 
 
@@ -279,11 +339,14 @@ async def import_all(payload: ImportPayload):
     students = sanitize(payload.students)
     payments = sanitize(payload.payments)
     events = sanitize(payload.events)
+    activities = sanitize(payload.activities)
+    settings = payload.settings if isinstance(payload.settings, dict) else None
 
     await db.batches.delete_many({})
     await db.students.delete_many({})
     await db.payments.delete_many({})
     await db.events.delete_many({})
+    await db.activities.delete_many({})
     if batches:
         await db.batches.insert_many(batches)
     if students:
@@ -292,7 +355,13 @@ async def import_all(payload: ImportPayload):
         await db.payments.insert_many(payments)
     if events:
         await db.events.insert_many(events)
-    return {"ok": True, "counts": {"batches": len(batches), "students": len(students), "payments": len(payments), "events": len(events)}}
+    if activities:
+        await db.activities.insert_many(activities)
+    if settings:
+        settings.pop("_id", None)
+        settings["id"] = "settings"
+        await db.settings.replace_one({"id": "settings"}, settings, upsert=True)
+    return {"ok": True, "counts": {"batches": len(batches), "students": len(students), "payments": len(payments), "events": len(events), "activities": len(activities)}}
 
 
 # ---------- Reset / Seed ----------

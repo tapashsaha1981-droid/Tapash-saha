@@ -17,11 +17,11 @@ export const Layout = ({ children }) => {
   ];
 
   return (
-    <div className="min-h-screen bg-[#F5F6FA] pb-24">
+    <div className="min-h-screen pb-24">
       {/* Header */}
       <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-slate-200/60">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center gap-3">
-          <div className="h-10 w-10 rounded-2xl bg-indigo-600 flex items-center justify-center shadow-sm shrink-0">
+          <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shadow-md shrink-0">
             <GraduationCap className="text-white" size={22} strokeWidth={2.5} />
           </div>
           <h1 className="text-lg sm:text-2xl font-extrabold tracking-tight text-slate-900" data-testid="app-title">TAPASH SIR</h1>
@@ -68,7 +68,7 @@ export const Layout = ({ children }) => {
                 data-testid={n.testid}
                 className={cn(
                   "flex flex-col items-center justify-center gap-0.5 py-2 rounded-2xl mx-1 btn-press",
-                  active ? "bg-indigo-600 text-white" : "text-slate-600 hover:bg-slate-100"
+                  active ? "bg-gradient-to-br from-indigo-600 to-violet-600 text-white shadow-md" : "text-slate-600 hover:bg-slate-100"
                 )}
               >
                 <span className="text-lg leading-none" aria-hidden>{n.emoji}</span>

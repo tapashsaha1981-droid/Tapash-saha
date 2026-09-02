@@ -29,6 +29,11 @@ export const api = {
   createEvent: (data) => client.post("/events", data).then((r) => r.data),
   deleteEvent: (id) => client.delete(`/events/${id}`).then((r) => r.data),
 
+  // settings & activity
+  getSettings: () => client.get("/settings").then((r) => r.data),
+  updateSettings: (data) => client.put("/settings", data).then((r) => r.data),
+  listActivities: () => client.get("/activities").then((r) => r.data),
+
   // export/import
   exportAll: () => client.get("/export").then((r) => r.data),
   importAll: (data) => client.post("/import", data).then((r) => r.data),

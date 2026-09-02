@@ -1,26 +1,41 @@
 import React, { useMemo, useState } from "react";
 import { useData } from "@/lib/store";
-import { lifetimeOverdue, inr, currentMonth, monthLabel } from "@/lib/calc";
+import { lifetimeOverdue, inr, currentMonth, monthLabel, indexPayments, openWhatsApp, paymentConfirmationMessage } from "@/lib/calc";
 import { Megaphone, Phone } from "lucide-react";
 import { PaymentHistoryModal } from "@/components/PaymentHistoryModal";
+import { PaymentModal } from "@/components/PaymentModal";
 import { toast } from "sonner";
 
 export const Overview = () => {
-  const { students, payments } = useData();
+  const { students, payments, settings, addPayment } = useData();
   const [historyFor, setHistoryFor] = useState(null);
+  const [payFor, setPayFor] = useState(null);
+  const [limit, setLimit] = useState(100);
   const month = currentMonth();
 
-  const rows = useMemo(() => lifetimeOverdue(students, payments, month).filter((r) => r.overdue > 0), [students, payments, month]);
+  const confirmPayment = async (payload) => {
+    const student = payFor?.s;
+    await addPayment(payload);
+    if (student?.phone) {
+      openWhatsApp(student.phone, paymentConfirmationMessage(student, payload.amount, payload.month, settings?.org_name));
+    } else {
+      toast.info("Payment saved — no phone number on file for WhatsApp confirmation");
+    }
+  };
+
+  const paymentsIndex = useMemo(() => indexPayments(payments), [payments]);
+  const rows = useMemo(() => lifetimeOverdue(students, paymentsIndex, month).filter((r) => r.overdue > 0), [students, paymentsIndex, month]);
+  const visibleRows = rows.slice(0, limit);
   const total = rows.reduce((s, r) => s + r.overdue, 0);
 
   const remindAll = () => {
     if (rows.length === 0) return toast.info("No overdue students");
+    const orgName = settings?.org_name || "TAPASH SIR";
     rows.forEach((r, i) => {
       const s = r.student;
       if (!s.phone) return;
-      const msg = `Hello ${s.name}, this is a reminder regarding your outstanding tuition fee of ${inr(r.overdue)}. Please make the payment at your convenience. Thank you.`;
-      const url = `https://wa.me/${s.phone.replace(/\D/g, "")}?text=${encodeURIComponent(msg)}`;
-      setTimeout(() => window.open(url, "_blank", "noopener"), i * 200);
+      const msg = `Hello ${s.name}, this is a reminder from ${orgName} regarding your outstanding tuition fee of ${inr(r.overdue)}. Please make the payment at your convenience. Thank you.`;
+      setTimeout(() => openWhatsApp(s.phone, msg), i * 200);
     });
     toast.success(`Opening WhatsApp for ${rows.length} students`);
   };
@@ -62,7 +77,7 @@ export const Overview = () => {
               </tr>
             </thead>
             <tbody>
-              {rows.map((r) => (
+              {visibleRows.map((r) => (
                 <tr key={r.student.id} className="border-t border-slate-100 hover:bg-slate-50 cursor-pointer" onClick={() => setHistoryFor(r.student)} data-testid={`overdue-row-${r.student.id}`}>
                   <td className="px-5 py-3 font-semibold text-slate-900">{r.student.name}</td>
                   <td className="px-5 py-3 text-slate-600">
@@ -71,16 +86,43 @@ export const Overview = () => {
                   <td className="px-5 py-3 text-right font-extrabold text-rose-600">{inr(r.overdue)}</td>
                 </tr>
               ))}
-              {rows.length === 0 && (
+              {visibleRows.length === 0 && (
                 <tr><td colSpan={3} className="text-center py-8 text-slate-500">Nothing overdue. Excellent!</td></tr>
               )}
             </tbody>
           </table>
+          {rows.length > limit && (
+            <button
+              data-testid="show-more-overview"
+              onClick={() => setLimit((l) => l + 100)}
+              className="btn-press w-full py-3 font-semibold text-slate-600 hover:bg-slate-50 border-t border-slate-100"
+            >
+              Show more ({rows.length - limit} remaining)
+            </button>
+          )}
         </div>
       </div>
 
       {historyFor && (
-        <PaymentHistoryModal open={!!historyFor} onClose={() => setHistoryFor(null)} student={historyFor} payments={payments} />
+        <PaymentHistoryModal
+          open={!!historyFor}
+          onClose={() => setHistoryFor(null)}
+          student={historyFor}
+          payments={payments}
+          onMarkPaid={(row) => setPayFor({ s: historyFor, fee: row.fee, paidThisMonth: row.paid, month: row.month })}
+        />
+      )}
+
+      {payFor && (
+        <PaymentModal
+          open={!!payFor}
+          onClose={() => setPayFor(null)}
+          student={payFor.s}
+          month={payFor.month}
+          paidThisMonth={payFor.paidThisMonth}
+          fee={payFor.fee}
+          onSave={confirmPayment}
+        />
       )}
     </div>
   );

@@ -20,14 +20,30 @@ def client():
     return s
 
 
+# DESTRUCTIVE MODULE: these tests wipe the database (reset + seed + import).
+# The DB now holds the user's REAL imported data (16 batches / 629 students /
+# 2088 payments). Skipped unless explicitly enabled AND a snapshot/restore is done.
+pytestmark = pytest.mark.skipif(
+    os.environ.get("ALLOW_DESTRUCTIVE_TESTS") != "1",
+    reason="Destructive (reset/seed/import) - set ALLOW_DESTRUCTIVE_TESTS=1 to run; wipes real user data",
+)
+
+
 @pytest.fixture(scope="module", autouse=True)
 def clean_state(client):
-    """Reset + seed before tests, and restore seeded state afterwards."""
+    """Snapshot real data, run on a seeded DB, then restore the snapshot."""
+    snapshot = client.get(f"{BASE_URL}/api/export", timeout=60).json()
     client.post(f"{BASE_URL}/api/reset", timeout=30)
     client.post(f"{BASE_URL}/api/seed", timeout=60)
     yield
-    client.post(f"{BASE_URL}/api/reset", timeout=30)
-    client.post(f"{BASE_URL}/api/seed", timeout=60)
+    client.post(f"{BASE_URL}/api/import", json={
+        "batches": snapshot.get("batches") or [],
+        "students": snapshot.get("students") or [],
+        "payments": snapshot.get("payments") or [],
+        "events": snapshot.get("events") or [],
+        "activities": snapshot.get("activities") or [],
+        "settings": snapshot.get("settings"),
+    }, timeout=180)
 
 
 # ---------- GET /api/export ----------

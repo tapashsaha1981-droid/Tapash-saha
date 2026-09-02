@@ -24,12 +24,12 @@ export const monthStatus = (fee, paidThisMonth) => {
   return "unpaid";
 };
 
-// Aggregate student stats for a given month view
-export const studentMonthStats = (student, payments, month) => {
+// Aggregate student stats for a given month view.
+// Pass the student's OWN payments (use indexPayments + paysFor for speed).
+export const studentMonthStats = (student, studentPayments, month) => {
   const fee = student.monthly_fee || 0;
   const elapsed = monthsElapsed(student.join_month || month, month);
   const totalDue = fee * elapsed;
-  const studentPayments = payments.filter((p) => p.student_id === student.id);
   const totalPaid = studentPayments.reduce((s, p) => s + (p.amount || 0), 0);
   const paidThisMonth = studentPayments
     .filter((p) => p.month === month)
@@ -39,12 +39,26 @@ export const studentMonthStats = (student, payments, month) => {
   return { fee, elapsed, totalDue, totalPaid, paidThisMonth, outstanding, status };
 };
 
-// Dashboard stats for a month
-export const dashboardStats = (students, batches, payments, month) => {
+// Index payments by student_id once: O(P) instead of O(S x P) lookups
+export const indexPayments = (payments) => {
+  const map = new Map();
+  for (const p of payments) {
+    const arr = map.get(p.student_id);
+    if (arr) arr.push(p);
+    else map.set(p.student_id, [p]);
+  }
+  return map;
+};
+
+const EMPTY_ARR = [];
+export const paysFor = (index, studentId) => index.get(studentId) || EMPTY_ARR;
+
+// Dashboard stats for a month (pass paymentsIndex from indexPayments)
+export const dashboardStats = (students, batches, paymentsIndex, month) => {
   let paid = 0, partial = 0, unpaid = 0, collected = 0, pending = 0;
   const activeStudents = students.filter((s) => (s.join_month || month) <= month);
   for (const s of activeStudents) {
-    const st = studentMonthStats(s, payments, month);
+    const st = studentMonthStats(s, paysFor(paymentsIndex, s.id), month);
     if (st.status === "paid") paid++;
     else if (st.status === "partial") partial++;
     else unpaid++;
@@ -62,10 +76,10 @@ export const dashboardStats = (students, batches, payments, month) => {
   };
 };
 
-// Lifetime overdue for each student
-export const lifetimeOverdue = (students, payments, upto) => {
+// Lifetime overdue for each student (pass paymentsIndex from indexPayments)
+export const lifetimeOverdue = (students, paymentsIndex, upto) => {
   const rows = students.map((s) => {
-    const st = studentMonthStats(s, payments, upto);
+    const st = studentMonthStats(s, paysFor(paymentsIndex, s.id), upto);
     return { student: s, overdue: st.outstanding };
   });
   rows.sort((a, b) => b.overdue - a.overdue);
@@ -86,9 +100,22 @@ export const filterStudents = (students, batches, { batchFilter, query }) => {
   return filtered;
 };
 
-export const reminderMessage = (student, amount, month) =>
-  `Hello ${student.name}, this is a reminder regarding the tuition fee of ${inr(amount)} for ${monthLabel(month)}. Please make the payment at your convenience. Thank you.`;
+export const reminderMessage = (student, amount, month, orgName = "TAPASH SIR") =>
+  `Hello ${student.name}, this is a reminder from ${orgName} regarding the tuition fee of ${inr(amount)} for ${monthLabel(month)}. Please make the payment at your convenience. Thank you.`;
+
+export const paymentConfirmationMessage = (student, amount, month, orgName = "TAPASH SIR") =>
+  `Hello ${student.name}, payment of ${inr(amount)} for ${monthLabel(month)} tuition fee has been received successfully. Thank you. — ${orgName}`;
+
+// Normalise to international format; Indian 10-digit numbers get +91
+export const normalizePhone = (phone) => {
+  let d = (phone || "").replace(/\D/g, "");
+  if (d.startsWith("00")) d = d.slice(2);
+  if (d.length === 11 && d.startsWith("0")) d = d.slice(1);
+  if (d.length === 10) d = "91" + d;
+  return d;
+};
 
 export const openWhatsApp = (phone, message) => {
-  window.open(`https://wa.me/${(phone || "").replace(/\D/g, "")}?text=${encodeURIComponent(message)}`, "_blank", "noopener");
+  const num = normalizePhone(phone);
+  window.open(`https://wa.me/${num}?text=${encodeURIComponent(message)}`, "_blank", "noopener");
 };

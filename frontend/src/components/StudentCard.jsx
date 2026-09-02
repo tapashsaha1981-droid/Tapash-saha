@@ -17,15 +17,27 @@ const ActionBtn = ({ onClick, icon, label, tint, testid }) => (
   </button>
 );
 
+const AVATAR_BY_STATUS = {
+  paid: "bg-emerald-100 text-emerald-700 ring-2 ring-emerald-200",
+  partial: "bg-amber-100 text-amber-700 ring-2 ring-amber-200",
+  unpaid: "bg-rose-100 text-rose-600 ring-2 ring-rose-200",
+};
+
+const ACCENT_BY_STATUS = {
+  paid: "border-t-4 border-t-emerald-400",
+  partial: "border-t-4 border-t-amber-400",
+  unpaid: "border-t-4 border-t-rose-400",
+};
+
 export const StudentCard = ({ student: s, stats: st, batch, onEdit, onMarkPaid, onRemind, onMove, onHistory, onDelete }) => {
   const initial = s.name.charAt(0).toUpperCase();
   const remaining = Math.max(0, st.fee - st.paidThisMonth);
   const unpaid = st.status !== "paid";
 
   return (
-    <div data-testid={`student-card-${s.id}`} className="rounded-3xl bg-white p-5 soft-shadow card-hover">
+    <div data-testid={`student-card-${s.id}`} className={cn("rounded-3xl bg-white p-5 soft-shadow card-hover", ACCENT_BY_STATUS[st.status])}>
       <div className="flex items-start gap-3">
-        <div className="h-12 w-12 rounded-full bg-indigo-100 text-indigo-700 font-bold flex items-center justify-center shrink-0">{initial}</div>
+        <div className={cn("h-12 w-12 rounded-full font-bold flex items-center justify-center shrink-0", AVATAR_BY_STATUS[st.status])}>{initial}</div>
         <div className="min-w-0 flex-1">
           <div className="font-extrabold text-slate-900">{s.name}</div>
           <a href={`tel:${s.phone}`} className="text-sm text-slate-500 inline-flex items-center gap-1 hover:text-indigo-600"><Phone size={12} /> {s.phone || "—"}</a>

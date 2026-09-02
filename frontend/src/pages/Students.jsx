@@ -1,6 +1,7 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect, useRef } from "react";
 import { useData } from "@/lib/store";
 import { Plus, Search, ChevronLeft, ChevronRight, Download } from "lucide-react";
+import dayjs from "dayjs";
 import { Input } from "@/components/ui/input";
 import { StudentForm } from "@/components/StudentForm";
 import { PaymentModal } from "@/components/PaymentModal";
@@ -8,16 +9,24 @@ import { PaymentHistoryModal } from "@/components/PaymentHistoryModal";
 import { MoveStudentModal } from "@/components/MoveStudentModal";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { StudentCard } from "@/components/StudentCard";
-import { monthLabel, shiftMonth, currentMonth, studentMonthStats, filterStudents, reminderMessage, openWhatsApp } from "@/lib/calc";
+import { monthLabel, shiftMonth, currentMonth, studentMonthStats, filterStudents, reminderMessage, paymentConfirmationMessage, openWhatsApp, indexPayments, paysFor } from "@/lib/calc";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
+const STATUS_CHIP_ACTIVE = {
+  all: "bg-indigo-600",
+  unpaid: "bg-rose-500",
+  partial: "bg-amber-500",
+  paid: "bg-emerald-600",
+};
+
 export const Students = () => {
-  const { batches, students, payments, addStudent, editStudent, removeStudent, moveStudent, addPayment } = useData();
+  const { batches, students, payments, settings, addStudent, editStudent, removeStudent, moveStudent, addPayment } = useData();
   const [month, setMonth] = useState(currentMonth());
   const [batchFilter, setBatchFilter] = useState("all");
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [limit, setLimit] = useState(60);
 
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState(null);
@@ -33,15 +42,41 @@ export const Students = () => {
     [students, batches, batchFilter, query]
   );
 
+  const paymentsIndex = useMemo(() => indexPayments(payments), [payments]);
+
   const list = useMemo(() => {
-    const withStats = baseList.map((s) => ({ s, st: studentMonthStats(s, payments, month) }));
+    const withStats = baseList.map((s) => ({ s, st: studentMonthStats(s, paysFor(paymentsIndex, s.id), month) }));
     return statusFilter === "all" ? withStats : withStats.filter(({ st }) => st.status === statusFilter);
-  }, [baseList, payments, month, statusFilter]);
+  }, [baseList, paymentsIndex, month, statusFilter]);
+
+  const visible = list.slice(0, limit);
+
+  useEffect(() => { setLimit(60); }, [batchFilter, query, statusFilter, month]);
+
+  const advancedRef = useRef(null);
+  useEffect(() => {
+    const day = settings?.auto_advance_day;
+    const m = currentMonth();
+    if (day && dayjs().date() >= day && advancedRef.current !== m) {
+      advancedRef.current = m;
+      toast.info(`Auto-advanced to ${monthLabel(m)}`);
+    }
+  }, [settings]);
 
   const remind = (student, monthStats) => {
     if (!student.phone) return toast.error("No phone number on file");
     const amount = Math.max(0, monthStats.fee - monthStats.paidThisMonth);
-    openWhatsApp(student.phone, reminderMessage(student, amount, month));
+    openWhatsApp(student.phone, reminderMessage(student, amount, month, settings?.org_name));
+  };
+
+  const confirmPayment = async (payload) => {
+    const student = payFor?.s;
+    await addPayment(payload);
+    if (student?.phone) {
+      openWhatsApp(student.phone, paymentConfirmationMessage(student, payload.amount, payload.month, settings?.org_name));
+    } else {
+      toast.info("Payment saved — no phone number on file for WhatsApp confirmation");
+    }
   };
 
   const exportCSV = () => {
@@ -107,8 +142,8 @@ export const Students = () => {
               data-testid={`status-filter-${s}`}
               onClick={() => setStatusFilter(s)}
               className={cn(
-                "btn-press px-3.5 h-10 rounded-xl text-sm font-semibold capitalize",
-                statusFilter === s ? "bg-indigo-600 text-white" : "bg-white border border-slate-200 text-slate-700 hover:bg-slate-50"
+                "btn-press px-3.5 h-10 rounded-xl text-sm font-semibold capitalize text-white",
+                statusFilter === s ? STATUS_CHIP_ACTIVE[s] : "bg-white border border-slate-200 !text-slate-700 hover:bg-slate-50"
               )}
             >{s}</button>
           ))}
@@ -117,24 +152,34 @@ export const Students = () => {
 
       {/* Student cards */}
       <div className="grid gap-4 md:grid-cols-2" data-testid="student-list">
-        {list.map(({ s, st }) => (
+        {visible.map(({ s, st }) => (
           <StudentCard
             key={s.id}
             student={s}
             stats={st}
             batch={batches.find((b) => b.id === s.batch_id)}
             onEdit={() => { setEditing(s); setFormOpen(true); }}
-            onMarkPaid={() => setPayFor({ s, st })}
+            onMarkPaid={() => setPayFor({ s, fee: st.fee, paidThisMonth: st.paidThisMonth, month })}
             onRemind={() => remind(s, st)}
             onMove={() => setMoveFor(s)}
             onHistory={() => setHistoryFor(s)}
             onDelete={() => setToDelete(s)}
           />
         ))}
-        {list.length === 0 && (
+        {visible.length === 0 && (
           <div className="col-span-full rounded-3xl bg-white p-10 text-center text-slate-500 soft-shadow">No students match.</div>
         )}
       </div>
+
+      {list.length > limit && (
+        <button
+          data-testid="show-more-students"
+          onClick={() => setLimit((l) => l + 60)}
+          className="btn-press w-full rounded-2xl bg-white border border-slate-200 py-3 font-semibold text-slate-700 hover:bg-slate-50"
+        >
+          Show more ({list.length - limit} remaining)
+        </button>
+      )}
 
       <StudentForm
         open={formOpen}
@@ -153,10 +198,10 @@ export const Students = () => {
           open={!!payFor}
           onClose={() => setPayFor(null)}
           student={payFor.s}
-          month={month}
-          paidThisMonth={payFor.st.paidThisMonth}
-          fee={payFor.st.fee}
-          onSave={addPayment}
+          month={payFor.month}
+          paidThisMonth={payFor.paidThisMonth}
+          fee={payFor.fee}
+          onSave={confirmPayment}
         />
       )}
 
@@ -166,6 +211,7 @@ export const Students = () => {
           onClose={() => setHistoryFor(null)}
           student={historyFor}
           payments={payments}
+          onMarkPaid={(row) => setPayFor({ s: historyFor, fee: row.fee, paidThisMonth: row.paid, month: row.month })}
         />
       )}
 

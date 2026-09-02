@@ -6,6 +6,8 @@ import { BatchForm } from "@/components/BatchForm";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { inr } from "@/lib/calc";
 
+const AVATAR_TINTS = ["bg-indigo-100", "bg-violet-100", "bg-emerald-100", "bg-amber-100", "bg-rose-100", "bg-sky-100"];
+
 export const Batches = () => {
   const { batches, students, addBatch, editBatch, removeBatch } = useData();
   const [formOpen, setFormOpen] = useState(false);
@@ -40,9 +42,9 @@ export const Batches = () => {
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
-        {batches.map((b) => (
-          <div key={b.id} data-testid={`batch-card-${b.id}`} className="rounded-3xl bg-white p-5 soft-shadow card-hover flex items-center gap-4">
-            <div className="h-14 w-14 rounded-2xl bg-indigo-100 flex items-center justify-center text-2xl shrink-0">📚</div>
+        {batches.map((b, i) => (
+          <div key={b.id} data-testid={`batch-card-${b.id}`} className="rounded-3xl bg-white p-5 soft-shadow card-hover border border-slate-100 flex items-center gap-4">
+            <div className={`h-14 w-14 rounded-2xl ${AVATAR_TINTS[i % AVATAR_TINTS.length]} flex items-center justify-center text-2xl shrink-0`}>📚</div>
             <div className="min-w-0 flex-1">
               <div className="font-extrabold text-slate-900 text-lg truncate">{b.name}</div>
               <div className="text-sm text-slate-500 truncate">{b.subject}{b.class_time ? ` · ${b.class_time}` : ""}</div>

@@ -29,7 +29,16 @@ export const CalendarPage = () => {
 
   const allEvents = useMemo(() => [...events, ...paymentEvents], [events, paymentEvents]);
 
-  const evsFor = (date) => allEvents.filter((e) => e.date === date);
+  const eventsByDate = useMemo(() => {
+    const map = {};
+    for (const e of allEvents) {
+      if (!map[e.date]) map[e.date] = [];
+      map[e.date].push(e);
+    }
+    return map;
+  }, [allEvents]);
+
+  const evsFor = (date) => eventsByDate[date] || [];
 
   const openAdd = (date) => {
     setSelectedDate(date);

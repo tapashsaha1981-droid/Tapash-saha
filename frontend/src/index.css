@@ -9,7 +9,8 @@ body {
     font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    background: #F5F6FA;
+    background: linear-gradient(160deg, #F4F2FF 0%, #F5F8FF 45%, #FFF8F2 100%);
+    background-attachment: fixed;
     color: #1A1B2E;
 }
 

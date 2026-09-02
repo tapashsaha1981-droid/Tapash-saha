@@ -15,28 +15,36 @@ export const PaymentModal = ({ open, onClose, student, month, paidThisMonth, fee
   const [amount, setAmount] = useState(remaining);
   const [note, setNote] = useState("");
   const [date, setDate] = useState(today);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (open) {
       setAmount(remaining);
       setNote("");
       setDate(today());
+      setSaving(false);
     }
   }, [open, remaining]);
 
   const submit = async () => {
     const amt = Number(amount);
     if (!amt || amt <= 0) return toast.error("Enter a positive amount");
-    await onSave({
-      student_id: student.id,
-      month,
-      amount: amt,
-      fee_snapshot: fee,
-      note,
-      payment_date: date,
-    });
-    toast.success(`Payment of ${inr(amt)} recorded`);
-    onClose();
+    if (saving) return;
+    setSaving(true);
+    try {
+      await onSave({
+        student_id: student.id,
+        month,
+        amount: amt,
+        fee_snapshot: fee,
+        note,
+        payment_date: date,
+      });
+      toast.success(`Payment of ${inr(amt)} recorded`);
+      onClose();
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -82,8 +90,8 @@ export const PaymentModal = ({ open, onClose, student, month, paidThisMonth, fee
           </div>
         </div>
         <DialogFooter>
-          <Button variant="ghost" onClick={onClose} data-testid="payment-cancel">Cancel</Button>
-          <Button onClick={submit} className="bg-emerald-600 hover:bg-emerald-700" data-testid="payment-save">Save Payment</Button>
+          <Button variant="ghost" onClick={onClose} disabled={saving} data-testid="payment-cancel">Cancel</Button>
+          <Button onClick={submit} disabled={saving} className="bg-emerald-600 hover:bg-emerald-700" data-testid="payment-save">{saving ? "Saving…" : "Save Payment"}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

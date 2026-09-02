@@ -9,6 +9,8 @@ export const DataProvider = ({ children }) => {
   const [students, setStudents] = useState([]);
   const [payments, setPayments] = useState([]);
   const [events, setEvents] = useState([]);
+  const [settings, setSettings] = useState(null);
+  const [activities, setActivities] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
 
@@ -17,16 +19,20 @@ export const DataProvider = ({ children }) => {
   const [redoStack, setRedoStack] = useState([]);
 
   const refresh = useCallback(async () => {
-    const [b, s, p, e] = await Promise.all([
+    const [b, s, p, e, st, ac] = await Promise.all([
       api.listBatches(),
       api.listStudents(),
       api.listPayments(),
       api.listEvents(),
+      api.getSettings(),
+      api.listActivities(),
     ]);
     setBatches(b);
     setStudents(s);
     setPayments(p);
     setEvents(e);
+    setSettings(st);
+    setActivities(ac);
   }, []);
 
   const retryLoad = useCallback(async () => {
@@ -77,13 +83,20 @@ export const DataProvider = ({ children }) => {
     setRedoStack([]);
   }, []);
 
+  const saveSettings = useCallback(async (data) => {
+    const res = await api.updateSettings(data);
+    await refresh();
+    return res;
+  }, [refresh]);
+
   const ops = useOperations({ batches, students, payments, refresh, record, clearStacks });
 
   return (
     <DataCtx.Provider
       value={{
-        batches, students, payments, events, loading, loadError, retryLoad,
-        refresh,
+        batches, students, payments, events, settings, activities,
+        loading, loadError, retryLoad,
+        refresh, saveSettings,
         ...ops,
         canUndo: undoStack.length > 0,
         canRedo: redoStack.length > 0,

@@ -1,32 +1,37 @@
 import React, { useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useData } from "@/lib/store";
-import { dashboardStats, monthLabel, shiftMonth, currentMonth, inr, studentMonthStats, reminderMessage, openWhatsApp } from "@/lib/calc";
+import { dashboardStats, monthLabel, shiftMonth, currentMonth, inr, studentMonthStats, reminderMessage, openWhatsApp, indexPayments, paysFor } from "@/lib/calc";
 import { ChevronLeft, ChevronRight, Download, Upload, Megaphone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { StatCard } from "@/components/StatCard";
 import { PaymentOverview } from "@/components/PaymentOverview";
+import { OrganisationCard, AutoAdvanceCard } from "@/components/SettingsCards";
+import { RecentActivity } from "@/components/RecentActivity";
 import { useBackup } from "@/lib/useBackup";
 import { toast } from "sonner";
 
 export const Dashboard = () => {
-  const { batches, students, payments, events, importAll } = useData();
+  const { batches, students, payments, events, importAll, settings, activities, saveSettings } = useData();
+  const navigate = useNavigate();
   const [month, setMonth] = useState(currentMonth());
   const [mode, setMode] = useState("monthly");
   const { fileRef, importOpen, setImportOpen, exportJSON, onImportPick, doImport } = useBackup({ batches, students, payments, events, importAll });
 
-  const stats = useMemo(() => dashboardStats(students, batches, payments, month), [students, batches, payments, month]);
+  const paymentsIndex = useMemo(() => indexPayments(payments), [payments]);
+  const stats = useMemo(() => dashboardStats(students, batches, paymentsIndex, month), [students, batches, paymentsIndex, month]);
 
   const remindAllUnpaid = () => {
     const unpaid = students.filter((s) => {
-      const st = studentMonthStats(s, payments, month);
+      const st = studentMonthStats(s, paysFor(paymentsIndex, s.id), month);
       return st.status !== "paid" && s.phone;
     });
     if (unpaid.length === 0) return toast.info("No unpaid students with phone numbers");
     unpaid.forEach((s, i) => {
-      const st = studentMonthStats(s, payments, month);
+      const st = studentMonthStats(s, paysFor(paymentsIndex, s.id), month);
       const amount = Math.max(0, st.fee - st.paidThisMonth);
-      setTimeout(() => openWhatsApp(s.phone, reminderMessage(s, amount, month)), i * 200);
+      setTimeout(() => openWhatsApp(s.phone, reminderMessage(s, amount, month, settings?.org_name)), i * 200);
     });
     toast.success(`Opening WhatsApp for ${unpaid.length} unpaid students`);
   };
@@ -58,13 +63,25 @@ export const Dashboard = () => {
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard testid="stat-students" emoji="🎓" value={stats.students} label="Students This Month" tint="bg-indigo-100" />
-        <StatCard testid="stat-batches" emoji="📚" value={stats.batches} label="Total Batches" tint="bg-violet-100" />
-        <StatCard testid="stat-collected" emoji="✅" value={inr(stats.collected)} label="Collected This Month" tint="bg-emerald-100" />
-        <StatCard testid="stat-pending" emoji="⌛" value={inr(stats.pending)} label="Pending This Month" tint="bg-amber-100" />
+        <StatCard testid="stat-students" emoji="🎓" value={stats.students} label="Students This Month" tint="bg-indigo-100" valueCls="text-indigo-700" />
+        <StatCard testid="stat-batches" emoji="📚" value={stats.batches} label="Total Batches" tint="bg-violet-100" valueCls="text-violet-700" />
+        <StatCard testid="stat-collected" emoji="✅" value={inr(stats.collected)} label="Collected This Month" tint="bg-emerald-100" valueCls="text-emerald-600" />
+        <StatCard testid="stat-pending" emoji="⌛" value={inr(stats.pending)} label="Pending This Month" tint="bg-amber-100" valueCls="text-amber-600" />
       </div>
 
       <PaymentOverview paid={stats.paid} partial={stats.partial} unpaid={stats.unpaid} />
+
+      <button
+        data-testid="check-monthly-overview"
+        onClick={() => navigate("/overview")}
+        className="btn-press w-full rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-4 text-base sm:text-lg flex items-center justify-center gap-2 shadow-md"
+      >
+        📊 Check Monthly Overview
+      </button>
+
+      <OrganisationCard value={settings?.org_name} onSave={saveSettings} />
+      <AutoAdvanceCard value={settings?.auto_advance_day} onSave={saveSettings} onPreview={() => navigate("/students")} />
+      <RecentActivity activities={activities} />
 
       <ConfirmDialog
         open={importOpen}

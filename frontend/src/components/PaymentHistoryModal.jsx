@@ -4,7 +4,13 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { monthLabel, monthsElapsed, monthStatus, inr, currentMonth } from "@/lib/calc";
 import dayjs from "dayjs";
 
-export const PaymentHistoryModal = ({ open, onClose, student, payments }) => {
+const ROW_ACCENT = {
+  paid: "border-l-4 border-l-emerald-400",
+  partial: "border-l-4 border-l-amber-400",
+  unpaid: "border-l-4 border-l-rose-400",
+};
+
+export const PaymentHistoryModal = ({ open, onClose, student, payments, onMarkPaid }) => {
   if (!student) return null;
   const now = currentMonth();
   const totalMonths = monthsElapsed(student.join_month || now, now);
@@ -30,8 +36,8 @@ export const PaymentHistoryModal = ({ open, onClose, student, payments }) => {
         </DialogHeader>
         <div className="space-y-3">
           {rows.map((r) => (
-            <div key={r.month} className="rounded-xl border border-slate-200 p-3">
-              <div className="flex items-center justify-between">
+            <div key={r.month} className={`rounded-xl border border-slate-200 p-3 ${ROW_ACCENT[r.status] || ""}`} data-testid={`history-row-${r.month}`}>
+              <div className="flex items-center justify-between gap-2">
                 <div className="font-bold text-slate-900">{monthLabel(r.month)}</div>
                 <StatusBadge status={r.status} size="sm" />
               </div>
@@ -45,6 +51,15 @@ export const PaymentHistoryModal = ({ open, onClose, student, payments }) => {
                     </div>
                   ))}
                 </div>
+              )}
+              {r.status !== "paid" && onMarkPaid && (
+                <button
+                  data-testid={`history-mark-paid-${r.month}`}
+                  onClick={() => onMarkPaid({ month: r.month, fee, paid: r.paid })}
+                  className="btn-press mt-2.5 inline-flex items-center gap-1.5 px-3 h-8 rounded-lg text-xs font-semibold bg-emerald-600 text-white hover:bg-emerald-700"
+                >
+                  ✅ Mark Paid
+                </button>
               )}
             </div>
           ))}
