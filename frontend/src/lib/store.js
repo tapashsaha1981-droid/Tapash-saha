@@ -36,7 +36,7 @@ export const DataProvider = ({ children }) => {
     setLoading(true);
     setLoadError(null);
     try {
-      await api.seed();
+      
       await refresh();
     } catch (err) {
       if (process.env.NODE_ENV === "development") console.error("Initial data load failed", err);
