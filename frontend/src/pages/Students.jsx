@@ -46,6 +46,9 @@ export const Students = () => {
   const [moveFor, setMoveFor] = useState(null);
   const [toDelete, setToDelete] = useState(null);
 
+  // WhatsApp confirmation popup
+  const [whatsappPrompt, setWhatsappPrompt] = useState(null);
+
   const activeBatch = batches.find((b) => b.id === batchFilter);
 
   const baseList = useMemo(
@@ -116,26 +119,42 @@ export const Students = () => {
     );
   };
 
+  // Save payment first, then show WhatsApp confirmation.
   const confirmPayment = async (payload) => {
     const student = payFor?.s;
 
     await addPayment(payload);
 
     if (student?.phone) {
-      openWhatsApp(
-        student.phone,
-        paymentConfirmationMessage(
-          student,
-          payload.amount,
-          payload.month,
-          settings?.org_name
-        )
-      );
+      setWhatsappPrompt({
+        student,
+        amount: payload.amount,
+        month: payload.month,
+      });
     } else {
       toast.info(
         "Payment saved — no phone number on file for WhatsApp confirmation"
       );
     }
+  };
+
+  const sendWhatsAppConfirmation = () => {
+    if (!whatsappPrompt?.student?.phone) {
+      setWhatsappPrompt(null);
+      return;
+    }
+
+    openWhatsApp(
+      whatsappPrompt.student.phone,
+      paymentConfirmationMessage(
+        whatsappPrompt.student,
+        whatsappPrompt.amount,
+        whatsappPrompt.month,
+        settings?.org_name
+      )
+    );
+
+    setWhatsappPrompt(null);
   };
 
   const markUnpaid = async (
@@ -407,6 +426,43 @@ export const Students = () => {
           );
         }}
       />
+
+      {/* WhatsApp Confirmation Popup */}
+      {whatsappPrompt && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl">
+            <h3 className="text-xl font-bold text-slate-900">
+              Payment marked successfully
+            </h3>
+
+            <p className="mt-3 text-slate-600">
+              Do you want to send a WhatsApp confirmation to{" "}
+              <span className="font-semibold text-slate-900">
+                {whatsappPrompt.student.name}
+              </span>
+              ?
+            </p>
+
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                onClick={() =>
+                  setWhatsappPrompt(null)
+                }
+                className="rounded-2xl border border-slate-200 bg-white px-5 py-3 font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                Not Now
+              </button>
+
+              <button
+                onClick={sendWhatsAppConfirmation}
+                className="rounded-2xl bg-indigo-600 px-5 py-3 font-semibold text-white shadow-md hover:bg-indigo-700"
+              >
+                💬 Send WhatsApp
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
