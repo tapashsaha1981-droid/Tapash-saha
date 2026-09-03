@@ -58,13 +58,29 @@ export const Students = () => {
   };
 
   const confirmPayment = async (payload) => {
-    const student = payFor?.s;
-    await addPayment(payload);
-    if (student?.phone) {
-      openWhatsApp(student.phone, paymentConfirmationMessage(student, payload.amount, payload.month, settings?.org_name));
-    } else {
-      toast.info("Payment saved — no phone number on file for WhatsApp confirmation");
+  const student = payFor?.s;
+  await addPayment(payload);
+
+  if (student?.phone) {
+    const sendWhatsApp = window.confirm(
+      `Mark Paid: ${student.name}\n\nSend a "Thank you" WhatsApp message to ${student.name}?`
+    );
+
+    if (sendWhatsApp) {
+      openWhatsApp(
+        student.phone,
+        paymentConfirmationMessage(
+          student,
+          payload.amount,
+          payload.month,
+          settings?.org_name
+        )
+      );
     }
+  } else {
+    toast.info("Payment saved — no phone number on file for WhatsApp confirmation");
+  }
+};
   };
 const markUnpaid = async (student, targetMonth = month) => {
   const targets = payments.filter(
