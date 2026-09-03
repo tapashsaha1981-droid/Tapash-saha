@@ -119,22 +119,71 @@ export const Students = () => {
     );
   };
 
-  // Save payment first, then show WhatsApp confirmation.
+  // MARK PAID:
+  // Automatically save the full remaining amount.
+  // Do NOT open the Record Payment screen.
+  const markPaidDirectly = async (student, monthStats) => {
+    const amount = Math.max(
+      0,
+      Number(monthStats.fee) - Number(monthStats.paidThisMonth)
+    );
+
+    if (amount <= 0) {
+      return;
+    }
+
+    try {
+      await addPayment({
+        student_id: student.id,
+        month,
+        amount,
+        fee_snapshot: monthStats.fee,
+        note: "",
+        payment_date: dayjs().format("YYYY-MM-DD"),
+      });
+
+      // After saving, show ONLY WhatsApp confirmation.
+      if (student.phone) {
+        setWhatsappPrompt({
+          student,
+          amount,
+          month,
+        });
+      } else {
+        toast.info(
+          "Payment saved — no phone number on file for WhatsApp confirmation"
+        );
+      }
+    } catch (error) {
+      console.error("Payment failed:", error);
+      toast.error("Could not save payment");
+    }
+  };
+
+  // Used when marking a payment from History,
+  // where the user may still want the payment modal.
   const confirmPayment = async (payload) => {
     const student = payFor?.s;
 
-    await addPayment(payload);
+    try {
+      await addPayment(payload);
 
-    if (student?.phone) {
-      setWhatsappPrompt({
-        student,
-        amount: payload.amount,
-        month: payload.month,
-      });
-    } else {
-      toast.info(
-        "Payment saved — no phone number on file for WhatsApp confirmation"
-      );
+      setPayFor(null);
+
+      if (student?.phone) {
+        setWhatsappPrompt({
+          student,
+          amount: payload.amount,
+          month: payload.month,
+        });
+      } else {
+        toast.info(
+          "Payment saved — no phone number on file for WhatsApp confirmation"
+        );
+      }
+    } catch (error) {
+      console.error("Payment failed:", error);
+      toast.error("Could not save payment");
     }
   };
 
@@ -329,27 +378,29 @@ export const Students = () => {
               setEditing(s);
               setFormOpen(true);
             }}
+
+            // IMPORTANT:
+            // Mark Paid now saves directly.
             onMarkPaid={() =>
-              setPayFor({
-                s,
-                fee: st.fee,
-                paidThisMonth:
-                  st.paidThisMonth,
-                month,
-              })
+              markPaidDirectly(s, st)
             }
+
             onMarkUnpaid={() =>
               markUnpaid(s)
             }
+
             onRemind={() =>
               remind(s, st)
             }
+
             onMove={() =>
               setMoveFor(s)
             }
+
             onHistory={() =>
               setHistoryFor(s)
             }
+
             onDelete={() =>
               setToDelete(s)
             }
@@ -393,16 +444,22 @@ export const Students = () => {
             await addStudent(data);
           }
         }}
+
         payFor={payFor}
+
         onClosePay={() =>
           setPayFor(null)
         }
+
         onConfirmPayment={confirmPayment}
+
         historyFor={historyFor}
         payments={payments}
+
         onCloseHistory={() =>
           setHistoryFor(null)
         }
+
         onHistoryMarkPaid={(row) =>
           setPayFor({
             s: historyFor,
@@ -411,15 +468,21 @@ export const Students = () => {
             month: row.month,
           })
         }
+
         moveFor={moveFor}
+
         onCloseMove={() =>
           setMoveFor(null)
         }
+
         onMove={moveStudent}
+
         toDelete={toDelete}
+
         onCloseDelete={() =>
           setToDelete(null)
         }
+
         onDelete={async () => {
           await removeStudent(
             toDelete.id
@@ -427,10 +490,11 @@ export const Students = () => {
         }}
       />
 
-      {/* WhatsApp Confirmation Popup */}
+      {/* ONLY WhatsApp Confirmation Popup */}
       {whatsappPrompt && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl">
+
             <h3 className="text-xl font-bold text-slate-900">
               Payment marked successfully
             </h3>
@@ -444,6 +508,7 @@ export const Students = () => {
             </p>
 
             <div className="mt-6 flex justify-end gap-3">
+
               <button
                 onClick={() =>
                   setWhatsappPrompt(null)
@@ -459,6 +524,7 @@ export const Students = () => {
               >
                 💬 Send WhatsApp
               </button>
+
             </div>
           </div>
         </div>
