@@ -118,3 +118,4 @@ export const normalizePhone = (phone) => {
 export const openWhatsApp = (phone, message) => {
   const num = normalizePhone(phone);
   window.location.href = `https://wa.me/${num}?text=${encodeURIComponent(message)}`;
+};
