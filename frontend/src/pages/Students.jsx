@@ -9,7 +9,7 @@ import { monthLabel, shiftMonth, currentMonth, studentMonthStats, filterStudents
 import { toast } from "sonner";
 
 export const Students = () => {
-  const { batches, students, payments, settings, addStudent, editStudent, removeStudent, moveStudent, addPayment } = useData();
+  const { batches, students, payments, settings, addStudent, editStudent, removeStudent, moveStudent, addPayment } = useData();removePaymentsForMonth,
   const [month, setMonth] = useState(currentMonth());
   const [batchFilter, setBatchFilter] = useState("all");
   const [query, setQuery] = useState("");
@@ -66,7 +66,23 @@ export const Students = () => {
       toast.info("Payment saved — no phone number on file for WhatsApp confirmation");
     }
   };
+const markUnpaid = async (student, targetMonth = month) => {
+  const targets = payments.filter(
+    (p) => p.student_id === student.id && p.month === targetMonth
+  );
 
+  if (!targets.length) {
+    toast.error(`No payment found for ${targetMonth}`);
+    return;
+  }
+
+  if (!window.confirm(`Mark ${student.name} as Unpaid for ${targetMonth}?`)) {
+    return;
+  }
+
+  await removePaymentsForMonth(student.id, targetMonth);
+  toast.success(`${student.name} marked Unpaid for ${targetMonth}`);
+};
   const exportCSV = () => {
     const rows = [["Student Name", "Phone", "Batch", "Monthly Fee", "Month", "Amount Paid", "Amount Due", "Status"]];
     list.forEach(({ s, st }) => {
