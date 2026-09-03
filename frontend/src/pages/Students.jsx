@@ -80,8 +80,7 @@ export const Students = () => {
   } else {
     toast.info("Payment saved — no phone number on file for WhatsApp confirmation");
   }
-};
-  };
+
 const markUnpaid = async (student, targetMonth = month) => {
   const targets = payments.filter(
     (p) => p.student_id === student.id && p.month === targetMonth
