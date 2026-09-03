@@ -103,7 +103,36 @@ export const useOperations = ({ batches, students, payments, refresh, record, cl
     await refresh();
     return created;
   }, [record, refresh]);
+const removePaymentsForMonth = useCallback(async (studentId, month) => {
+  const targets = payments.filter(
+    (p) => p.student_id === studentId && p.month === month
+  );
 
+  if (!targets.length) return;
+
+  const liveIds = targets.map((p) => ({ id: p.id }));
+
+  for (const item of liveIds) {
+    await api.deletePayment(item.id);
+  }
+
+  record({
+    label: "Mark unpaid",
+    undo: async () => {
+      for (let i = 0; i < targets.length; i++) {
+        const recreated = await api.createPayment(targets[i]);
+        liveIds[i].id = recreated.id;
+      }
+    },
+    redo: async () => {
+      for (const item of liveIds) {
+        await api.deletePayment(item.id);
+      }
+    },
+  });
+
+  await refresh();
+}, [payments, record, refresh]);
   const addEvent = useCallback(async (data) => {
     const created = await api.createEvent(data);
     await refresh();
@@ -125,7 +154,7 @@ export const useOperations = ({ batches, students, payments, refresh, record, cl
   return useMemo(() => ({
     addBatch, editBatch, removeBatch,
     addStudent, editStudent, removeStudent, moveStudent,
-    addPayment,
+    addPayment,removePaymentsForMonth,
     addEvent, removeEvent,
     importAll,
   }), [addBatch, editBatch, removeBatch, addStudent, editStudent, removeStudent, moveStudent, addPayment, addEvent, removeEvent, importAll]);
