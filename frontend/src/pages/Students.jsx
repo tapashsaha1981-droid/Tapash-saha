@@ -9,7 +9,7 @@ import { monthLabel, shiftMonth, currentMonth, studentMonthStats, filterStudents
 import { toast } from "sonner";
 
 export const Students = () => {
-  const { batches, students, payments, settings, addStudent, editStudent, removeStudent, moveStudent, addPayment } = useData();removePaymentsForMonth,
+  const { batches, students, payments, settings, addStudent, editStudent, removeStudent, moveStudent, addPayment, removePaymentsForMonth } = useData();
   const [month, setMonth] = useState(currentMonth());
   const [batchFilter, setBatchFilter] = useState("all");
   const [query, setQuery] = useState("");
@@ -140,6 +140,8 @@ const markUnpaid = async (student, targetMonth = month) => {
             batch={batches.find((b) => b.id === s.batch_id)}
             onEdit={() => { setEditing(s); setFormOpen(true); }}
             onMarkPaid={() => setPayFor({ s, fee: st.fee, paidThisMonth: st.paidThisMonth, month })}
+            onMarkUnpaid={() => markUnpaid(s)}
+    
             onRemind={() => remind(s, st)}
             onMove={() => setMoveFor(s)}
             onHistory={() => setHistoryFor(s)}
