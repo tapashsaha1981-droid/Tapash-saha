@@ -29,7 +29,7 @@ const ACCENT_BY_STATUS = {
   unpaid: "border-t-4 border-t-rose-400",
 };
 
-export const StudentCard = ({ student: s, stats: st, batch, onEdit, onMarkPaid, onRemind, onMove, onHistory, onDelete }) => {
+export const StudentCard = ({ student: s, stats: st, batch, onEdit, onMarkPaid, onMarkUnpaid, onRemind, onMove, onHistory, onDelete }) => {
   const initial = s.name.charAt(0).toUpperCase();
   const remaining = Math.max(0, st.fee - st.paidThisMonth);
   const unpaid = st.status !== "paid";
@@ -64,6 +64,7 @@ export const StudentCard = ({ student: s, stats: st, batch, onEdit, onMarkPaid, 
       <div className="mt-4 flex flex-wrap gap-2">
         <ActionBtn testid={`edit-${s.id}`} onClick={onEdit} icon="✏️" label="Edit" />
         {unpaid && <ActionBtn testid={`mark-paid-${s.id}`} onClick={onMarkPaid} icon="✅" label="Mark Paid" tint="bg-emerald-600 text-white hover:bg-emerald-700" />}
+    {!unpaid && <ActionBtn testid={`mark-unpaid-${s.id}`} onClick={onMarkUnpaid} icon="↩️" label="Mark Unpaid" tint="bg-rose-600 text-white hover:bg-rose-700" />}
         <ActionBtn testid={`remind-${s.id}`} onClick={onRemind} icon="💬" label="Remind" />
         {unpaid && <ActionBtn testid={`move-${s.id}`} onClick={onMove} icon="⇄" label="Move" />}
         <ActionBtn testid={`history-${s.id}`} onClick={onHistory} icon="📄" label="History" />
