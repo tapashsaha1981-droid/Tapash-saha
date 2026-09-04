@@ -19,32 +19,18 @@ import {
 export const PaymentOverview = ({ paid, partial, unpaid }) => {
   const total = Math.max(1, paid + partial + unpaid);
 
-  const {
-    students,
-    batches,
-    payments,
-    addPayment,
-  } = useData();
+  const { students, batches, payments, addPayment } = useData();
 
   const [open, setOpen] = useState(false);
-
-  // Previous month selected for payment marking
   const [selectedMonth, setSelectedMonth] = useState(
     shiftMonth(currentMonth(), -1)
   );
-
-  // Selected class
   const [selectedClass, setSelectedClass] = useState(null);
-
   const [processingId, setProcessingId] = useState(null);
 
   const thisMonth = currentMonth();
   const previousMonth = shiftMonth(thisMonth, -1);
 
-  /*
-   * Calculate every student's previous pending
-   * and current month due.
-   */
   const studentRows = useMemo(() => {
     return students
       .filter((student) => {
@@ -59,33 +45,17 @@ export const PaymentOverview = ({ paid, partial, unpaid }) => {
         const fee = Number(student.monthly_fee || 0);
         const joinMonth = student.join_month || thisMonth;
 
-        /*
-         * PREVIOUS DUES
-         *
-         * All fees from joining month up to the
-         * previous month, minus payments made
-         * for those months.
-         */
         let previousTotalDue = 0;
 
         if (joinMonth <= previousMonth) {
-          const elapsed = monthsElapsed(
-            joinMonth,
-            previousMonth
-          );
-
+          const elapsed = monthsElapsed(joinMonth, previousMonth);
           previousTotalDue = fee * elapsed;
         }
 
         const previousPaid = studentPayments
-          .filter(
-            (p) =>
-              p.month &&
-              p.month <= previousMonth
-          )
+          .filter((p) => p.month && p.month <= previousMonth)
           .reduce(
-            (sum, p) =>
-              sum + Number(p.amount || 0),
+            (sum, p) => sum + Number(p.amount || 0),
             0
           );
 
@@ -94,16 +64,10 @@ export const PaymentOverview = ({ paid, partial, unpaid }) => {
           previousTotalDue - previousPaid
         );
 
-        /*
-         * CURRENT MONTH DUE
-         */
         const currentPaid = studentPayments
-          .filter(
-            (p) => p.month === thisMonth
-          )
+          .filter((p) => p.month === thisMonth)
           .reduce(
-            (sum, p) =>
-              sum + Number(p.amount || 0),
+            (sum, p) => sum + Number(p.amount || 0),
             0
           );
 
@@ -112,29 +76,22 @@ export const PaymentOverview = ({ paid, partial, unpaid }) => {
           fee - currentPaid
         );
 
-        /*
-         * Selected previous month's individual due
-         */
         const selectedMonthActive =
           joinMonth <= selectedMonth;
 
         const selectedMonthPaid = studentPayments
-          .filter(
-            (p) => p.month === selectedMonth
-          )
+          .filter((p) => p.month === selectedMonth)
           .reduce(
-            (sum, p) =>
-              sum + Number(p.amount || 0),
+            (sum, p) => sum + Number(p.amount || 0),
             0
           );
 
-        const selectedMonthDue =
-          selectedMonthActive
-            ? Math.max(
-                0,
-                fee - selectedMonthPaid
-              )
-            : 0;
+        const selectedMonthDue = selectedMonthActive
+          ? Math.max(
+              0,
+              fee - selectedMonthPaid
+            )
+          : 0;
 
         const batch = batches.find(
           (b) => b.id === student.batch_id
@@ -146,8 +103,7 @@ export const PaymentOverview = ({ paid, partial, unpaid }) => {
           fee,
           previousDue,
           currentDue,
-          totalDue:
-            previousDue + currentDue,
+          totalDue: previousDue + currentDue,
           selectedMonthDue,
         };
       });
@@ -161,10 +117,8 @@ export const PaymentOverview = ({ paid, partial, unpaid }) => {
   ]);
 
   /*
-   * IMPORTANT:
-   *
-   * Only classes containing students with
-   * PREVIOUS pending dues are shown.
+   * ONLY classes with previous pending dues
+   * are displayed on the first screen.
    */
   const classGroups = useMemo(() => {
     const groups = new Map();
@@ -184,18 +138,15 @@ export const PaymentOverview = ({ paid, partial, unpaid }) => {
         name,
         students: rows,
         previous: rows.reduce(
-          (sum, row) =>
-            sum + row.previousDue,
+          (sum, row) => sum + row.previousDue,
           0
         ),
         current: rows.reduce(
-          (sum, row) =>
-            sum + row.currentDue,
+          (sum, row) => sum + row.currentDue,
           0
         ),
         total: rows.reduce(
-          (sum, row) =>
-            sum + row.totalDue,
+          (sum, row) => sum + row.totalDue,
           0
         ),
       }))
@@ -209,26 +160,20 @@ export const PaymentOverview = ({ paid, partial, unpaid }) => {
   );
 
   const grandPrevious = classGroups.reduce(
-    (sum, group) =>
-      sum + group.previous,
+    (sum, group) => sum + group.previous,
     0
   );
 
   const grandCurrent = classGroups.reduce(
-    (sum, group) =>
-      sum + group.current,
+    (sum, group) => sum + group.current,
     0
   );
 
   const grandTotal = classGroups.reduce(
-    (sum, group) =>
-      sum + group.total,
+    (sum, group) => sum + group.total,
     0
   );
 
-  /*
-   * Mark the selected previous month as paid.
-   */
   const markPreviousPaid = async (row) => {
     const amount = row.selectedMonthDue;
 
@@ -269,10 +214,6 @@ export const PaymentOverview = ({ paid, partial, unpaid }) => {
     }
   };
 
-  /*
-   * WhatsApp message always includes
-   * previous + current month amount.
-   */
   const sendWhatsApp = (row) => {
     const message =
       `Hello ${row.student.name},\n\n` +
@@ -368,10 +309,9 @@ export const PaymentOverview = ({ paid, partial, unpaid }) => {
           />
         </div>
 
-        {/* OPEN BUTTON */}
         <button
           onClick={() => setOpen(true)}
-          className="mt-5 w-full rounded-2xl bg-gradient-to-r from-indigo-500 to-purple-600 px-4 py-3 text-sm font-extrabold text-white shadow-md hover:opacity-95 transition"
+          className="mt-5 w-full rounded-2xl bg-gradient-to-r from-indigo-500 to-purple-600 px-4 py-3 text-sm font-extrabold text-white shadow-md"
         >
           📚 Previous + Current Dues
         </button>
@@ -381,10 +321,10 @@ export const PaymentOverview = ({ paid, partial, unpaid }) => {
       {open && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/60 p-3 sm:p-6">
 
-          <div className="relative flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-3xl bg-slate-50 shadow-2xl">
+          <div className="relative flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-3xl bg-slate-50 shadow-xl">
 
             {/* HEADER */}
-            <div className="flex items-center justify-between border-b bg-white px-5 py-4">
+            <div className="flex shrink-0 items-center justify-between border-b bg-white px-5 py-4">
 
               <div>
                 <h2 className="text-lg sm:text-xl font-extrabold text-slate-900">
@@ -400,14 +340,15 @@ export const PaymentOverview = ({ paid, partial, unpaid }) => {
 
               <button
                 onClick={closePopup}
-                className="rounded-full bg-slate-100 p-2 text-slate-600 hover:bg-slate-200"
+                className="rounded-full bg-slate-100 p-2 text-slate-600"
               >
                 <X size={20} />
               </button>
+
             </div>
 
             {/* MONTH SELECTOR */}
-            <div className="border-b bg-white px-5 py-4">
+            <div className="shrink-0 border-b bg-white px-5 py-4">
 
               <div className="flex flex-wrap items-center justify-between gap-3">
 
@@ -417,9 +358,7 @@ export const PaymentOverview = ({ paid, partial, unpaid }) => {
                   </div>
 
                   <div className="mt-1 text-lg font-extrabold text-indigo-700">
-                    {monthLabel(
-                      selectedMonth
-                    )}
+                    {monthLabel(selectedMonth)}
                   </div>
                 </div>
 
@@ -434,7 +373,7 @@ export const PaymentOverview = ({ paid, partial, unpaid }) => {
                         )
                       )
                     }
-                    className="rounded-xl bg-slate-100 p-2 hover:bg-slate-200"
+                    className="rounded-xl bg-slate-100 p-2"
                   >
                     <ChevronLeft size={20} />
                   </button>
@@ -448,24 +387,25 @@ export const PaymentOverview = ({ paid, partial, unpaid }) => {
                         )
                       )
                     }
-                    className="rounded-xl bg-slate-100 p-2 hover:bg-slate-200"
+                    className="rounded-xl bg-slate-100 p-2"
                   >
                     <ChevronRight size={20} />
                   </button>
 
                 </div>
+
               </div>
 
               <div className="mt-3 rounded-2xl bg-indigo-50 px-4 py-3 text-xs sm:text-sm text-indigo-800">
                 <b>Note:</b> Only classes with previous
                 pending dues are shown. Current month
-                dues are included in the total for
-                WhatsApp reminders.
+                dues are included in the total.
               </div>
+
             </div>
 
             {/* SUMMARY */}
-            <div className="grid grid-cols-1 gap-3 px-5 py-4 sm:grid-cols-3">
+            <div className="shrink-0 grid grid-cols-1 gap-3 px-5 py-4 sm:grid-cols-3">
 
               <div className="rounded-2xl bg-white p-4 shadow-sm">
                 <div className="text-xs font-bold text-slate-500">
@@ -499,15 +439,19 @@ export const PaymentOverview = ({ paid, partial, unpaid }) => {
 
             </div>
 
-            {/* CONTENT */}
-            <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-5 sm:px-5">
+            {/* SMOOTH SCROLL AREA */}
+            <div
+              className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pb-5 sm:px-5"
+              style={{
+                WebkitOverflowScrolling: "touch",
+                touchAction: "pan-y",
+                willChange: "scroll-position",
+              }}
+            >
 
               {!selectedClass ? (
 
-                /* =========================
-                   CLASS LIST
-                   ========================= */
-
+                /* CLASS LIST */
                 <div className="space-y-3">
 
                   <div className="mb-3 text-sm font-bold text-slate-600">
@@ -535,86 +479,74 @@ export const PaymentOverview = ({ paid, partial, unpaid }) => {
 
                   ) : (
 
-                    classGroups.map(
-                      (group) => (
+                    classGroups.map((group) => (
 
-                        <button
-                          key={group.name}
-                          onClick={() =>
-                            setSelectedClass(
-                              group.name
-                            )
-                          }
-                          className="w-full rounded-2xl bg-white p-4 text-left shadow-sm transition hover:scale-[1.01] hover:shadow-md"
-                        >
+                      <button
+                        key={group.name}
+                        onClick={() =>
+                          setSelectedClass(
+                            group.name
+                          )
+                        }
+                        className="w-full rounded-2xl bg-white p-4 text-left shadow-sm"
+                      >
 
-                          <div className="flex items-center justify-between gap-3">
+                        <div className="flex items-center justify-between gap-3">
 
-                            <div>
+                          <div>
 
-                              <div className="text-lg font-extrabold text-slate-900">
-                                📚 {group.name}
-                              </div>
-
-                              <div className="mt-1 text-xs text-slate-500">
-                                {
-                                  group.students
-                                    .length
-                                }{" "}
-                                student
-                                {group.students
-                                  .length !== 1
-                                  ? "s"
-                                  : ""}{" "}
-                                with previous pending
-                              </div>
-
+                            <div className="text-lg font-extrabold text-slate-900">
+                              📚 {group.name}
                             </div>
 
-                            <div className="text-right">
-
-                              <div className="text-xs font-bold text-orange-500">
-                                PREVIOUS
-                              </div>
-
-                              <div className="text-lg font-extrabold text-orange-600">
-                                {inr(
-                                  group.previous
-                                )}
-                              </div>
-
-                              <div className="mt-1 text-xs text-slate-500">
-                                Total:{" "}
-                                <b>
-                                  {inr(
-                                    group.total
-                                  )}
-                                </b>
-                              </div>
-
+                            <div className="mt-1 text-xs text-slate-500">
+                              {group.students.length}{" "}
+                              student
+                              {group.students.length !== 1
+                                ? "s"
+                                : ""}{" "}
+                              with previous pending
                             </div>
 
                           </div>
 
-                          <div className="mt-3 flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2 text-xs">
+                          <div className="text-right">
 
-                            <span className="text-blue-600 font-bold">
-                              Current:{" "}
-                              {inr(
-                                group.current
-                              )}
-                            </span>
+                            <div className="text-xs font-bold text-orange-500">
+                              PREVIOUS
+                            </div>
 
-                            <span className="font-extrabold text-indigo-600">
-                              Tap to open →
-                            </span>
+                            <div className="text-lg font-extrabold text-orange-600">
+                              {inr(group.previous)}
+                            </div>
+
+                            <div className="mt-1 text-xs text-slate-500">
+                              Total:{" "}
+                              <b>
+                                {inr(group.total)}
+                              </b>
+                            </div>
 
                           </div>
 
-                        </button>
+                        </div>
 
-                      )
-                    )
+                        <div className="mt-3 flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2 text-xs">
+
+                          <span className="font-bold text-blue-600">
+                            Current:{" "}
+                            {inr(group.current)}
+                          </span>
+
+                          <span className="font-extrabold text-indigo-600">
+                            Tap to open →
+                          </span>
+
+                        </div>
+
+                      </button>
+
+                    ))
 
                   )}
 
@@ -622,10 +554,7 @@ export const PaymentOverview = ({ paid, partial, unpaid }) => {
 
               ) : (
 
-                /* =========================
-                   STUDENT LIST
-                   ========================= */
-
+                /* STUDENT LIST */
                 <div>
 
                   <button
@@ -643,28 +572,27 @@ export const PaymentOverview = ({ paid, partial, unpaid }) => {
                       <div className="flex flex-wrap items-center justify-between gap-3">
 
                         <div>
+
                           <div className="text-xs font-bold text-slate-500">
                             CLASS
                           </div>
 
                           <div className="text-xl font-extrabold text-slate-900">
-                            📚{" "}
-                            {
-                              selectedGroup.name
-                            }
+                            📚 {selectedGroup.name}
                           </div>
+
                         </div>
 
                         <div className="text-right">
+
                           <div className="text-xs font-bold text-slate-500">
                             CLASS TOTAL
                           </div>
 
                           <div className="text-xl font-extrabold text-indigo-700">
-                            {inr(
-                              selectedGroup.total
-                            )}
+                            {inr(selectedGroup.total)}
                           </div>
+
                         </div>
 
                       </div>
@@ -682,7 +610,6 @@ export const PaymentOverview = ({ paid, partial, unpaid }) => {
                           className="rounded-2xl bg-white p-4 shadow-sm"
                         >
 
-                          {/* NAME */}
                           <div className="font-extrabold text-slate-900">
                             {row.student.name}
                           </div>
@@ -693,7 +620,6 @@ export const PaymentOverview = ({ paid, partial, unpaid }) => {
                             </div>
                           )}
 
-                          {/* AMOUNTS */}
                           <div className="mt-4 grid grid-cols-3 gap-2">
 
                             <div className="rounded-xl bg-orange-50 p-3 text-center">
@@ -702,9 +628,7 @@ export const PaymentOverview = ({ paid, partial, unpaid }) => {
                               </div>
 
                               <div className="mt-1 text-sm font-extrabold text-orange-700">
-                                {inr(
-                                  row.previousDue
-                                )}
+                                {inr(row.previousDue)}
                               </div>
                             </div>
 
@@ -714,9 +638,7 @@ export const PaymentOverview = ({ paid, partial, unpaid }) => {
                               </div>
 
                               <div className="mt-1 text-sm font-extrabold text-blue-700">
-                                {inr(
-                                  row.currentDue
-                                )}
+                                {inr(row.currentDue)}
                               </div>
                             </div>
 
@@ -726,77 +648,53 @@ export const PaymentOverview = ({ paid, partial, unpaid }) => {
                               </div>
 
                               <div className="mt-1 text-sm font-extrabold text-indigo-700">
-                                {inr(
-                                  row.totalDue
-                                )}
+                                {inr(row.totalDue)}
                               </div>
                             </div>
 
                           </div>
 
-                          {/* ACTIONS */}
                           <div className="mt-4 flex flex-wrap gap-2">
 
                             <button
                               onClick={() =>
-                                sendWhatsApp(
-                                  row
-                                )
+                                sendWhatsApp(row)
                               }
-                              disabled={
-                                !row.student
-                                  .phone
-                              }
-                              className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-3 py-3 text-xs font-extrabold text-white hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-40"
+                              disabled={!row.student.phone}
+                              className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-3 py-3 text-xs font-extrabold text-white disabled:cursor-not-allowed disabled:opacity-40"
                             >
-                              <MessageCircle
-                                size={16}
-                              />
+                              <MessageCircle size={16} />
                               WhatsApp
                             </button>
 
-                            {row.selectedMonthDue >
-                              0 && (
-
+                            {row.selectedMonthDue > 0 && (
                               <button
                                 onClick={() =>
-                                  markPreviousPaid(
-                                    row
-                                  )
+                                  markPreviousPaid(row)
                                 }
                                 disabled={
                                   processingId ===
-                                  row.student
-                                    .id
+                                  row.student.id
                                 }
-                                className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-indigo-600 px-3 py-3 text-xs font-extrabold text-white hover:bg-indigo-700 disabled:opacity-50"
+                                className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-indigo-600 px-3 py-3 text-xs font-extrabold text-white disabled:opacity-50"
                               >
-                                <CheckCircle2
-                                  size={16}
-                                />
+                                <CheckCircle2 size={16} />
 
                                 {processingId ===
-                                row.student
-                                  .id
+                                row.student.id
                                   ? "Saving..."
                                   : `Mark ${monthLabel(
                                       selectedMonth
-                                    ).split(
-                                      " "
-                                    )[0]} Paid`}
+                                    ).split(" ")[0]} Paid`}
                               </button>
-
                             )}
 
                           </div>
 
-                          {/* MESSAGE AMOUNT */}
                           <div className="mt-3 rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-600">
                             WhatsApp will show:{" "}
                             <b className="text-indigo-700">
-                              {inr(
-                                row.totalDue
-                              )}
+                              {inr(row.totalDue)}
                             </b>{" "}
                             (Previous + Current)
                           </div>
@@ -815,11 +713,12 @@ export const PaymentOverview = ({ paid, partial, unpaid }) => {
             </div>
 
             {/* FOOTER */}
-            <div className="border-t bg-white px-5 py-4">
+            <div className="shrink-0 border-t bg-white px-5 py-4">
 
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
 
                 <div>
+
                   <div className="text-xs font-bold uppercase text-slate-500">
                     Grand Total
                   </div>
@@ -827,11 +726,12 @@ export const PaymentOverview = ({ paid, partial, unpaid }) => {
                   <div className="text-2xl font-extrabold text-indigo-700">
                     {inr(grandTotal)}
                   </div>
+
                 </div>
 
                 <button
                   onClick={closePopup}
-                  className="rounded-xl bg-slate-900 px-5 py-3 text-sm font-extrabold text-white hover:bg-slate-800"
+                  className="rounded-xl bg-slate-900 px-5 py-3 text-sm font-extrabold text-white"
                 >
                   Close
                 </button>
