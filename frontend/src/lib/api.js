@@ -2,7 +2,7 @@ import axios from "axios";
 
 const BACKEND_URL =
   process.env.REACT_APP_BACKEND_URL ||
-  "https://tapash-saha.onrender.com";
+  "https://tapash-saha-1.onrender.com";
 
 export const API = `${BACKEND_URL}/api`;
 
@@ -13,7 +13,7 @@ const client = axios.create({
   timeout: 20000,
 });
 
-// Add login token to every API request
+// Add login token to every request
 client.interceptors.request.use((config) => {
   const token = localStorage.getItem(TOKEN_KEY);
 
@@ -38,81 +38,55 @@ client.interceptors.response.use(
 );
 
 export const api = {
-  // authentication
+  // Authentication
   login: (password) =>
     client.post("/auth/login", { password }).then((r) => r.data),
 
   // batches
-  listBatches: () =>
-    client.get("/batches").then((r) => r.data),
-
-  createBatch: (data) =>
-    client.post("/batches", data).then((r) => r.data),
-
+  listBatches: () => client.get("/batches").then((r) => r.data),
+  createBatch: (data) => client.post("/batches", data).then((r) => r.data),
   updateBatch: (id, data) =>
     client.put(`/batches/${id}`, data).then((r) => r.data),
-
   deleteBatch: (id) =>
     client.delete(`/batches/${id}`).then((r) => r.data),
 
   // students
-  listStudents: () =>
-    client.get("/students").then((r) => r.data),
-
+  listStudents: () => client.get("/students").then((r) => r.data),
   createStudent: (data) =>
     client.post("/students", data).then((r) => r.data),
-
   updateStudent: (id, data) =>
     client.put(`/students/${id}`, data).then((r) => r.data),
-
   moveStudent: (id, batch_id) =>
-    client
-      .post(`/students/${id}/move`, { batch_id })
-      .then((r) => r.data),
-
+    client.post(`/students/${id}/move`, { batch_id }).then((r) => r.data),
   deleteStudent: (id) =>
     client.delete(`/students/${id}`).then((r) => r.data),
 
   // payments
   listPayments: (params = {}) =>
     client.get("/payments", { params }).then((r) => r.data),
-
   createPayment: (data) =>
     client.post("/payments", data).then((r) => r.data),
-
   deletePayment: (id) =>
     client.delete(`/payments/${id}`).then((r) => r.data),
 
   // events
-  listEvents: () =>
-    client.get("/events").then((r) => r.data),
-
+  listEvents: () => client.get("/events").then((r) => r.data),
   createEvent: (data) =>
     client.post("/events", data).then((r) => r.data),
-
   deleteEvent: (id) =>
     client.delete(`/events/${id}`).then((r) => r.data),
 
   // settings & activity
-  getSettings: () =>
-    client.get("/settings").then((r) => r.data),
-
+  getSettings: () => client.get("/settings").then((r) => r.data),
   updateSettings: (data) =>
     client.put("/settings", data).then((r) => r.data),
-
   listActivities: () =>
     client.get("/activities").then((r) => r.data),
 
   // export/import
-  exportAll: () =>
-    client.get("/export").then((r) => r.data),
-
+  exportAll: () => client.get("/export").then((r) => r.data),
   importAll: (data) =>
     client.post("/import", data).then((r) => r.data),
-
-  seed: () =>
-    client.post("/seed").then((r) => r.data),
-
-  reset: () =>
-    client.post("/reset").then((r) => r.data),
+  seed: () => client.post("/seed").then((r) => r.data),
+  reset: () => client.post("/reset").then((r) => r.data),
 };
