@@ -1,7 +1,8 @@
 import axios from "axios";
 
 const BACKEND_URL =
-  process.env.REACT_APP_BACKEND_URL || "https://tapash-saha.onrender.com";
+  process.env.REACT_APP_BACKEND_URL ||
+  "https://tapash-saha.onrender.com";
 
 export const API = `${BACKEND_URL}/api`;
 
@@ -12,7 +13,7 @@ const client = axios.create({
   timeout: 20000,
 });
 
-// Add login token to every request
+// Add login token to every API request
 client.interceptors.request.use((config) => {
   const token = localStorage.getItem(TOKEN_KEY);
 
@@ -39,12 +40,7 @@ client.interceptors.response.use(
 export const api = {
   // authentication
   login: (password) =>
-    client
-      .post("/auth/login", { password })
-      .then((r) => {
-        localStorage.setItem(TOKEN_KEY, r.data.access_token);
-        return r.data;
-      }),
+    client.post("/auth/login", { password }).then((r) => r.data),
 
   // batches
   listBatches: () =>
