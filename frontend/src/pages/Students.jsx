@@ -49,10 +49,28 @@ export const Students = () => {
   // WhatsApp confirmation popup
   const [whatsappPrompt, setWhatsappPrompt] = useState(null);
 
-  const activeBatch = batches.find((b) => b.id === batchFilter);
+  // Build batch lookup once instead of repeatedly using batches.find().
+  const batchById = useMemo(() => {
+    const map = new Map();
+
+    for (const batch of batches) {
+      map.set(batch.id, batch);
+    }
+
+    return map;
+  }, [batches]);
+
+  const activeBatch =
+    batchFilter === "all"
+      ? null
+      : batchById.get(batchFilter);
 
   const baseList = useMemo(
-    () => filterStudents(students, batches, { batchFilter, query }),
+    () =>
+      filterStudents(students, batches, {
+        batchFilter,
+        query,
+      }),
     [students, batches, batchFilter, query]
   );
 
@@ -73,14 +91,26 @@ export const Students = () => {
 
     return statusFilter === "all"
       ? withStats
-      : withStats.filter(({ st }) => st.status === statusFilter);
-  }, [baseList, paymentsIndex, month, statusFilter]);
+      : withStats.filter(
+          ({ st }) => st.status === statusFilter
+        );
+  }, [
+    baseList,
+    paymentsIndex,
+    month,
+    statusFilter,
+  ]);
 
   const visible = list.slice(0, limit);
 
   useEffect(() => {
     setLimit(60);
-  }, [batchFilter, query, statusFilter, month]);
+  }, [
+    batchFilter,
+    query,
+    statusFilter,
+    month,
+  ]);
 
   const advancedRef = useRef(null);
 
@@ -94,18 +124,23 @@ export const Students = () => {
       advancedRef.current !== m
     ) {
       advancedRef.current = m;
-      toast.info(`Auto-advanced to ${monthLabel(m)}`);
+      toast.info(
+        `Auto-advanced to ${monthLabel(m)}`
+      );
     }
   }, [settings]);
 
   const remind = (student, monthStats) => {
     if (!student.phone) {
-      return toast.error("No phone number on file");
+      return toast.error(
+        "No phone number on file"
+      );
     }
 
     const amount = Math.max(
       0,
-      monthStats.fee - monthStats.paidThisMonth
+      monthStats.fee -
+        monthStats.paidThisMonth
     );
 
     openWhatsApp(
@@ -122,10 +157,14 @@ export const Students = () => {
   // MARK PAID:
   // Automatically save the full remaining amount.
   // Do NOT open the Record Payment screen.
-  const markPaidDirectly = async (student, monthStats) => {
+  const markPaidDirectly = async (
+    student,
+    monthStats
+  ) => {
     const amount = Math.max(
       0,
-      Number(monthStats.fee) - Number(monthStats.paidThisMonth)
+      Number(monthStats.fee) -
+        Number(monthStats.paidThisMonth)
     );
 
     if (amount <= 0) {
@@ -139,7 +178,8 @@ export const Students = () => {
         amount,
         fee_snapshot: monthStats.fee,
         note: "",
-        payment_date: dayjs().format("YYYY-MM-DD"),
+        payment_date:
+          dayjs().format("YYYY-MM-DD"),
       });
 
       // After saving, show ONLY WhatsApp confirmation.
@@ -155,8 +195,13 @@ export const Students = () => {
         );
       }
     } catch (error) {
-      console.error("Payment failed:", error);
-      toast.error("Could not save payment");
+      console.error(
+        "Payment failed:",
+        error
+      );
+      toast.error(
+        "Could not save payment"
+      );
     }
   };
 
@@ -182,13 +227,20 @@ export const Students = () => {
         );
       }
     } catch (error) {
-      console.error("Payment failed:", error);
-      toast.error("Could not save payment");
+      console.error(
+        "Payment failed:",
+        error
+      );
+      toast.error(
+        "Could not save payment"
+      );
     }
   };
 
   const sendWhatsAppConfirmation = () => {
-    if (!whatsappPrompt?.student?.phone) {
+    if (
+      !whatsappPrompt?.student?.phone
+    ) {
       setWhatsappPrompt(null);
       return;
     }
@@ -256,9 +308,8 @@ export const Students = () => {
     ];
 
     list.forEach(({ s, st }) => {
-      const b = batches.find(
-        (x) => x.id === s.batch_id
-      );
+      // Fast Map lookup instead of batches.find().
+      const b = batchById.get(s.batch_id);
 
       rows.push([
         s.name,
@@ -269,7 +320,8 @@ export const Students = () => {
         st.paidThisMonth,
         Math.max(
           0,
-          st.fee - st.paidThisMonth
+          st.fee -
+            st.paidThisMonth
         ),
         st.status,
       ]);
@@ -280,7 +332,10 @@ export const Students = () => {
         r
           .map(
             (v) =>
-              `"${String(v).replace(/"/g, '""')}"`
+              `"${String(v).replace(
+                /"/g,
+                '""'
+              )}"`
           )
           .join(",")
       )
@@ -290,9 +345,12 @@ export const Students = () => {
       type: "text/csv",
     });
 
-    const url = URL.createObjectURL(blob);
+    const url =
+      URL.createObjectURL(blob);
 
-    const a = document.createElement("a");
+    const a =
+      document.createElement("a");
+
     a.href = url;
     a.download = `students-${month}.csv`;
     a.click();
@@ -351,15 +409,21 @@ export const Students = () => {
       <StudentsToolbar
         month={month}
         onShiftMonth={(d) =>
-          setMonth(shiftMonth(month, d))
+          setMonth(
+            shiftMonth(month, d)
+          )
         }
         batches={batches}
         batchFilter={batchFilter}
-        onBatchFilter={setBatchFilter}
+        onBatchFilter={
+          setBatchFilter
+        }
         query={query}
         onQuery={setQuery}
         statusFilter={statusFilter}
-        onStatusFilter={setStatusFilter}
+        onStatusFilter={
+          setStatusFilter
+        }
       />
 
       <div
@@ -371,8 +435,8 @@ export const Students = () => {
             key={s.id}
             student={s}
             stats={st}
-            batch={batches.find(
-              (b) => b.id === s.batch_id
+            batch={batchById.get(
+              s.batch_id
             )}
             onEdit={() => {
               setEditing(s);
@@ -418,11 +482,15 @@ export const Students = () => {
         <button
           data-testid="show-more-students"
           onClick={() =>
-            setLimit((l) => l + 60)
+            setLimit(
+              (l) => l + 60
+            )
           }
           className="btn-press w-full rounded-2xl bg-white border border-slate-200 py-3 font-semibold text-slate-700 hover:bg-slate-50"
         >
-          Show more ({list.length - limit} remaining)
+          Show more (
+          {list.length - limit}{" "}
+          remaining)
         </button>
       )}
 
@@ -434,7 +502,9 @@ export const Students = () => {
         onCloseForm={() =>
           setFormOpen(false)
         }
-        onSaveStudent={async (data) => {
+        onSaveStudent={async (
+          data
+        ) => {
           if (editing) {
             await editStudent(
               editing.id,
@@ -444,45 +514,38 @@ export const Students = () => {
             await addStudent(data);
           }
         }}
-
         payFor={payFor}
-
         onClosePay={() =>
           setPayFor(null)
         }
-
-        onConfirmPayment={confirmPayment}
-
+        onConfirmPayment={
+          confirmPayment
+        }
         historyFor={historyFor}
         payments={payments}
-
         onCloseHistory={() =>
           setHistoryFor(null)
         }
-
-        onHistoryMarkPaid={(row) =>
+        onHistoryMarkPaid={(
+          row
+        ) =>
           setPayFor({
             s: historyFor,
             fee: row.fee,
-            paidThisMonth: row.paid,
+            paidThisMonth:
+              row.paid,
             month: row.month,
           })
         }
-
         moveFor={moveFor}
-
         onCloseMove={() =>
           setMoveFor(null)
         }
-
         onMove={moveStudent}
-
         toDelete={toDelete}
-
         onCloseDelete={() =>
           setToDelete(null)
         }
-
         onDelete={async () => {
           await removeStudent(
             toDelete.id
@@ -494,7 +557,6 @@ export const Students = () => {
       {whatsappPrompt && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl">
-
             <h3 className="text-xl font-bold text-slate-900">
               Payment marked successfully
             </h3>
@@ -502,16 +564,20 @@ export const Students = () => {
             <p className="mt-3 text-slate-600">
               Do you want to send a WhatsApp confirmation to{" "}
               <span className="font-semibold text-slate-900">
-                {whatsappPrompt.student.name}
+                {
+                  whatsappPrompt
+                    .student.name
+                }
               </span>
               ?
             </p>
 
             <div className="mt-6 flex justify-end gap-3">
-
               <button
                 onClick={() =>
-                  setWhatsappPrompt(null)
+                  setWhatsappPrompt(
+                    null
+                  )
                 }
                 className="rounded-2xl border border-slate-200 bg-white px-5 py-3 font-semibold text-slate-700 hover:bg-slate-50"
               >
@@ -519,12 +585,13 @@ export const Students = () => {
               </button>
 
               <button
-                onClick={sendWhatsAppConfirmation}
+                onClick={
+                  sendWhatsAppConfirmation
+                }
                 className="rounded-2xl bg-indigo-600 px-5 py-3 font-semibold text-white shadow-md hover:bg-indigo-700"
               >
                 💬 Send WhatsApp
               </button>
-
             </div>
           </div>
         </div>
