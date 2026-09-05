@@ -28,6 +28,9 @@ export const PaymentOverview = ({ paid, partial, unpaid }) => {
   const [selectedClass, setSelectedClass] = useState(null);
   const [processingId, setProcessingId] = useState(null);
 
+  // New: controls the instant confirmation popup
+  const [confirmRow, setConfirmRow] = useState(null);
+
   const thisMonth = currentMonth();
   const previousMonth = shiftMonth(thisMonth, -1);
 
@@ -233,29 +236,36 @@ export const PaymentOverview = ({ paid, partial, unpaid }) => {
     0
   );
 
-  const markPreviousPaid = async (row) => {
+  /*
+   * STEP 2:
+   * Open our confirmation popup immediately.
+   */
+  const markPreviousPaid = (row) => {
     const amount = row.selectedMonthDue;
 
     if (amount <= 0) return;
 
-    /*
-     * IMPORTANT:
-     * Confirmation happens BEFORE any network request.
-     */
-    const ok = window.confirm(
-      `Mark ${monthLabel(
-        selectedMonth
-      )} fee as PAID for ${
-        row.student.name
-      }?\n\nAmount: ${inr(amount)}`
-    );
+    setConfirmRow(row);
+  };
 
-    if (!ok) return;
+  /*
+   * Actually save the payment only after
+   * the user confirms.
+   */
+  const confirmMarkPreviousPaid = async () => {
+    if (!confirmRow) return;
+
+    const row = confirmRow;
+    const amount = row.selectedMonthDue;
+
+    if (amount <= 0) {
+      setConfirmRow(null);
+      return;
+    }
 
     try {
-      setProcessingId(
-        row.student.id
-      );
+      setConfirmRow(null);
+      setProcessingId(row.student.id);
 
       await addPayment({
         student_id: row.student.id,
@@ -306,6 +316,7 @@ export const PaymentOverview = ({ paid, partial, unpaid }) => {
   const closePopup = () => {
     setOpen(false);
     setSelectedClass(null);
+    setConfirmRow(null);
   };
 
   return (
@@ -382,7 +393,7 @@ export const PaymentOverview = ({ paid, partial, unpaid }) => {
         </button>
       </div>
 
-      {/* POPUP */}
+      {/* PAYMENT OVERVIEW POPUP */}
       {open && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/60 p-3 sm:p-6">
           <div className="relative flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-3xl bg-slate-50 shadow-xl">
@@ -493,7 +504,7 @@ export const PaymentOverview = ({ paid, partial, unpaid }) => {
               </div>
             </div>
 
-            {/* SMOOTH SCROLL AREA */}
+            {/* SCROLL AREA */}
             <div
               className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pb-5 sm:px-5"
               style={{
@@ -505,7 +516,6 @@ export const PaymentOverview = ({ paid, partial, unpaid }) => {
               }}
             >
               {!selectedClass ? (
-                /* CLASS LIST */
                 <div className="space-y-3">
                   <div className="mb-3 text-sm font-bold text-slate-600">
                     Select a class:
@@ -595,7 +605,6 @@ export const PaymentOverview = ({ paid, partial, unpaid }) => {
                   )}
                 </div>
               ) : (
-                /* STUDENT LIST */
                 <div>
                   <button
                     onClick={() =>
@@ -781,6 +790,93 @@ export const PaymentOverview = ({ paid, partial, unpaid }) => {
                   Close
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =====================================================
+          INSTANT PAYMENT CONFIRMATION POPUP
+          ===================================================== */}
+      {confirmRow && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-950/60 p-4">
+          <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl">
+
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <div className="text-xs font-bold uppercase tracking-wide text-indigo-600">
+                  Confirm Payment
+                </div>
+
+                <h3 className="mt-1 text-xl font-extrabold text-slate-900">
+                  Mark Fee as Paid?
+                </h3>
+              </div>
+
+              <button
+                onClick={() =>
+                  setConfirmRow(null)
+                }
+                className="rounded-full bg-slate-100 p-2 text-slate-600"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="mt-5 rounded-2xl bg-slate-50 p-4">
+              <div className="text-sm text-slate-500">
+                Student
+              </div>
+
+              <div className="mt-1 text-lg font-extrabold text-slate-900">
+                {confirmRow.student.name}
+              </div>
+
+              <div className="mt-4 grid grid-cols-2 gap-3">
+                <div className="rounded-xl bg-white p-3">
+                  <div className="text-[10px] font-bold uppercase text-slate-500">
+                    Month
+                  </div>
+
+                  <div className="mt-1 font-extrabold text-indigo-700">
+                    {monthLabel(
+                      selectedMonth
+                    )}
+                  </div>
+                </div>
+
+                <div className="rounded-xl bg-white p-3">
+                  <div className="text-[10px] font-bold uppercase text-slate-500">
+                    Amount
+                  </div>
+
+                  <div className="mt-1 text-lg font-extrabold text-emerald-600">
+                    {inr(
+                      confirmRow.selectedMonthDue
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-5 flex gap-3">
+              <button
+                onClick={() =>
+                  setConfirmRow(null)
+                }
+                className="flex-1 rounded-xl bg-slate-100 px-4 py-3 font-extrabold text-slate-700"
+              >
+                Cancel
+              </button>
+
+              <button
+                onClick={
+                  confirmMarkPreviousPaid
+                }
+                className="flex-1 rounded-xl bg-indigo-600 px-4 py-3 font-extrabold text-white"
+              >
+                ✓ Confirm & Mark Paid
+              </button>
             </div>
 
           </div>
