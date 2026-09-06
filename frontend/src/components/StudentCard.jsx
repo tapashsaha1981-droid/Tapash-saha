@@ -1,7 +1,7 @@
 import React from "react";
 import { Phone } from "lucide-react";
 import { StatusBadge } from "@/components/StatusBadge";
-import { inr } from "@/lib/calc";
+import { inr, openWhatsApp } from "@/lib/calc";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -63,17 +63,35 @@ export const StudentCard = ({
   const unpaid = st.status !== "paid";
 
   const handleJoinGroup = () => {
-    if (!s.whatsapp_group_link) {
+    const groupLink =
+      batch?.whatsapp_group_link?.trim();
+
+    const phone = s.phone?.trim();
+
+    if (!groupLink) {
       toast.error(
-        "No WhatsApp Group Link saved for this student"
+        "Please add the WhatsApp Group Link in this batch first"
       );
       return;
     }
 
-    window.open(
-      s.whatsapp_group_link,
-      "_blank",
-      "noopener,noreferrer"
+    if (!phone) {
+      toast.error(
+        "No student phone number is saved"
+      );
+      return;
+    }
+
+    openWhatsApp(
+      phone,
+      `Hello ${s.name}, welcome to ${batch.name}.
+
+Please join our class WhatsApp group using this link:
+
+${groupLink}
+
+Thank you.
+TAPASH SIR`
     );
   };
 
@@ -123,6 +141,7 @@ export const StudentCard = ({
           <div className="text-[11px] text-slate-500">
             Total ({st.elapsed}m)
           </div>
+
           <div className="font-bold text-slate-900">
             {inr(st.totalDue)}
           </div>
@@ -132,6 +151,7 @@ export const StudentCard = ({
           <div className="text-[11px] text-emerald-700">
             Already Paid
           </div>
+
           <div className="font-bold text-emerald-700">
             {inr(st.totalPaid)}
           </div>
@@ -141,6 +161,7 @@ export const StudentCard = ({
           <div className="text-[11px] text-rose-700">
             To Be Paid
           </div>
+
           <div className="font-bold text-rose-700">
             {inr(remaining)}
           </div>
@@ -148,6 +169,8 @@ export const StudentCard = ({
       </div>
 
       <div className="mt-4 flex flex-wrap gap-2">
+
+        {/* Edit */}
         <ActionBtn
           testid={`edit-${s.id}`}
           onClick={onEdit}
@@ -155,6 +178,7 @@ export const StudentCard = ({
           label="Edit"
         />
 
+        {/* Mark Paid */}
         {unpaid && (
           <ActionBtn
             testid={`mark-paid-${s.id}`}
@@ -165,6 +189,7 @@ export const StudentCard = ({
           />
         )}
 
+        {/* Mark Unpaid */}
         {!unpaid && (
           <ActionBtn
             testid={`mark-unpaid-${s.id}`}
@@ -175,6 +200,7 @@ export const StudentCard = ({
           />
         )}
 
+        {/* Payment Reminder */}
         <ActionBtn
           testid={`remind-${s.id}`}
           onClick={onRemind}
@@ -182,6 +208,7 @@ export const StudentCard = ({
           label="Remind"
         />
 
+        {/* Payment Confirmation */}
         <ActionBtn
           testid={`payment-confirmation-${s.id}`}
           onClick={onPaymentConfirmation}
@@ -190,14 +217,16 @@ export const StudentCard = ({
           tint="bg-indigo-50 text-indigo-700 hover:bg-indigo-100"
         />
 
+        {/* WhatsApp Group */}
         <ActionBtn
           testid={`join-group-${s.id}`}
           onClick={handleJoinGroup}
-          icon="🟢"
-          label="Join Group"
+          icon="👥"
+          label="Group"
           tint="bg-green-50 text-green-700 hover:bg-green-100"
         />
 
+        {/* Move */}
         {unpaid && (
           <ActionBtn
             testid={`move-${s.id}`}
@@ -207,6 +236,7 @@ export const StudentCard = ({
           />
         )}
 
+        {/* History */}
         <ActionBtn
           testid={`history-${s.id}`}
           onClick={onHistory}
@@ -214,6 +244,7 @@ export const StudentCard = ({
           label="History"
         />
 
+        {/* Delete */}
         <ActionBtn
           testid={`delete-${s.id}`}
           onClick={onDelete}
@@ -221,6 +252,7 @@ export const StudentCard = ({
           label="Delete"
           tint="bg-rose-50 text-rose-600 hover:bg-rose-100"
         />
+
       </div>
     </div>
   );
