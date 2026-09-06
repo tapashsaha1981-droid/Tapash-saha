@@ -29,7 +29,6 @@ const EMPTY_FORM = {
   monthly_fee: "",
   join_month: "",
   parent_name: "",
-  whatsapp_group_link: "",
   notes: "",
 };
 
@@ -44,7 +43,6 @@ const formFromStudent = (s) => ({
     : "",
   join_month: s.join_month || "",
   parent_name: s.parent_name || "",
-  whatsapp_group_link: s.whatsapp_group_link || "",
   notes: s.notes || "",
 });
 
@@ -56,7 +54,8 @@ export const StudentForm = ({
   defaultBatchId,
   onSave,
 }) => {
-  const [form, setForm] = useState(EMPTY_FORM);
+  const [form, setForm] =
+    useState(EMPTY_FORM);
 
   useEffect(() => {
     if (!open) return;
@@ -72,8 +71,10 @@ export const StudentForm = ({
           defaultBatchId ||
           batches[0]?.id ||
           "",
-        join_month: today.format("YYYY-MM"),
-        admission_date: today.format("YYYY-MM-DD"),
+        join_month:
+          today.format("YYYY-MM"),
+        admission_date:
+          today.format("YYYY-MM-DD"),
       });
     }
   }, [
@@ -127,7 +128,8 @@ export const StudentForm = ({
     await onSave({
       name: form.name.trim(),
       phone: form.phone.trim(),
-      parent_phone: form.parent_phone.trim(),
+      parent_phone:
+        form.parent_phone.trim(),
       batch_id: form.batch_id,
       admission_date:
         form.admission_date.trim(),
@@ -136,8 +138,6 @@ export const StudentForm = ({
       join_month: form.join_month,
       parent_name:
         form.parent_name.trim(),
-      whatsapp_group_link:
-        form.whatsapp_group_link.trim(),
       notes: form.notes.trim(),
     });
 
@@ -327,30 +327,6 @@ export const StudentForm = ({
               value={form.parent_name}
               onChange={set("parent_name")}
               placeholder="Parent / Guardian name"
-              className="mt-1.5"
-            />
-          </div>
-
-
-          {/* WhatsApp Group Link */}
-          <div>
-            <Label>
-              WhatsApp Group Link
-              <span className="text-muted-foreground font-normal">
-                {" "} (optional)
-              </span>
-            </Label>
-
-            <p className="text-xs text-muted-foreground mt-1">
-              Used to invite the student to the class WhatsApp group
-            </p>
-
-            <Input
-              data-testid="student-whatsapp-group-input"
-              type="url"
-              value={form.whatsapp_group_link}
-              onChange={set("whatsapp_group_link")}
-              placeholder="https://chat.whatsapp.com/..."
               className="mt-1.5"
             />
           </div>
