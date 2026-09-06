@@ -121,6 +121,7 @@ class Batch(BaseModel):
     subject: str = ""
     class_time: str = ""
     monthly_fee: float = 0
+    whatsapp_group_link: str = ""
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
 
@@ -131,6 +132,7 @@ class BatchIn(BaseModel):
     subject: Optional[str] = ""
     class_time: Optional[str] = ""
     monthly_fee: Optional[float] = 0
+    whatsapp_group_link: Optional[str] = ""
 
 
 class Student(BaseModel):
