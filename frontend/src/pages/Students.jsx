@@ -258,6 +258,38 @@ export const Students = () => {
     setWhatsappPrompt(null);
   };
 
+  // Separate Payment Confirmation button
+  // Uses the parent's phone number.
+  const sendPaymentConfirmation = (
+    student,
+    monthStats
+  ) => {
+    if (!student.parent_phone) {
+      return toast.error(
+        "No Parent's Phone Number on file"
+      );
+    }
+
+    const amount =
+      Number(monthStats.paidThisMonth) || 0;
+
+    if (amount <= 0) {
+      return toast.error(
+        "No payment recorded for this month"
+      );
+    }
+
+    openWhatsApp(
+      student.parent_phone,
+      paymentConfirmationMessage(
+        student,
+        amount,
+        month,
+        settings?.org_name
+      )
+    );
+  };
+
   const markUnpaid = async (
     student,
     targetMonth = month
@@ -455,6 +487,15 @@ export const Students = () => {
 
             onRemind={() =>
               remind(s, st)
+            }
+
+            // Separate Payment Confirmation button.
+            // This sends to the parent's phone.
+            onPaymentConfirmation={() =>
+              sendPaymentConfirmation(
+                s,
+                st
+              )
             }
 
             onMove={() =>
