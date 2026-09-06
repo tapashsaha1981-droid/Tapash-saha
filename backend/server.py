@@ -138,9 +138,12 @@ class Student(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     name: str
     phone: str = ""
+    parent_phone: str = ""
     batch_id: str
     monthly_fee: float = 0
     parent_name: str = ""
+    admission_date: str = ""
+    whatsapp_group_link: str = ""
     notes: str = ""
     join_month: str = Field(default_factory=lambda: datetime.now(timezone.utc).strftime("%Y-%m"))
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
@@ -151,9 +154,12 @@ class StudentIn(BaseModel):
     created_at: Optional[str] = None
     name: str
     phone: Optional[str] = ""
+    parent_phone: Optional[str] = ""
     batch_id: str
     monthly_fee: Optional[float] = 0
     parent_name: Optional[str] = ""
+    admission_date: Optional[str] = ""
+    whatsapp_group_link: Optional[str] = ""
     notes: Optional[str] = ""
     join_month: Optional[str] = None
 
@@ -161,9 +167,12 @@ class StudentIn(BaseModel):
 class StudentUpdate(BaseModel):
     name: Optional[str] = None
     phone: Optional[str] = None
+    parent_phone: Optional[str] = None
     batch_id: Optional[str] = None
     monthly_fee: Optional[float] = None
     parent_name: Optional[str] = None
+    admission_date: Optional[str] = None
+    whatsapp_group_link: Optional[str] = None
     notes: Optional[str] = None
 
 
