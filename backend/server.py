@@ -13,7 +13,7 @@ import uuid
 from datetime import datetime, timezone, timedelta
 
 # Attendance router
-from attendance import attendance_router
+from backend.attendance import attendance_router
 
 
 ROOT_DIR = Path(__file__).parent
