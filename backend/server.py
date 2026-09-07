@@ -19,7 +19,7 @@ load_dotenv(ROOT_DIR / '.env')
 
 # Attendance router
 # Imported AFTER environment variables are loaded
-from attendance import attendance_router
+from backend.attendance import attendance_router
 
 
 mongo_url = os.environ['MONGO_URL']
