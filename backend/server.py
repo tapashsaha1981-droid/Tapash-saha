@@ -12,6 +12,10 @@ from typing import List, Optional, Any
 import uuid
 from datetime import datetime, timezone, timedelta
 
+# Attendance router
+from attendance import attendance_router
+
+
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
@@ -997,6 +1001,14 @@ async def root():
 # ---------- Register routers ----------
 app.include_router(public_router)
 app.include_router(api_router)
+
+# Attendance API
+# Protected by the same authentication used by the main application
+app.include_router(
+    attendance_router,
+    prefix="/api",
+    dependencies=[Depends(require_auth)]
+)
 
 
 # ---------- CORS ----------
