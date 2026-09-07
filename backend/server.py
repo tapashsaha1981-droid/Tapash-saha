@@ -12,16 +12,20 @@ from typing import List, Optional, Any
 import uuid
 from datetime import datetime, timezone, timedelta
 
-# Attendance router
-from backend.attendance import attendance_router
-
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
+
+# Attendance router
+# Imported AFTER environment variables are loaded
+from attendance import attendance_router
+
+
 mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ['DB_NAME']]
+
 
 # ---------- Authentication ----------
 APP_PASSWORD = os.environ.get("APP_PASSWORD", "")
@@ -56,8 +60,10 @@ async def require_auth(authorization: Optional[str] = Header(None)):
 
 app = FastAPI()
 
+
 # Public routes - login only
 public_router = APIRouter(prefix="/api")
+
 
 # All normal application API routes require authentication
 api_router = APIRouter(
@@ -120,13 +126,22 @@ async def login(payload: LoginIn):
 # ---------- Models ----------
 class Batch(BaseModel):
     model_config = ConfigDict(extra="ignore")
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+
+    id: str = Field(
+        default_factory=lambda: str(uuid.uuid4())
+    )
+
     name: str
     subject: str = ""
     class_time: str = ""
     monthly_fee: float = 0
     whatsapp_group_link: str = ""
-    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
+    created_at: str = Field(
+        default_factory=lambda: datetime.now(
+            timezone.utc
+        ).isoformat()
+    )
 
 
 class BatchIn(BaseModel):
@@ -141,7 +156,11 @@ class BatchIn(BaseModel):
 
 class Student(BaseModel):
     model_config = ConfigDict(extra="ignore")
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+
+    id: str = Field(
+        default_factory=lambda: str(uuid.uuid4())
+    )
+
     name: str
     phone: str = ""
     parent_phone: str = ""
@@ -151,17 +170,30 @@ class Student(BaseModel):
     admission_date: str = ""
     whatsapp_group_link: str = ""
     notes: str = ""
-    join_month: str = Field(default_factory=lambda: datetime.now(timezone.utc).strftime("%Y-%m"))
-    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
+    join_month: str = Field(
+        default_factory=lambda: datetime.now(
+            timezone.utc
+        ).strftime("%Y-%m")
+    )
+
+    created_at: str = Field(
+        default_factory=lambda: datetime.now(
+            timezone.utc
+        ).isoformat()
+    )
 
 
 class StudentIn(BaseModel):
     id: Optional[str] = None
     created_at: Optional[str] = None
+
     name: str
     phone: Optional[str] = ""
     parent_phone: Optional[str] = ""
+
     batch_id: str
+
     monthly_fee: Optional[float] = 0
     parent_name: Optional[str] = ""
     admission_date: Optional[str] = ""
@@ -184,19 +216,34 @@ class StudentUpdate(BaseModel):
 
 class Payment(BaseModel):
     model_config = ConfigDict(extra="ignore")
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+
+    id: str = Field(
+        default_factory=lambda: str(uuid.uuid4())
+    )
+
     student_id: str
     month: str
     amount: float
     fee_snapshot: float = 0
     note: str = ""
-    payment_date: str = Field(default_factory=lambda: datetime.now(timezone.utc).date().isoformat())
-    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
+    payment_date: str = Field(
+        default_factory=lambda: datetime.now(
+            timezone.utc
+        ).date().isoformat()
+    )
+
+    created_at: str = Field(
+        default_factory=lambda: datetime.now(
+            timezone.utc
+        ).isoformat()
+    )
 
 
 class PaymentIn(BaseModel):
     id: Optional[str] = None
     created_at: Optional[str] = None
+
     student_id: str
     month: str
     amount: float
@@ -207,7 +254,11 @@ class PaymentIn(BaseModel):
 
 class CalendarEvent(BaseModel):
     model_config = ConfigDict(extra="ignore")
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+
+    id: str = Field(
+        default_factory=lambda: str(uuid.uuid4())
+    )
+
     date: str
     title: str
     type: str = "note"
@@ -250,26 +301,45 @@ class ImportPayload(BaseModel):
 def clean(doc):
     if doc and "_id" in doc:
         doc.pop("_id", None)
+
     return doc
 
 
 # ---------- Batch routes ----------
 @api_router.get("/batches")
 async def list_batches():
-    docs = await db.batches.find({}, {"_id": 0}).to_list(1000)
+    docs = await db.batches.find(
+        {},
+        {"_id": 0}
+    ).to_list(1000)
+
     return docs
 
 
 @api_router.post("/batches")
 async def create_batch(payload: BatchIn):
-    batch = Batch(**payload.model_dump(exclude_none=True))
-    await db.batches.insert_one(batch.model_dump())
-    await log_activity(f"Added batch: {batch.name}")
+    batch = Batch(
+        **payload.model_dump(
+            exclude_none=True
+        )
+    )
+
+    await db.batches.insert_one(
+        batch.model_dump()
+    )
+
+    await log_activity(
+        f"Added batch: {batch.name}"
+    )
+
     return batch.model_dump()
 
 
 @api_router.put("/batches/{batch_id}")
-async def update_batch(batch_id: str, payload: BatchIn):
+async def update_batch(
+    batch_id: str,
+    payload: BatchIn
+):
     result = await db.batches.update_one(
         {"id": batch_id},
         {
@@ -282,7 +352,10 @@ async def update_batch(batch_id: str, payload: BatchIn):
     )
 
     if result.matched_count == 0:
-        raise HTTPException(404, "Batch not found")
+        raise HTTPException(
+            404,
+            "Batch not found"
+        )
 
     doc = await db.batches.find_one(
         {"id": batch_id},
@@ -300,17 +373,28 @@ async def delete_batch(batch_id: str):
     )
 
     if not batch:
-        raise HTTPException(404, "Batch not found")
+        raise HTTPException(
+            404,
+            "Batch not found"
+        )
 
     students = await db.students.find(
         {"batch_id": batch_id},
         {"_id": 0}
     ).to_list(10000)
 
-    student_ids = [s["id"] for s in students]
+    student_ids = [
+        s["id"]
+        for s in students
+    ]
 
-    await db.batches.delete_one({"id": batch_id})
-    await db.students.delete_many({"batch_id": batch_id})
+    await db.batches.delete_one(
+        {"id": batch_id}
+    )
+
+    await db.students.delete_many(
+        {"batch_id": batch_id}
+    )
 
     if student_ids:
         await db.payments.delete_many(
@@ -339,8 +423,12 @@ async def list_students():
 
 
 @api_router.post("/students")
-async def create_student(payload: StudentIn):
-    data = payload.model_dump(exclude_none=True)
+async def create_student(
+    payload: StudentIn
+):
+    data = payload.model_dump(
+        exclude_none=True
+    )
 
     if not data.get("join_month"):
         data["join_month"] = datetime.now(
@@ -375,6 +463,7 @@ async def update_student(
             {"id": student_id},
             {"_id": 0}
         )
+
         return doc
 
     result = await db.students.update_one(
@@ -401,7 +490,9 @@ async def move_student(
 ):
     result = await db.students.update_one(
         {"id": student_id},
-        {"$set": {"batch_id": payload.batch_id}}
+        {"$set": {
+            "batch_id": payload.batch_id
+        }}
     )
 
     if result.matched_count == 0:
@@ -423,10 +514,15 @@ async def move_student(
 
 
 @api_router.delete("/students/{student_id}")
-async def delete_student(student_id: str):
+async def delete_student(
+    student_id: str
+):
     st = await db.students.find_one(
         {"id": student_id},
-        {"_id": 0, "name": 1}
+        {
+            "_id": 0,
+            "name": 1
+        }
     )
 
     if not st:
@@ -476,7 +572,9 @@ async def list_payments(
 
 
 @api_router.post("/payments")
-async def create_payment(payload: PaymentIn):
+async def create_payment(
+    payload: PaymentIn
+):
     data = payload.model_dump(
         exclude_none=True
     )
@@ -533,7 +631,9 @@ async def create_payment(payload: PaymentIn):
 
 
 @api_router.delete("/payments/{payment_id}")
-async def delete_payment(payment_id: str):
+async def delete_payment(
+    payment_id: str
+):
     result = await db.payments.delete_one(
         {"id": payment_id}
     )
@@ -559,7 +659,9 @@ async def list_events():
 
 
 @api_router.post("/events")
-async def create_event(payload: CalendarEventIn):
+async def create_event(
+    payload: CalendarEventIn
+):
     ev = CalendarEvent(
         **payload.model_dump()
     )
@@ -572,7 +674,9 @@ async def create_event(payload: CalendarEventIn):
 
 
 @api_router.delete("/events/{event_id}")
-async def delete_event(event_id: str):
+async def delete_event(
+    event_id: str
+):
     result = await db.events.delete_one(
         {"id": event_id}
     )
@@ -610,6 +714,7 @@ async def get_settings():
         await db.settings.insert_one(
             dict(DEFAULT_SETTINGS)
         )
+
         return dict(DEFAULT_SETTINGS)
 
     return doc
@@ -691,11 +796,16 @@ async def export_all():
         "payments": payments,
         "events": events,
         "activities": activities,
-        "settings": settings or dict(DEFAULT_SETTINGS),
+        "settings": settings or dict(
+            DEFAULT_SETTINGS
+        ),
     }
 
 
-async def _replace_collection(name, docs):
+async def _replace_collection(
+    name,
+    docs
+):
     await db[name].delete_many({})
 
     if docs:
@@ -860,7 +970,11 @@ SKIP_LAST_MONTH = (
 )
 
 
-def _seed_payment_amount(name, fee, k):
+def _seed_payment_amount(
+    name,
+    fee,
+    k
+):
     if k == 2 and name == "Digbijoy":
         return fee / 2
 
@@ -889,7 +1003,13 @@ def _seed_student_docs(
     student_docs = []
     payment_docs = []
 
-    for name, phone, bidx, fee, months_back in students_seed:
+    for (
+        name,
+        phone,
+        bidx,
+        fee,
+        months_back
+    ) in students_seed:
 
         batch_id = batch_docs[bidx]["id"]
 
@@ -1002,8 +1122,16 @@ async def root():
 app.include_router(public_router)
 app.include_router(api_router)
 
-# Attendance API
-# Protected by the same authentication used by the main application
+
+# ---------- Attendance API ----------
+# Attendance endpoints:
+# GET    /api/attendance
+# POST   /api/attendance/bulk
+# DELETE /api/attendance/{attendance_id}
+#
+# Protected by the same authentication
+# used by the main application.
+
 app.include_router(
     attendance_router,
     prefix="/api",
@@ -1024,6 +1152,7 @@ app.add_middleware(
 )
 
 
+# ---------- Logging ----------
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
@@ -1032,6 +1161,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+# ---------- Shutdown ----------
 @app.on_event("shutdown")
 async def shutdown_db_client():
     client.close()
