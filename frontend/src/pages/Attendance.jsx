@@ -1,9 +1,5 @@
 import React, { useEffect, useState } from "react";
-import axios from "axios";
-
-const BACKEND_URL =
-  process.env.REACT_APP_BACKEND_URL ||
-  "https://tapash-saha-1.onrender.com";
+import { api } from "../lib/api";
 
 export default function Attendance() {
   const [date, setDate] = useState(
@@ -14,24 +10,17 @@ export default function Attendance() {
   const [batches, setBatches] = useState([]);
   const [selectedBatch, setSelectedBatch] = useState("");
   const [attendance, setAttendance] = useState({});
+
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
 
-  const getAuthHeaders = () => {
-    const token =
-      localStorage.getItem("token") ||
-      localStorage.getItem("access_token");
-
-    return token
-      ? { Authorization: `Bearer ${token}` }
-      : {};
-  };
-
+  // Load classes/batches
   useEffect(() => {
     loadBatches();
   }, []);
 
+  // Load students when class changes
   useEffect(() => {
     if (selectedBatch) {
       loadStudents();
@@ -41,6 +30,7 @@ export default function Attendance() {
     }
   }, [selectedBatch]);
 
+  // Load saved attendance when class/date changes
   useEffect(() => {
     if (selectedBatch && date) {
       loadExistingAttendance();
@@ -49,14 +39,8 @@ export default function Attendance() {
 
   const loadBatches = async () => {
     try {
-      const response = await axios.get(
-        `${BACKEND_URL}/api/batches`,
-        {
-          headers: getAuthHeaders(),
-        }
-      );
-
-      setBatches(response.data || []);
+      const data = await api.listBatches();
+      setBatches(data || []);
     } catch (error) {
       console.error("Error loading batches:", error);
       setMessage("Unable to load classes.");
@@ -65,18 +49,12 @@ export default function Attendance() {
 
   const loadStudents = async () => {
     setLoading(true);
+    setMessage("");
 
     try {
-      const response = await axios.get(
-        `${BACKEND_URL}/api/students`,
-        {
-          headers: getAuthHeaders(),
-        }
-      );
+      const allStudents = await api.listStudents();
 
-      const allStudents = response.data || [];
-
-      const filtered = allStudents.filter(
+      const filtered = (allStudents || []).filter(
         (student) =>
           String(student.batch_id) === String(selectedBatch)
       );
@@ -100,21 +78,14 @@ export default function Attendance() {
 
   const loadExistingAttendance = async () => {
     try {
-      const response = await axios.get(
-        `${BACKEND_URL}/api/attendance`,
-        {
-          params: {
-            date,
-            app_class_id: String(selectedBatch),
-          },
-          headers: getAuthHeaders(),
-        }
-      );
+      const existing = await api.listAttendance({
+        date,
+        app_class_id: String(selectedBatch),
+      });
 
-      const existing = response.data || {};
       const updated = { ...attendance };
 
-      existing.forEach((record) => {
+      (existing || []).forEach((record) => {
         if (record.app_student_id) {
           updated[record.app_student_id] = record.status;
         }
@@ -131,6 +102,26 @@ export default function Attendance() {
       ...previous,
       [studentId]: status,
     }));
+  };
+
+  const markAllPresent = () => {
+    const updated = {};
+
+    students.forEach((student) => {
+      updated[student.id] = "present";
+    });
+
+    setAttendance(updated);
+  };
+
+  const markAllAbsent = () => {
+    const updated = {};
+
+    students.forEach((student) => {
+      updated[student.id] = "absent";
+    });
+
+    setAttendance(updated);
   };
 
   const saveAttendance = async () => {
@@ -155,13 +146,7 @@ export default function Attendance() {
         status: attendance[student.id] || "present",
       }));
 
-      await axios.post(
-        `${BACKEND_URL}/api/attendance/bulk`,
-        { records },
-        {
-          headers: getAuthHeaders(),
-        }
-      );
+      await api.saveAttendance(records);
 
       setMessage("Attendance saved successfully.");
     } catch (error) {
@@ -177,13 +162,22 @@ export default function Attendance() {
     }
   };
 
+  const presentCount = students.filter(
+    (student) => attendance[student.id] === "present"
+  ).length;
+
+  const absentCount = students.filter(
+    (student) => attendance[student.id] === "absent"
+  ).length;
+
   return (
     <div style={styles.page}>
       <div style={styles.header}>
         <div>
           <h1 style={styles.title}>Attendance</h1>
+
           <p style={styles.subtitle}>
-            Mark today's student attendance
+            Mark student attendance
           </p>
         </div>
       </div>
@@ -225,6 +219,45 @@ export default function Attendance() {
       {message && (
         <div style={styles.message}>
           {message}
+        </div>
+      )}
+
+      {selectedBatch && students.length > 0 && (
+        <div style={styles.summary}>
+          <div style={styles.summaryItem}>
+            <strong>{students.length}</strong>
+            <span>Total</span>
+          </div>
+
+          <div style={styles.summaryItem}>
+            <strong>{presentCount}</strong>
+            <span>Present</span>
+          </div>
+
+          <div style={styles.summaryItem}>
+            <strong>{absentCount}</strong>
+            <span>Absent</span>
+          </div>
+        </div>
+      )}
+
+      {selectedBatch && students.length > 0 && (
+        <div style={styles.quickActions}>
+          <button
+            type="button"
+            onClick={markAllPresent}
+            style={styles.quickButton}
+          >
+            Mark All Present
+          </button>
+
+          <button
+            type="button"
+            onClick={markAllAbsent}
+            style={styles.quickButton}
+          >
+            Mark All Absent
+          </button>
         </div>
       )}
 
@@ -380,6 +413,40 @@ const styles = {
     marginBottom: "16px",
     borderRadius: "8px",
     background: "#f3f4f6",
+  },
+
+  summary: {
+    display: "flex",
+    gap: "12px",
+    flexWrap: "wrap",
+    marginBottom: "16px",
+  },
+
+  summaryItem: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "3px",
+    minWidth: "90px",
+    padding: "12px 16px",
+    border: "1px solid #e5e7eb",
+    borderRadius: "8px",
+    background: "#fff",
+  },
+
+  quickActions: {
+    display: "flex",
+    gap: "10px",
+    flexWrap: "wrap",
+    marginBottom: "16px",
+  },
+
+  quickButton: {
+    padding: "9px 14px",
+    border: "1px solid #d1d5db",
+    borderRadius: "7px",
+    background: "#fff",
+    cursor: "pointer",
+    fontWeight: 600,
   },
 
   empty: {
