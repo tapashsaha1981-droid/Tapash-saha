@@ -295,9 +295,15 @@ export default function Attendance() {
                         {student.name}
                       </div>
 
-                      {student.phone && (
+                      {/* PARENT / GUARDIAN WHATSAPP NUMBER */}
+                      {student.parent_phone ? (
                         <div style={styles.phone}>
-                          {student.phone}
+                          📱 Parent WhatsApp:{" "}
+                          {student.parent_phone}
+                        </div>
+                      ) : (
+                        <div style={styles.noPhone}>
+                          📱 Parent WhatsApp: Not available
                         </div>
                       )}
                     </div>
@@ -496,6 +502,12 @@ const styles = {
   phone: {
     fontSize: "13px",
     color: "#6b7280",
+    marginTop: "3px",
+  },
+
+  noPhone: {
+    fontSize: "13px",
+    color: "#ef4444",
     marginTop: "3px",
   },
 
