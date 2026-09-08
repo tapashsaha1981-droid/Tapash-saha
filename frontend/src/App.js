@@ -9,6 +9,7 @@ import { Batches } from "@/pages/Batches";
 import { Students } from "@/pages/Students";
 import { Overview } from "@/pages/Overview";
 import { CalendarPage } from "@/pages/CalendarPage";
+import { Attendance } from "@/pages/Attendance";
 import { api } from "@/lib/api";
 
 const TOKEN_KEY = "tapash_auth_token";
@@ -69,6 +70,7 @@ const Shell = () => {
         <Route path="/students" element={<Students />} />
         <Route path="/overview" element={<Overview />} />
         <Route path="/calendar" element={<CalendarPage />} />
+        <Route path="/attendance" element={<Attendance />} />
       </Routes>
     </Layout>
   );
