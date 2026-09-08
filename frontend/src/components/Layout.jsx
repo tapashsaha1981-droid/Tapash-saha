@@ -9,6 +9,7 @@ import {
   Users,
   ClipboardList,
   CalendarDays,
+  ClipboardCheck,
   LogOut,
 } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
@@ -60,6 +61,13 @@ export const Layout = ({ children }) => {
       icon: ClipboardList,
       testid: "nav-overview",
       emoji: "📋",
+    },
+    {
+      to: "/attendance",
+      label: "Attendance",
+      icon: ClipboardCheck,
+      testid: "nav-attendance",
+      emoji: "✅",
     },
     {
       to: "/calendar",
@@ -146,7 +154,7 @@ export const Layout = ({ children }) => {
 
       {/* Bottom nav */}
       <nav className="fixed bottom-0 left-0 right-0 z-30 bg-white/90 backdrop-blur-md border-t border-slate-200/60">
-        <div className="max-w-3xl mx-auto grid grid-cols-5 px-2 py-2">
+        <div className="max-w-3xl mx-auto grid grid-cols-6 px-2 py-2">
           {nav.map((n) => {
             const active = loc.pathname === n.to;
 
@@ -171,7 +179,7 @@ export const Layout = ({ children }) => {
 
                 <span
                   className={cn(
-                    "text-[11px] font-semibold",
+                    "text-[10px] sm:text-[11px] font-semibold",
                     active
                       ? "text-white"
                       : "text-slate-700"
