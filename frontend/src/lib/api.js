@@ -76,6 +76,16 @@ export const api = {
   deleteEvent: (id) =>
     client.delete(`/events/${id}`).then((r) => r.data),
 
+  // attendance
+  listAttendance: (params = {}) =>
+    client.get("/attendance", { params }).then((r) => r.data),
+
+  saveAttendance: (records) =>
+    client.post("/attendance/bulk", { records }).then((r) => r.data),
+
+  deleteAttendance: (id) =>
+    client.delete(`/attendance/${id}`).then((r) => r.data),
+
   // settings & activity
   getSettings: () => client.get("/settings").then((r) => r.data),
   updateSettings: (data) =>
