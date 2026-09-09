@@ -16,6 +16,7 @@ import {
   openWhatsApp,
   indexPayments,
   paysFor,
+  inr,
 } from "@/lib/calc";
 import { toast } from "sonner";
 
@@ -124,11 +125,79 @@ export const Students = () => {
       advancedRef.current !== m
     ) {
       advancedRef.current = m;
+
       toast.info(
         `Auto-advanced to ${monthLabel(m)}`
       );
     }
   }, [settings]);
+
+  // Find all pending months from the student's
+  // join month up to the currently selected month.
+  const getPendingMonths = (student) => {
+    const fee = Number(student.monthly_fee) || 0;
+
+    if (fee <= 0) {
+      return [];
+    }
+
+    const startMonth =
+      student.join_month || month;
+
+    const start = dayjs(
+      `${startMonth}-01`
+    );
+
+    const end = dayjs(
+      `${month}-01`
+    );
+
+    if (start.isAfter(end)) {
+      return [];
+    }
+
+    const studentPayments = paysFor(
+      paymentsIndex,
+      student.id
+    );
+
+    const pending = [];
+
+    let cursor = start;
+
+    while (
+      cursor.isBefore(end) ||
+      cursor.isSame(end, "month")
+    ) {
+      const targetMonth =
+        cursor.format("YYYY-MM");
+
+      let paid = 0;
+
+      for (const p of studentPayments) {
+        if (p.month === targetMonth) {
+          paid += Number(p.amount) || 0;
+        }
+      }
+
+      const remaining = Math.max(
+        0,
+        fee - paid
+      );
+
+      if (remaining > 0) {
+        pending.push({
+          month: targetMonth,
+          label: monthLabel(targetMonth),
+          amount: remaining,
+        });
+      }
+
+      cursor = cursor.add(1, "month");
+    }
+
+    return pending;
+  };
 
   const remind = (student, monthStats) => {
     if (!student.phone) {
@@ -137,20 +206,56 @@ export const Students = () => {
       );
     }
 
-    const amount = Math.max(
-      0,
-      monthStats.fee -
-        monthStats.paidThisMonth
-    );
+    const pendingMonths =
+      getPendingMonths(student);
+
+    if (!pendingMonths.length) {
+      return toast.error(
+        "No pending fee found"
+      );
+    }
+
+    const totalPending =
+      pendingMonths.reduce(
+        (sum, item) =>
+          sum + item.amount,
+        0
+      );
+
+    const pendingMonthNames =
+      pendingMonths
+        .map((item) => item.label)
+        .join(", ");
+
+    const message = `প্রিয় অভিভাবক,
+
+আপনার সন্তানের নিচের মাসগুলোর টিউশন ফি এখনও বকেয়া রয়েছে:
+
+বকেয়া মাস: ${pendingMonthNames}
+মোট বকেয়া: ₹${Math.round(
+      totalPending
+    ).toLocaleString("en-IN")}
+
+অনুগ্রহ করে সুবিধামতো বকেয়া ফি দিয়ে দিন।
+ধন্যবাদ।
+
+— ${settings?.org_name || "TAPASH SIR"}
+
+Dear Parent,
+
+Your child's tuition fees for the following months are still pending:
+
+Pending months: ${pendingMonthNames}
+Total pending: ${inr(totalPending)}
+
+Please clear the pending fees when convenient.
+Thank you.
+
+— ${settings?.org_name || "TAPASH SIR"}`;
 
     openWhatsApp(
       student.phone,
-      reminderMessage(
-        student,
-        amount,
-        month,
-        settings?.org_name
-      )
+      message
     );
   };
 
@@ -199,6 +304,7 @@ export const Students = () => {
         "Payment failed:",
         error
       );
+
       toast.error(
         "Could not save payment"
       );
@@ -231,6 +337,7 @@ export const Students = () => {
         "Payment failed:",
         error
       );
+
       toast.error(
         "Could not save payment"
       );
@@ -470,6 +577,7 @@ export const Students = () => {
             batch={batchById.get(
               s.batch_id
             )}
+
             onEdit={() => {
               setEditing(s);
               setFormOpen(true);
