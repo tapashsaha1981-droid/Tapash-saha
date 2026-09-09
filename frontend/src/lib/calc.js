@@ -239,21 +239,67 @@ export const filterStudents = (
   });
 };
 
+// Bilingual payment reminder
+// Bengali first, followed by simple English.
 export const reminderMessage = (
   student,
   amount,
   month,
   orgName = "TAPASH SIR"
-) =>
-  `Hello ${student.name}, this is a reminder from ${orgName} regarding the tuition fee of ${inr(amount)} for ${monthLabel(month)}. Please make the payment at your convenience. Thank you.`;
+) => {
+  const monthName = monthLabel(month);
 
+  return `প্রিয় অভিভাবক,
+
+আপনার সন্তানের ${monthName} মাসের টিউশন ফি ₹${Math.round(
+    amount || 0
+  ).toLocaleString("en-IN")} টাকা এখনও বকেয়া রয়েছে।
+
+অনুগ্রহ করে সুবিধামতো ফি দিয়ে দিন। ধন্যবাদ।
+
+— ${orgName}
+
+Dear Parent,
+
+Your child's tuition fee for ${monthName} is still pending.
+
+Amount pending: ${inr(amount)}
+
+Please pay the fee when convenient. Thank you.
+
+— ${orgName}`;
+};
+
+// Bilingual payment confirmation
+// Bengali first, followed by simple English.
 export const paymentConfirmationMessage = (
   student,
   amount,
   month,
   orgName = "TAPASH SIR"
-) =>
-  `Hello ${student.name}, payment of ${inr(amount)} for ${monthLabel(month)} tuition fee has been received successfully. Thank you. — ${orgName}`;
+) => {
+  const monthName = monthLabel(month);
+
+  return `প্রিয় অভিভাবক,
+
+আপনার সন্তানের ${monthName} মাসের টিউশন ফি বাবদ ${inr(
+    amount
+  )} টাকা আমরা সফলভাবে পেয়েছি।
+
+ফি দেওয়ার জন্য আপনাকে ধন্যবাদ।
+
+— ${orgName}
+
+Dear Parent,
+
+We have received ${inr(
+    amount
+  )} for your child's ${monthName} tuition fees successfully.
+
+Thank you for making the payment.
+
+— ${orgName}`;
+};
 
 // Normalise to international format;
 // Indian 10-digit numbers get +91
