@@ -134,7 +134,13 @@ export const Students = () => {
 
   // Find all pending months from the student's
   // join month up to the currently selected month.
-  const getPendingMonths = (student) => {
+  //
+  // extraPayment is used immediately after saving a payment,
+  // because React state may not contain the new payment yet.
+  const getPendingMonths = (
+    student,
+    extraPayment = null
+  ) => {
     const fee = Number(student.monthly_fee) || 0;
 
     if (fee <= 0) {
@@ -156,10 +162,20 @@ export const Students = () => {
       return [];
     }
 
-    const studentPayments = paysFor(
-      paymentsIndex,
-      student.id
-    );
+    const studentPayments = [
+      ...paysFor(
+        paymentsIndex,
+        student.id
+      ),
+    ];
+
+    // Include the payment that was just saved,
+    // even if React has not updated the payments state yet.
+    if (extraPayment) {
+      studentPayments.push(
+        extraPayment
+      );
+    }
 
     const pending = [];
 
@@ -276,16 +292,28 @@ Thank you.
       return;
     }
 
+    const newPayment = {
+      student_id: student.id,
+      month,
+      amount,
+      fee_snapshot: monthStats.fee,
+      note: "",
+      payment_date:
+        dayjs().format("YYYY-MM-DD"),
+    };
+
     try {
-      await addPayment({
-        student_id: student.id,
-        month,
-        amount,
-        fee_snapshot: monthStats.fee,
-        note: "",
-        payment_date:
-          dayjs().format("YYYY-MM-DD"),
-      });
+      await addPayment(
+        newPayment
+      );
+
+      // Calculate pending months including
+      // the payment we just saved.
+      const pendingMonths =
+        getPendingMonths(
+          student,
+          newPayment
+        );
 
       // After saving, show ONLY WhatsApp confirmation.
       if (student.phone) {
@@ -293,6 +321,7 @@ Thank you.
           student,
           amount,
           month,
+          pendingMonths,
         });
       } else {
         toast.info(
@@ -313,19 +342,32 @@ Thank you.
 
   // Used when marking a payment from History,
   // where the user may still want the payment modal.
-  const confirmPayment = async (payload) => {
+  const confirmPayment = async (
+    payload
+  ) => {
     const student = payFor?.s;
 
     try {
-      await addPayment(payload);
+      await addPayment(
+        payload
+      );
 
       setPayFor(null);
 
       if (student?.phone) {
+        // Calculate pending months including
+        // the payment that was just recorded.
+        const pendingMonths =
+          getPendingMonths(
+            student,
+            payload
+          );
+
         setWhatsappPrompt({
           student,
           amount: payload.amount,
           month: payload.month,
+          pendingMonths,
         });
       } else {
         toast.info(
@@ -352,14 +394,86 @@ Thank you.
       return;
     }
 
+    const student =
+      whatsappPrompt.student;
+
+    const amount =
+      Number(
+        whatsappPrompt.amount
+      ) || 0;
+
+    const paidMonth =
+      monthLabel(
+        whatsappPrompt.month
+      );
+
+    const pendingMonths =
+      whatsappPrompt.pendingMonths ||
+      [];
+
+    const totalPending =
+      pendingMonths.reduce(
+        (sum, item) =>
+          sum + item.amount,
+        0
+      );
+
+    const pendingMonthNames =
+      pendingMonths
+        .map((item) => item.label)
+        .join(", ");
+
+    let message;
+
+    if (pendingMonths.length > 0) {
+      message = `প্রিয় অভিভাবক,
+
+আপনার সন্তানের ${paidMonth} মাসের টিউশন ফি বাবদ ${inr(
+        amount
+      )} টাকা আমরা পেয়েছি। ধন্যবাদ।
+
+তবে নিচের মাসগুলোর ফি এখনও বকেয়া রয়েছে:
+
+বকেয়া মাস: ${pendingMonthNames}
+মোট বকেয়া: ${inr(
+        totalPending
+      )}
+
+অনুগ্রহ করে সুবিধামতো বকেয়া ফি দিয়ে দিন।
+ধন্যবাদ।
+
+— ${settings?.org_name || "TAPASH SIR"}
+
+Dear Parent,
+
+We have received ${inr(
+        amount
+      )} for your child's ${paidMonth} tuition fees. Thank you.
+
+However, the fees for the following months are still pending:
+
+Pending months: ${pendingMonthNames}
+Total pending: ${inr(
+        totalPending
+      )}
+
+Please clear the pending fees when convenient.
+Thank you.
+
+— ${settings?.org_name || "TAPASH SIR"}`;
+    } else {
+      message =
+        paymentConfirmationMessage(
+          student,
+          amount,
+          whatsappPrompt.month,
+          settings?.org_name
+        );
+    }
+
     openWhatsApp(
-      whatsappPrompt.student.phone,
-      paymentConfirmationMessage(
-        whatsappPrompt.student,
-        whatsappPrompt.amount,
-        whatsappPrompt.month,
-        settings?.org_name
-      )
+      student.phone,
+      message
     );
 
     setWhatsappPrompt(null);
@@ -378,7 +492,9 @@ Thank you.
     }
 
     const amount =
-      Number(monthStats.paidThisMonth) || 0;
+      Number(
+        monthStats.paidThisMonth
+      ) || 0;
 
     if (amount <= 0) {
       return toast.error(
@@ -386,14 +502,78 @@ Thank you.
       );
     }
 
+    // Here the payment already exists in state,
+    // so getPendingMonths() automatically sees it.
+    const pendingMonths =
+      getPendingMonths(student);
+
+    const totalPending =
+      pendingMonths.reduce(
+        (sum, item) =>
+          sum + item.amount,
+        0
+      );
+
+    const pendingMonthNames =
+      pendingMonths
+        .map((item) => item.label)
+        .join(", ");
+
+    let message;
+
+    if (pendingMonths.length > 0) {
+      message = `প্রিয় অভিভাবক,
+
+আপনার সন্তানের ${monthLabel(
+        month
+      )} মাসের টিউশন ফি বাবদ ${inr(
+        amount
+      )} টাকা আমরা পেয়েছি। ধন্যবাদ।
+
+তবে নিচের মাসগুলোর ফি এখনও বকেয়া রয়েছে:
+
+বকেয়া মাস: ${pendingMonthNames}
+মোট বকেয়া: ${inr(
+        totalPending
+      )}
+
+অনুগ্রহ করে সুবিধামতো বকেয়া ফি দিয়ে দিন।
+ধন্যবাদ।
+
+— ${settings?.org_name || "TAPASH SIR"}
+
+Dear Parent,
+
+We have received ${inr(
+        amount
+      )} for your child's ${monthLabel(
+        month
+      )} tuition fees. Thank you.
+
+However, the fees for the following months are still pending:
+
+Pending months: ${pendingMonthNames}
+Total pending: ${inr(
+        totalPending
+      )}
+
+Please clear the pending fees when convenient.
+Thank you.
+
+— ${settings?.org_name || "TAPASH SIR"}`;
+    } else {
+      message =
+        paymentConfirmationMessage(
+          student,
+          amount,
+          month,
+          settings?.org_name
+        );
+    }
+
     openWhatsApp(
       student.parent_phone,
-      paymentConfirmationMessage(
-        student,
-        amount,
-        month,
-        settings?.org_name
-      )
+      message
     );
   };
 
