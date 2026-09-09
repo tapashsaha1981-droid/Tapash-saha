@@ -215,10 +215,12 @@ export const Students = () => {
     return pending;
   };
 
+  // REMINDER:
+  // Always send the reminder to the parent's phone number.
   const remind = (student, monthStats) => {
-    if (!student.phone) {
+    if (!student.parent_phone) {
       return toast.error(
-        "No phone number on file"
+        "No Parent's Phone Number on file"
       );
     }
 
@@ -270,7 +272,7 @@ Thank you.
 — ${settings?.org_name || "TAPASH SIR"}`;
 
     openWhatsApp(
-      student.phone,
+      student.parent_phone,
       message
     );
   };
