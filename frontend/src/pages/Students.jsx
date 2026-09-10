@@ -11,7 +11,6 @@ import {
   currentMonth,
   studentMonthStats,
   filterStudents,
-  reminderMessage,
   paymentConfirmationMessage,
   openWhatsApp,
   indexPayments,
@@ -46,9 +45,6 @@ export const Students = () => {
   const [historyFor, setHistoryFor] = useState(null);
   const [moveFor, setMoveFor] = useState(null);
   const [toDelete, setToDelete] = useState(null);
-
-  // WhatsApp confirmation popup
-  const [whatsappPrompt, setWhatsappPrompt] = useState(null);
 
   // Build batch lookup once instead of repeatedly using batches.find().
   const batchById = useMemo(() => {
@@ -280,6 +276,7 @@ Thank you.
   // MARK PAID:
   // Automatically save the full remaining amount.
   // Do NOT open the Record Payment screen.
+  // Do NOT show a WhatsApp popup.
   const markPaidDirectly = async (
     student,
     monthStats
@@ -309,27 +306,9 @@ Thank you.
         newPayment
       );
 
-      // Calculate pending months including
-      // the payment we just saved.
-      const pendingMonths =
-        getPendingMonths(
-          student,
-          newPayment
-        );
-
-      // After saving, show ONLY WhatsApp confirmation.
-      if (student.phone) {
-        setWhatsappPrompt({
-          student,
-          amount,
-          month,
-          pendingMonths,
-        });
-      } else {
-        toast.info(
-          "Payment saved — no phone number on file for WhatsApp confirmation"
-        );
-      }
+      toast.success(
+        "Payment saved successfully"
+      );
     } catch (error) {
       console.error(
         "Payment failed:",
@@ -347,8 +326,6 @@ Thank you.
   const confirmPayment = async (
     payload
   ) => {
-    const student = payFor?.s;
-
     try {
       await addPayment(
         payload
@@ -356,26 +333,9 @@ Thank you.
 
       setPayFor(null);
 
-      if (student?.phone) {
-        // Calculate pending months including
-        // the payment that was just recorded.
-        const pendingMonths =
-          getPendingMonths(
-            student,
-            payload
-          );
-
-        setWhatsappPrompt({
-          student,
-          amount: payload.amount,
-          month: payload.month,
-          pendingMonths,
-        });
-      } else {
-        toast.info(
-          "Payment saved — no phone number on file for WhatsApp confirmation"
-        );
-      }
+      toast.success(
+        "Payment saved successfully"
+      );
     } catch (error) {
       console.error(
         "Payment failed:",
@@ -386,99 +346,6 @@ Thank you.
         "Could not save payment"
       );
     }
-  };
-
-  const sendWhatsAppConfirmation = () => {
-    if (
-      !whatsappPrompt?.student?.phone
-    ) {
-      setWhatsappPrompt(null);
-      return;
-    }
-
-    const student =
-      whatsappPrompt.student;
-
-    const amount =
-      Number(
-        whatsappPrompt.amount
-      ) || 0;
-
-    const paidMonth =
-      monthLabel(
-        whatsappPrompt.month
-      );
-
-    const pendingMonths =
-      whatsappPrompt.pendingMonths ||
-      [];
-
-    const totalPending =
-      pendingMonths.reduce(
-        (sum, item) =>
-          sum + item.amount,
-        0
-      );
-
-    const pendingMonthNames =
-      pendingMonths
-        .map((item) => item.label)
-        .join(", ");
-
-    let message;
-
-    if (pendingMonths.length > 0) {
-      message = `প্রিয় অভিভাবক,
-
-আপনার সন্তানের ${paidMonth} মাসের টিউশন ফি বাবদ ${inr(
-        amount
-      )} টাকা আমরা পেয়েছি। ধন্যবাদ।
-
-তবে নিচের মাসগুলোর ফি এখনও বকেয়া রয়েছে:
-
-বকেয়া মাস: ${pendingMonthNames}
-মোট বকেয়া: ${inr(
-        totalPending
-      )}
-
-অনুগ্রহ করে সুবিধামতো বকেয়া ফি দিয়ে দিন।
-ধন্যবাদ।
-
-— ${settings?.org_name || "TAPASH SIR"}
-
-Dear Parent,
-
-We have received ${inr(
-        amount
-      )} for your child's ${paidMonth} tuition fees. Thank you.
-
-However, the fees for the following months are still pending:
-
-Pending months: ${pendingMonthNames}
-Total pending: ${inr(
-        totalPending
-      )}
-
-Please clear the pending fees when convenient.
-Thank you.
-
-— ${settings?.org_name || "TAPASH SIR"}`;
-    } else {
-      message =
-        paymentConfirmationMessage(
-          student,
-          amount,
-          whatsappPrompt.month,
-          settings?.org_name
-        );
-    }
-
-    openWhatsApp(
-      student.phone,
-      message
-    );
-
-    setWhatsappPrompt(null);
   };
 
   // Separate Payment Confirmation button
@@ -883,50 +750,6 @@ Thank you.
           );
         }}
       />
-
-      {/* ONLY WhatsApp Confirmation Popup */}
-      {whatsappPrompt && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl">
-            <h3 className="text-xl font-bold text-slate-900">
-              Payment marked successfully
-            </h3>
-
-            <p className="mt-3 text-slate-600">
-              Do you want to send a WhatsApp confirmation to{" "}
-              <span className="font-semibold text-slate-900">
-                {
-                  whatsappPrompt
-                    .student.name
-                }
-              </span>
-              ?
-            </p>
-
-            <div className="mt-6 flex justify-end gap-3">
-              <button
-                onClick={() =>
-                  setWhatsappPrompt(
-                    null
-                  )
-                }
-                className="rounded-2xl border border-slate-200 bg-white px-5 py-3 font-semibold text-slate-700 hover:bg-slate-50"
-              >
-                Not Now
-              </button>
-
-              <button
-                onClick={
-                  sendWhatsAppConfirmation
-                }
-                className="rounded-2xl bg-indigo-600 px-5 py-3 font-semibold text-white shadow-md hover:bg-indigo-700"
-              >
-                💬 Send WhatsApp
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
