@@ -2,116 +2,270 @@ import { useCallback, useMemo } from "react";
 import { api } from "./api";
 
 // CRUD operations wrapped with undo/redo recording.
-export const useOperations = ({ batches, students, payments, refresh, record, clearStacks }) => {
+export const useOperations = ({
+  batches,
+  students,
+  payments,
+  refresh,
+  record,
+  clearStacks,
+  setStudents,
+  setPayments,
+}) => {
   const addBatch = useCallback(async (data) => {
     const created = await api.createBatch(data);
+
     const liveId = { id: created.id };
+
     record({
       label: "Add batch",
-      undo: async () => { await api.deleteBatch(liveId.id); },
-      redo: async () => { const recreated = await api.createBatch({ ...data }); liveId.id = recreated.id; },
+      undo: async () => {
+        await api.deleteBatch(liveId.id);
+      },
+      redo: async () => {
+        const recreated = await api.createBatch({ ...data });
+        liveId.id = recreated.id;
+      },
     });
+
     await refresh();
     return created;
   }, [record, refresh]);
 
   const editBatch = useCallback(async (id, data) => {
     const before = batches.find((b) => b.id === id);
+
     await api.updateBatch(id, data);
+
     record({
       label: "Edit batch",
-      undo: async () => { await api.updateBatch(id, before); },
-      redo: async () => { await api.updateBatch(id, data); },
+      undo: async () => {
+        await api.updateBatch(id, before);
+      },
+      redo: async () => {
+        await api.updateBatch(id, data);
+      },
     });
+
     await refresh();
   }, [batches, record, refresh]);
 
   const removeBatch = useCallback(async (id) => {
     const before = batches.find((b) => b.id === id);
-    const studentsInBatch = students.filter((s) => s.batch_id === id);
-    const paymentsInBatch = payments.filter((p) => studentsInBatch.some((s) => s.id === p.student_id));
+
+    const studentsInBatch = students.filter(
+      (s) => s.batch_id === id
+    );
+
+    const paymentsInBatch = payments.filter(
+      (p) => studentsInBatch.some((s) => s.id === p.student_id)
+    );
+
     await api.deleteBatch(id);
+
     record({
       label: "Delete batch",
+
       undo: async () => {
         await api.createBatch(before);
-        for (const s of studentsInBatch) await api.createStudent(s);
-        for (const p of paymentsInBatch) await api.createPayment(p);
+
+        for (const s of studentsInBatch) {
+          await api.createStudent(s);
+        }
+
+        for (const p of paymentsInBatch) {
+          await api.createPayment(p);
+        }
       },
-      redo: async () => { await api.deleteBatch(id); },
+
+      redo: async () => {
+        await api.deleteBatch(id);
+      },
     });
+
     await refresh();
   }, [batches, students, payments, record, refresh]);
 
+  // =========================================================
+  // SAVE STUDENT — OPTIMIZED
+  // =========================================================
+
   const addStudent = useCallback(async (data) => {
     const created = await api.createStudent(data);
+
     const liveId = { id: created.id };
+
     record({
       label: "Add student",
-      undo: async () => { await api.deleteStudent(liveId.id); },
-      redo: async () => { const recreated = await api.createStudent(data); liveId.id = recreated.id; },
+
+      undo: async () => {
+        await api.deleteStudent(liveId.id);
+
+        setStudents((prev) =>
+          prev.filter((s) => s.id !== liveId.id)
+        );
+      },
+
+      redo: async () => {
+        const recreated = await api.createStudent(data);
+
+        liveId.id = recreated.id;
+
+        setStudents((prev) => [
+          ...prev,
+          recreated,
+        ]);
+      },
     });
-    await refresh();
+
+    // Update local student list immediately.
+    // No full refresh here.
+    setStudents((prev) => [
+      ...prev,
+      created,
+    ]);
+
     return created;
-  }, [record, refresh]);
+  }, [record, setStudents]);
 
   const editStudent = useCallback(async (id, data) => {
     const before = students.find((s) => s.id === id);
-    await api.updateStudent(id, data);
+
+    const updated = await api.updateStudent(id, data);
+
     record({
       label: "Edit student",
-      undo: async () => { await api.updateStudent(id, before); },
-      redo: async () => { await api.updateStudent(id, data); },
+
+      undo: async () => {
+        const restored = await api.updateStudent(id, before);
+
+        setStudents((prev) =>
+          prev.map((s) =>
+            s.id === id ? restored : s
+          )
+        );
+      },
+
+      redo: async () => {
+        const changed = await api.updateStudent(id, data);
+
+        setStudents((prev) =>
+          prev.map((s) =>
+            s.id === id ? changed : s
+          )
+        );
+      },
     });
-    await refresh();
-  }, [students, record, refresh]);
+
+    // Update only this student locally.
+    setStudents((prev) =>
+      prev.map((s) =>
+        s.id === id ? updated : s
+      )
+    );
+  }, [students, record, setStudents]);
 
   const removeStudent = useCallback(async (id) => {
     const before = students.find((s) => s.id === id);
-    const beforePayments = payments.filter((p) => p.student_id === id);
+    const beforePayments = payments.filter(
+      (p) => p.student_id === id
+    );
+
     await api.deleteStudent(id);
+
     record({
       label: "Delete student",
+
       undo: async () => {
         await api.createStudent(before);
-        for (const p of beforePayments) await api.createPayment(p);
+
+        for (const p of beforePayments) {
+          await api.createPayment(p);
+        }
       },
-      redo: async () => { await api.deleteStudent(id); },
+
+      redo: async () => {
+        await api.deleteStudent(id);
+      },
     });
+
     await refresh();
   }, [students, payments, record, refresh]);
 
   const moveStudent = useCallback(async (id, newBatchId) => {
     const before = students.find((s) => s.id === id);
+
     await api.moveStudent(id, newBatchId);
+
     record({
       label: "Move student",
-      undo: async () => { await api.moveStudent(id, before.batch_id); },
-      redo: async () => { await api.moveStudent(id, newBatchId); },
+
+      undo: async () => {
+        await api.moveStudent(id, before.batch_id);
+      },
+
+      redo: async () => {
+        await api.moveStudent(id, newBatchId);
+      },
     });
+
     await refresh();
   }, [students, record, refresh]);
 
+  // =========================================================
+  // MARK PAID — OPTIMIZED
+  // =========================================================
+
   const addPayment = useCallback(async (data) => {
     const created = await api.createPayment(data);
+
     const liveId = { id: created.id };
+
     record({
       label: "Payment",
-      undo: async () => { await api.deletePayment(liveId.id); },
-      redo: async () => { const recreated = await api.createPayment(data); liveId.id = recreated.id; },
+
+      undo: async () => {
+        await api.deletePayment(liveId.id);
+
+        setPayments((prev) =>
+          prev.filter((p) => p.id !== liveId.id)
+        );
+      },
+
+      redo: async () => {
+        const recreated = await api.createPayment(data);
+
+        liveId.id = recreated.id;
+
+        setPayments((prev) => [
+          ...prev,
+          recreated,
+        ]);
+      },
     });
-    await refresh();
+
+    // Update payments locally immediately.
+    // No full refresh here.
+    setPayments((prev) => [
+      ...prev,
+      created,
+    ]);
+
     return created;
-  }, [record, refresh]);
+  }, [record, setPayments]);
 
   const removePaymentsForMonth = useCallback(async (studentId, month) => {
     const targets = payments.filter(
-      (p) => p.student_id === studentId && p.month === month
+      (p) =>
+        p.student_id === studentId &&
+        p.month === month
     );
 
     if (!targets.length) return;
 
-    const liveIds = targets.map((p) => ({ id: p.id }));
+    const liveIds = targets.map((p) => ({
+      id: p.id,
+    }));
 
     for (const item of liveIds) {
       await api.deletePayment(item.id);
@@ -119,12 +273,17 @@ export const useOperations = ({ batches, students, payments, refresh, record, cl
 
     record({
       label: "Mark unpaid",
+
       undo: async () => {
         for (let i = 0; i < targets.length; i++) {
-          const recreated = await api.createPayment(targets[i]);
+          const recreated = await api.createPayment(
+            targets[i]
+          );
+
           liveIds[i].id = recreated.id;
         }
       },
+
       redo: async () => {
         for (const item of liveIds) {
           await api.deletePayment(item.id);
@@ -154,23 +313,38 @@ export const useOperations = ({ batches, students, payments, refresh, record, cl
   }, [clearStacks, refresh]);
 
   return useMemo(() => ({
-    addBatch, editBatch, removeBatch,
-    addStudent, editStudent, removeStudent, moveStudent,
-    addPayment, removePaymentsForMonth,
-    addEvent, removeEvent,
+    addBatch,
+    editBatch,
+    removeBatch,
+
+    addStudent,
+    editStudent,
+    removeStudent,
+    moveStudent,
+
+    addPayment,
+    removePaymentsForMonth,
+
+    addEvent,
+    removeEvent,
+
     importAll,
   }), [
     addBatch,
     editBatch,
     removeBatch,
+
     addStudent,
     editStudent,
     removeStudent,
     moveStudent,
+
     addPayment,
     removePaymentsForMonth,
+
     addEvent,
     removeEvent,
-    importAll
+
+    importAll,
   ]);
 };
