@@ -24,6 +24,7 @@ export const DataProvider = ({ children }) => {
       api.getSettings(),
       api.listActivities(),
     ]);
+
     setBatches(b);
     setStudents(s);
     setPayments(p);
@@ -35,11 +36,13 @@ export const DataProvider = ({ children }) => {
   const retryLoad = useCallback(async () => {
     setLoading(true);
     setLoadError(null);
+
     try {
-      
       await refresh();
     } catch (err) {
-      if (process.env.NODE_ENV === "development") console.error("Initial data load failed", err);
+      if (process.env.NODE_ENV === "development") {
+        console.error("Initial data load failed", err);
+      }
       setLoadError(err);
     } finally {
       setLoading(false);
@@ -50,7 +53,14 @@ export const DataProvider = ({ children }) => {
     retryLoad();
   }, [retryLoad]);
 
-  const { undoStack, redoStack, record, clearStacks, doUndo, doRedo } = useStacks(refresh);
+  const {
+    undoStack,
+    redoStack,
+    record,
+    clearStacks,
+    doUndo,
+    doRedo,
+  } = useStacks(refresh);
 
   const saveSettings = useCallback(async (data) => {
     const res = await api.updateSettings(data);
@@ -58,23 +68,66 @@ export const DataProvider = ({ children }) => {
     return res;
   }, [refresh, api]);
 
-  const ops = useOperations({ batches, students, payments, refresh, record, clearStacks });
+  const ops = useOperations({
+    batches,
+    students,
+    payments,
+    refresh,
+    record,
+    clearStacks,
+    setStudents,
+    setPayments,
+  });
 
   const value = useMemo(() => ({
-    batches, students, payments, events, settings, activities,
-    loading, loadError, retryLoad,
-    refresh, saveSettings,
+    batches,
+    students,
+    payments,
+    events,
+    settings,
+    activities,
+    loading,
+    loadError,
+    retryLoad,
+    refresh,
+    saveSettings,
     ...ops,
     canUndo: undoStack.length > 0,
     canRedo: redoStack.length > 0,
-    doUndo, doRedo,
-  }), [batches, students, payments, events, settings, activities, loading, loadError, retryLoad, refresh, saveSettings, ops, undoStack, redoStack, doUndo, doRedo]);
+    doUndo,
+    doRedo,
+  }), [
+    batches,
+    students,
+    payments,
+    events,
+    settings,
+    activities,
+    loading,
+    loadError,
+    retryLoad,
+    refresh,
+    saveSettings,
+    ops,
+    undoStack,
+    redoStack,
+    doUndo,
+    doRedo,
+  ]);
 
-  return <DataCtx.Provider value={value}>{children}</DataCtx.Provider>;
+  return (
+    <DataCtx.Provider value={value}>
+      {children}
+    </DataCtx.Provider>
+  );
 };
 
 export const useData = () => {
   const ctx = useContext(DataCtx);
-  if (!ctx) throw new Error("useData must be inside DataProvider");
+
+  if (!ctx) {
+    throw new Error("useData must be inside DataProvider");
+  }
+
   return ctx;
 };
