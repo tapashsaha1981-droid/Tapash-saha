@@ -36,7 +36,9 @@ export const PaymentOverview = ({ paid, partial, unpaid }) => {
 
   /*
    * Parent WhatsApp number
-   * Uses parent_phone first, then guardian_whatsapp.
+   *
+   * IMPORTANT:
+   * Never use the student's phone number for payment reminders.
    */
   const getParentWhatsApp = (student) => {
     return (
@@ -302,9 +304,19 @@ export const PaymentOverview = ({ paid, partial, unpaid }) => {
   };
 
   /*
-   * WhatsApp reminder:
-   * SEND TO PARENT/GUARDIAN ONLY
-   * BENGALI ONLY
+   * ==========================================================
+   * WHATSAPP PAYMENT REMINDER
+   * ==========================================================
+   *
+   * Parent/Guardian number ONLY.
+   *
+   * Priority:
+   * 1. parent_phone
+   * 2. guardian_whatsapp
+   *
+   * Student phone is NEVER used.
+   *
+   * Message is Bengali only.
    */
   const sendWhatsApp = (row) => {
     const parentPhone = getParentWhatsApp(
@@ -313,7 +325,7 @@ export const PaymentOverview = ({ paid, partial, unpaid }) => {
 
     if (!parentPhone) {
       alert(
-        "এই শিক্ষার্থীর অভিভাবকের WhatsApp নম্বর দেওয়া নেই।"
+        `এই শিক্ষার্থীর অভিভাবকের WhatsApp নম্বর দেওয়া নেই।\n\n${row.student.name}-এর Student Details থেকে Parent's Phone Number যোগ করুন।`
       );
       return;
     }
@@ -689,11 +701,11 @@ export const PaymentOverview = ({ paid, partial, unpaid }) => {
                               {row.student.name}
                             </div>
 
-                            {parentPhone && (
-                              <div className="mt-1 text-xs text-slate-500">
-                                {parentPhone}
-                              </div>
-                            )}
+                            <div className="mt-1 text-xs text-slate-500">
+                              {parentPhone
+                                ? parentPhone
+                                : "Parent WhatsApp number not added"}
+                            </div>
 
                             <div className="mt-4 grid grid-cols-3 gap-2">
                               <div className="rounded-xl bg-orange-50 p-3 text-center">
@@ -740,10 +752,7 @@ export const PaymentOverview = ({ paid, partial, unpaid }) => {
                                     row
                                   )
                                 }
-                                disabled={
-                                  !parentPhone
-                                }
-                                className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-3 py-3 text-xs font-extrabold text-white disabled:cursor-not-allowed disabled:opacity-40"
+                                className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-3 py-3 text-xs font-extrabold text-white"
                               >
                                 <MessageCircle
                                   size={16}
