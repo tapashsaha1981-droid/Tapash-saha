@@ -11,6 +11,8 @@ from pydantic import BaseModel, Field, ConfigDict
 from typing import List, Optional, Any
 import uuid
 from datetime import datetime, timezone, timedelta
+from urllib.parse import quote
+import requests
 
 
 ROOT_DIR = Path(__file__).parent
@@ -305,6 +307,278 @@ def clean(doc):
     return doc
 
 
+# ============================================================
+# SUPABASE TUITION PAYMENT SYNC
+# ============================================================
+
+def _normalise_phone(phone):
+    digits = "".join(
+        ch for ch in str(phone or "")
+        if ch.isdigit()
+    )
+
+    if len(digits) == 10:
+        return "91" + digits
+
+    if len(digits) == 12 and digits.startswith("91"):
+        return digits
+
+    if len(digits) == 11 and digits.startswith("0"):
+        return "91" + digits[1:]
+
+    return digits
+
+
+def _month_label(month_key):
+    try:
+        return datetime.strptime(
+            month_key,
+            "%Y-%m"
+        ).strftime("%B %Y")
+    except ValueError:
+        return month_key
+
+
+def _supabase_headers():
+    key = os.environ.get(
+        "SUPABASE_SERVICE_ROLE_KEY",
+        ""
+    ).strip()
+
+    return {
+        "apikey": key,
+        "Authorization": f"Bearer {key}",
+        "Content-Type": "application/json",
+        "Prefer": "return=minimal",
+    }
+
+
+def _supabase_request(
+    method,
+    url,
+    **kwargs
+):
+    response = requests.request(
+        method,
+        url,
+        timeout=15,
+        **kwargs
+    )
+
+    if response.status_code >= 400:
+        raise RuntimeError(
+            "Supabase request failed "
+            f"({response.status_code}): "
+            f"{response.text[:500]}"
+        )
+
+    return response
+
+
+async def sync_payment_for_student(
+    student_id,
+    month_key
+):
+    """
+    Synchronizes one student's monthly fee/payment
+    summary from MongoDB to Supabase.
+
+    This function NEVER interrupts the normal
+    Tuition Manager payment operation if syncing fails.
+    """
+
+    try:
+        supabase_url = os.environ.get(
+            "SUPABASE_URL",
+            ""
+        ).rstrip("/")
+
+        supabase_key = os.environ.get(
+            "SUPABASE_SERVICE_ROLE_KEY",
+            ""
+        ).strip()
+
+        if not supabase_url or not supabase_key:
+            logger.warning(
+                "Supabase payment sync skipped: "
+                "credentials not configured"
+            )
+            return False
+
+        # ----------------------------------------------------
+        # Find Tuition Manager student
+        # ----------------------------------------------------
+        student = await db.students.find_one(
+            {"id": student_id},
+            {
+                "_id": 0,
+                "phone": 1,
+                "monthly_fee": 1,
+            }
+        )
+
+        if not student:
+            logger.warning(
+                "Supabase payment sync skipped: "
+                "student %s not found",
+                student_id
+            )
+            return False
+
+        phone = _normalise_phone(
+            student.get("phone")
+        )
+
+        if not phone:
+            logger.warning(
+                "Supabase payment sync skipped: "
+                "student %s has no phone",
+                student_id
+            )
+            return False
+
+        base = f"{supabase_url}/rest/v1"
+        headers = _supabase_headers()
+
+        # ----------------------------------------------------
+        # Find matching EduNotes student profile by phone
+        # ----------------------------------------------------
+        profile_response = _supabase_request(
+            "GET",
+            f"{base}/profiles",
+            headers=headers,
+            params={
+                "select": "id",
+                "phone": f"eq.{phone}",
+                "role": "eq.student",
+                "limit": "1",
+            }
+        )
+
+        profiles = profile_response.json()
+
+        if not profiles:
+            logger.warning(
+                "Supabase payment sync skipped: "
+                "no EduNotes profile found for phone %s",
+                phone
+            )
+            return False
+
+        profile_id = profiles[0]["id"]
+
+        # ----------------------------------------------------
+        # Calculate total paid for this month
+        # ----------------------------------------------------
+        payments = await db.payments.find(
+            {
+                "student_id": student_id,
+                "month": month_key,
+            },
+            {
+                "_id": 0,
+                "amount": 1,
+            }
+        ).to_list(1000)
+
+        amount_paid = sum(
+            float(p.get("amount") or 0)
+            for p in payments
+        )
+
+        amount_due = float(
+            student.get("monthly_fee") or 0
+        )
+
+        # ----------------------------------------------------
+        # Determine status
+        # ----------------------------------------------------
+        if amount_paid >= amount_due and amount_due > 0:
+            status = "paid"
+        elif amount_paid > 0:
+            status = "partial"
+        else:
+            status = "unpaid"
+
+        payload = {
+            "profile_id": profile_id,
+            "month_key": month_key,
+            "month_label": _month_label(month_key),
+            "amount_due": amount_due,
+            "amount_paid": amount_paid,
+            "status": status,
+        }
+
+        # ----------------------------------------------------
+        # Look for existing monthly record
+        # ----------------------------------------------------
+        existing_response = _supabase_request(
+            "GET",
+            f"{base}/tuition_fee_records",
+            headers=headers,
+            params={
+                "select": "id",
+                "profile_id": f"eq.{quote(profile_id)}",
+                "month_key": f"eq.{quote(month_key)}",
+                "limit": "1",
+            }
+        )
+
+        existing = existing_response.json()
+
+        # ----------------------------------------------------
+        # Update existing record
+        # ----------------------------------------------------
+        if existing:
+            record_id = existing[0]["id"]
+
+            _supabase_request(
+                "PATCH",
+                f"{base}/tuition_fee_records",
+                headers=headers,
+                params={
+                    "id": f"eq.{quote(record_id)}"
+                },
+                json=payload,
+            )
+
+        # ----------------------------------------------------
+        # Create new record
+        # ----------------------------------------------------
+        else:
+            _supabase_request(
+                "POST",
+                f"{base}/tuition_fee_records",
+                headers=headers,
+                json=payload,
+            )
+
+        logger.info(
+            "Supabase tuition sync successful: "
+            "profile=%s month=%s paid=%s due=%s status=%s",
+            profile_id,
+            month_key,
+            amount_paid,
+            amount_due,
+            status,
+        )
+
+        return True
+
+    except Exception:
+        logger.exception(
+            "Supabase payment sync failed: "
+            "student=%s month=%s",
+            student_id,
+            month_key,
+        )
+
+        # IMPORTANT:
+        # Never fail the normal Tuition Manager
+        # operation because Supabase sync failed.
+        return False
+
+
 # ---------- Batch routes ----------
 @api_router.get("/batches")
 async def list_batches():
@@ -398,7 +672,11 @@ async def delete_batch(batch_id: str):
 
     if student_ids:
         await db.payments.delete_many(
-            {"student_id": {"$in": student_ids}}
+            {
+                "student_id": {
+                    "$in": student_ids
+                }
+            }
         )
 
     await log_activity(
@@ -490,9 +768,11 @@ async def move_student(
 ):
     result = await db.students.update_one(
         {"id": student_id},
-        {"$set": {
-            "batch_id": payload.batch_id
-        }}
+        {
+            "$set": {
+                "batch_id": payload.batch_id
+            }
+        }
     )
 
     if result.matched_count == 0:
@@ -586,6 +866,9 @@ async def create_payment(
 
     payment = Payment(**data)
 
+    # --------------------------------------------------------
+    # EXISTING TUITION MANAGER PAYMENT BEHAVIOUR
+    # --------------------------------------------------------
     await db.payments.insert_one(
         payment.model_dump()
     )
@@ -624,9 +907,19 @@ async def create_payment(
             )
         else:
             await log_activity(
-                f"Partial payment ₹{int(payment.amount)}: {st['name']}"
+                f"Partial payment ₹{int(payment.amount)}: "
+                f"{st['name']}"
             )
 
+    # --------------------------------------------------------
+    # NEW: SYNC TO EDUNOTES PRO
+    # --------------------------------------------------------
+    await sync_payment_for_student(
+        payment.student_id,
+        payment.month
+    )
+
+    # Existing response remains unchanged
     return payment.model_dump()
 
 
@@ -634,6 +927,30 @@ async def create_payment(
 async def delete_payment(
     payment_id: str
 ):
+    # --------------------------------------------------------
+    # Capture payment information BEFORE deletion
+    # --------------------------------------------------------
+    payment = await db.payments.find_one(
+        {"id": payment_id},
+        {
+            "_id": 0,
+            "student_id": 1,
+            "month": 1,
+        }
+    )
+
+    if not payment:
+        raise HTTPException(
+            404,
+            "Payment not found"
+        )
+
+    student_id = payment.get("student_id")
+    month_key = payment.get("month")
+
+    # --------------------------------------------------------
+    # EXISTING TUITION MANAGER DELETE BEHAVIOUR
+    # --------------------------------------------------------
     result = await db.payments.delete_one(
         {"id": payment_id}
     )
@@ -642,6 +959,15 @@ async def delete_payment(
         raise HTTPException(
             404,
             "Payment not found"
+        )
+
+    # --------------------------------------------------------
+    # NEW: SYNC REMAINING MONTHLY TOTAL TO EDUNOTES PRO
+    # --------------------------------------------------------
+    if student_id and month_key:
+        await sync_payment_for_student(
+            student_id,
+            month_key
         )
 
     return {"ok": True}
