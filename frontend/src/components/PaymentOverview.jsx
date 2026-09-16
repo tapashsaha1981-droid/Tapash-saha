@@ -35,6 +35,18 @@ export const PaymentOverview = ({ paid, partial, unpaid }) => {
   const previousMonth = shiftMonth(thisMonth, -1);
 
   /*
+   * Parent WhatsApp number
+   * Uses parent_phone first, then guardian_whatsapp.
+   */
+  const getParentWhatsApp = (student) => {
+    return (
+      student.parent_phone ||
+      student.guardian_whatsapp ||
+      ""
+    );
+  };
+
+  /*
    * PERFORMANCE OPTIMIZATION
    *
    * Create lookup maps once instead of repeatedly searching
@@ -289,26 +301,42 @@ export const PaymentOverview = ({ paid, partial, unpaid }) => {
     }
   };
 
+  /*
+   * WhatsApp reminder:
+   * SEND TO PARENT/GUARDIAN ONLY
+   * BENGALI ONLY
+   */
   const sendWhatsApp = (row) => {
+    const parentPhone = getParentWhatsApp(
+      row.student
+    );
+
+    if (!parentPhone) {
+      alert(
+        "এই শিক্ষার্থীর অভিভাবকের WhatsApp নম্বর দেওয়া নেই।"
+      );
+      return;
+    }
+
     const message =
-      `Hello ${row.student.name},\n\n` +
-      `This is a reminder regarding the tuition fee.\n\n` +
-      `Previous pending dues: ${inr(
+      `প্রিয় অভিভাবক,\n\n` +
+      `আপনার সন্তানের টিউশন ফি বাবদ বকেয়া রয়েছে।\n\n` +
+      `আগের মাসের বকেয়া: ${inr(
         row.previousDue
       )}\n` +
-      `Current month fee: ${inr(
+      `চলতি মাসের ফি: ${inr(
         row.currentDue
       )}\n` +
       `-------------------------\n` +
-      `TOTAL AMOUNT DUE: ${inr(
+      `মোট বকেয়া: ${inr(
         row.totalDue
       )}\n\n` +
-      `Please make the payment at your convenience.\n\n` +
-      `Thank you.\n` +
+      `অনুগ্রহ করে সুবিধামতো টিউশন ফি পরিশোধ করে দিন।\n\n` +
+      `ধন্যবাদ।\n` +
       `TAPASH SIR`;
 
     openWhatsApp(
-      row.student.phone,
+      parentPhone,
       message
     );
   };
@@ -646,124 +674,127 @@ export const PaymentOverview = ({ paid, partial, unpaid }) => {
 
                   <div className="space-y-3">
                     {selectedGroup?.students.map(
-                      (row) => (
-                        <div
-                          key={row.student.id}
-                          className="rounded-2xl bg-white p-4 shadow-sm"
-                        >
-                          <div className="font-extrabold text-slate-900">
-                            {row.student.name}
-                          </div>
+                      (row) => {
+                        const parentPhone =
+                          getParentWhatsApp(
+                            row.student
+                          );
 
-                          {row.student.phone && (
-                            <div className="mt-1 text-xs text-slate-500">
-                              {
-                                row.student
-                                  .phone
-                              }
-                            </div>
-                          )}
-
-                          <div className="mt-4 grid grid-cols-3 gap-2">
-                            <div className="rounded-xl bg-orange-50 p-3 text-center">
-                              <div className="text-[10px] font-bold uppercase text-orange-600">
-                                Previous
-                              </div>
-
-                              <div className="mt-1 text-sm font-extrabold text-orange-700">
-                                {inr(
-                                  row.previousDue
-                                )}
-                              </div>
+                        return (
+                          <div
+                            key={row.student.id}
+                            className="rounded-2xl bg-white p-4 shadow-sm"
+                          >
+                            <div className="font-extrabold text-slate-900">
+                              {row.student.name}
                             </div>
 
-                            <div className="rounded-xl bg-blue-50 p-3 text-center">
-                              <div className="text-[10px] font-bold uppercase text-blue-600">
-                                Current
+                            {parentPhone && (
+                              <div className="mt-1 text-xs text-slate-500">
+                                {parentPhone}
+                              </div>
+                            )}
+
+                            <div className="mt-4 grid grid-cols-3 gap-2">
+                              <div className="rounded-xl bg-orange-50 p-3 text-center">
+                                <div className="text-[10px] font-bold uppercase text-orange-600">
+                                  Previous
+                                </div>
+
+                                <div className="mt-1 text-sm font-extrabold text-orange-700">
+                                  {inr(
+                                    row.previousDue
+                                  )}
+                                </div>
                               </div>
 
-                              <div className="mt-1 text-sm font-extrabold text-blue-700">
-                                {inr(
-                                  row.currentDue
-                                )}
+                              <div className="rounded-xl bg-blue-50 p-3 text-center">
+                                <div className="text-[10px] font-bold uppercase text-blue-600">
+                                  Current
+                                </div>
+
+                                <div className="mt-1 text-sm font-extrabold text-blue-700">
+                                  {inr(
+                                    row.currentDue
+                                  )}
+                                </div>
+                              </div>
+
+                              <div className="rounded-xl bg-indigo-50 p-3 text-center">
+                                <div className="text-[10px] font-bold uppercase text-indigo-600">
+                                  TOTAL
+                                </div>
+
+                                <div className="mt-1 text-sm font-extrabold text-indigo-700">
+                                  {inr(
+                                    row.totalDue
+                                  )}
+                                </div>
                               </div>
                             </div>
 
-                            <div className="rounded-xl bg-indigo-50 p-3 text-center">
-                              <div className="text-[10px] font-bold uppercase text-indigo-600">
-                                TOTAL
-                              </div>
-
-                              <div className="mt-1 text-sm font-extrabold text-indigo-700">
-                                {inr(
-                                  row.totalDue
-                                )}
-                              </div>
-                            </div>
-                          </div>
-
-                          <div className="mt-4 flex flex-wrap gap-2">
-                            <button
-                              onClick={() =>
-                                sendWhatsApp(
-                                  row
-                                )
-                              }
-                              disabled={
-                                !row.student
-                                  .phone
-                              }
-                              className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-3 py-3 text-xs font-extrabold text-white disabled:cursor-not-allowed disabled:opacity-40"
-                            >
-                              <MessageCircle
-                                size={16}
-                              />
-                              WhatsApp
-                            </button>
-
-                            {row.selectedMonthDue >
-                              0 && (
+                            <div className="mt-4 flex flex-wrap gap-2">
                               <button
                                 onClick={() =>
-                                  markPreviousPaid(
+                                  sendWhatsApp(
                                     row
                                   )
                                 }
                                 disabled={
-                                  processingId ===
-                                  row.student
-                                    .id
+                                  !parentPhone
                                 }
-                                className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-indigo-600 px-3 py-3 text-xs font-extrabold text-white disabled:opacity-50"
+                                className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-3 py-3 text-xs font-extrabold text-white disabled:cursor-not-allowed disabled:opacity-40"
                               >
-                                <CheckCircle2
+                                <MessageCircle
                                   size={16}
                                 />
-
-                                {processingId ===
-                                row.student
-                                  .id
-                                  ? "Saving..."
-                                  : `Mark ${monthLabel(
-                                      selectedMonth
-                                    ).split(
-                                      " "
-                                    )[0]} Paid`}
+                                WhatsApp
                               </button>
-                            )}
-                          </div>
 
-                          <div className="mt-3 rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-600">
-                            WhatsApp will show:{" "}
-                            <b className="text-indigo-700">
-                              {inr(
-                                row.totalDue
+                              {row.selectedMonthDue >
+                                0 && (
+                                <button
+                                  onClick={() =>
+                                    markPreviousPaid(
+                                      row
+                                    )
+                                  }
+                                  disabled={
+                                    processingId ===
+                                    row.student
+                                      .id
+                                  }
+                                  className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-indigo-600 px-3 py-3 text-xs font-extrabold text-white disabled:opacity-50"
+                                >
+                                  <CheckCircle2
+                                    size={16}
+                                  />
+
+                                  {processingId ===
+                                  row.student
+                                    .id
+                                    ? "Saving..."
+                                    : `Mark ${monthLabel(
+                                        selectedMonth
+                                      ).split(
+                                        " "
+                                      )[0]} Paid`}
+                                </button>
                               )}
-                            </b>{" "}
-                            (Previous + Current)
+                            </div>
+
+                            <div className="mt-3 rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                              WhatsApp will show:{" "}
+                              <b className="text-indigo-700">
+                                {inr(
+                                  row.totalDue
+                                )}
+                              </b>{" "}
+                              (Previous + Current)
+                            </div>
                           </div>
-                        </div>
-                      )
+                        );
+                      }
                     )}
                   </div>
                 </div>
