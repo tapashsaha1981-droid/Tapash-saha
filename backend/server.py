@@ -308,6 +308,7 @@ def clean(doc):
 
 
 # ============================================================
+# ============================================================
 # SUPABASE TUITION PAYMENT SYNC
 # ============================================================
 
@@ -337,6 +338,28 @@ def _month_label(month_key):
         ).strftime("%B %Y")
     except ValueError:
         return month_key
+
+
+def _month_range(start_key, end_key):
+    try:
+        sy, sm = map(int, start_key.split("-"))
+        ey, em = map(int, end_key.split("-"))
+    except Exception:
+        return []
+
+    months = []
+    y, m = sy, sm
+
+    while (y, m) <= (ey, em):
+        months.append(f"{y:04d}-{m:02d}")
+
+        m += 1
+
+        if m > 12:
+            m = 1
+            y += 1
+
+    return months
 
 
 def _supabase_headers():
@@ -377,17 +400,20 @@ def _supabase_request(
 
 async def sync_payment_for_student(
     student_id,
-    month_key
+    month_key=None
 ):
     """
-    Synchronizes one student's monthly fee/payment
-    summary from MongoDB to Supabase.
+    Sync the complete tuition-payment history
+    of one Tuition Manager student to EduNotes Pro.
 
-    This function NEVER interrupts the normal
-    Tuition Manager payment operation if syncing fails.
+    A sync failure NEVER interrupts normal
+    Tuition Manager operations.
     """
 
     try:
+        # ----------------------------------------------------
+        # Supabase credentials
+        # ----------------------------------------------------
         supabase_url = os.environ.get(
             "SUPABASE_URL",
             ""
@@ -414,6 +440,7 @@ async def sync_payment_for_student(
                 "_id": 0,
                 "phone": 1,
                 "monthly_fee": 1,
+                "join_month": 1,
             }
         )
 
@@ -425,6 +452,9 @@ async def sync_payment_for_student(
             )
             return False
 
+        # ----------------------------------------------------
+        # Normalize phone number
+        # ----------------------------------------------------
         phone = _normalise_phone(
             student.get("phone")
         )
@@ -441,7 +471,7 @@ async def sync_payment_for_student(
         headers = _supabase_headers()
 
         # ----------------------------------------------------
-        # Find matching EduNotes student profile by phone
+        # Find matching EduNotes student
         # ----------------------------------------------------
         profile_response = _supabase_request(
             "GET",
@@ -468,116 +498,214 @@ async def sync_payment_for_student(
         profile_id = profiles[0]["id"]
 
         # ----------------------------------------------------
-        # Calculate total paid for this month
+        # Get ALL payments for this student
         # ----------------------------------------------------
-        payments = await db.payments.find(
-            {
-                "student_id": student_id,
-                "month": month_key,
-            },
+        payment_docs = await db.payments.find(
+            {"student_id": student_id},
             {
                 "_id": 0,
+                "month": 1,
                 "amount": 1,
+                "fee_snapshot": 1,
             }
-        ).to_list(1000)
+        ).to_list(50000)
 
-        amount_paid = sum(
-            float(p.get("amount") or 0)
-            for p in payments
+        # ----------------------------------------------------
+        # Group payments month by month
+        # ----------------------------------------------------
+        payments_by_month = {}
+        fee_by_month = {}
+
+        for payment in payment_docs:
+            month = payment.get("month")
+
+            if not month:
+                continue
+
+            amount = float(
+                payment.get("amount") or 0
+            )
+
+            payments_by_month[month] = (
+                payments_by_month.get(month, 0)
+                + amount
+            )
+
+            fee_snapshot = float(
+                payment.get("fee_snapshot") or 0
+            )
+
+            if fee_snapshot > 0:
+                fee_by_month[month] = fee_snapshot
+
+        # ----------------------------------------------------
+        # Current month
+        # ----------------------------------------------------
+        current_month = datetime.now(
+            timezone.utc
+        ).strftime("%Y-%m")
+
+        # ----------------------------------------------------
+        # Decide first month
+        # ----------------------------------------------------
+        join_month = student.get("join_month")
+
+        valid_payment_months = [
+            m
+            for m in payments_by_month
+            if isinstance(m, str)
+            and len(m) == 7
+            and m[4] == "-"
+        ]
+
+        if (
+            isinstance(join_month, str)
+            and len(join_month) == 7
+            and join_month[4] == "-"
+        ):
+            start_month = join_month
+        elif valid_payment_months:
+            start_month = min(valid_payment_months)
+        else:
+            start_month = current_month
+
+        # If payment history starts before join_month,
+        # use the earliest payment month so nothing is lost.
+        if valid_payment_months:
+            earliest_payment = min(valid_payment_months)
+
+            if earliest_payment < start_month:
+                start_month = earliest_payment
+
+        months = _month_range(
+            start_month,
+            current_month
         )
 
-        amount_due = float(
+        # ----------------------------------------------------
+        # Default current monthly fee
+        # ----------------------------------------------------
+        default_fee = float(
             student.get("monthly_fee") or 0
         )
 
         # ----------------------------------------------------
-        # Determine status
+        # Sync EVERY month
         # ----------------------------------------------------
-        if amount_paid >= amount_due and amount_due > 0:
-            status = "paid"
-        elif amount_paid > 0:
-            status = "partial"
-        else:
-            status = "unpaid"
+        for month in months:
 
-        payload = {
-            "profile_id": profile_id,
-            "month_key": month_key,
-            "month_label": _month_label(month_key),
-            "amount_due": amount_due,
-            "amount_paid": amount_paid,
-            "status": status,
-        }
+            amount_paid = float(
+                payments_by_month.get(month, 0)
+            )
 
-        # ----------------------------------------------------
-        # Look for existing monthly record
-        # ----------------------------------------------------
-        existing_response = _supabase_request(
-            "GET",
-            f"{base}/tuition_fee_records",
-            headers=headers,
-            params={
-                "select": "id",
-                "profile_id": f"eq.{quote(profile_id)}",
-                "month_key": f"eq.{quote(month_key)}",
-                "limit": "1",
+            # Use historical fee_snapshot when available.
+            # Otherwise use the student's current monthly fee.
+            amount_due = float(
+                fee_by_month.get(
+                    month,
+                    default_fee
+                )
+            )
+
+            # ------------------------------------------------
+            # IMPORTANT:
+            # Supabase allows only:
+            # paid / partial / pending
+            # ------------------------------------------------
+            if (
+                amount_paid >= amount_due
+                and amount_due > 0
+            ):
+                status = "paid"
+
+            elif amount_paid > 0:
+                status = "partial"
+
+            else:
+                status = "pending"
+
+            payload = {
+                "profile_id": profile_id,
+                "month_key": month,
+                "month_label": _month_label(month),
+                "amount_due": amount_due,
+                "amount_paid": amount_paid,
+                "status": status,
             }
-        )
 
-        existing = existing_response.json()
-
-        # ----------------------------------------------------
-        # Update existing record
-        # ----------------------------------------------------
-        if existing:
-            record_id = existing[0]["id"]
-
-            _supabase_request(
-                "PATCH",
+            # ------------------------------------------------
+            # Check if this month already exists
+            # ------------------------------------------------
+            existing_response = _supabase_request(
+                "GET",
                 f"{base}/tuition_fee_records",
                 headers=headers,
                 params={
-                    "id": f"eq.{quote(record_id)}"
-                },
-                json=payload,
+                    "select": "id",
+                    "profile_id": (
+                        f"eq.{quote(profile_id)}"
+                    ),
+                    "month_key": (
+                        f"eq.{quote(month)}"
+                    ),
+                    "limit": "1",
+                }
             )
 
-        # ----------------------------------------------------
-        # Create new record
-        # ----------------------------------------------------
-        else:
-            _supabase_request(
-                "POST",
-                f"{base}/tuition_fee_records",
-                headers=headers,
-                json=payload,
-            )
+            existing = existing_response.json()
+
+            # ------------------------------------------------
+            # Update existing month
+            # ------------------------------------------------
+            if existing:
+
+                record_id = existing[0]["id"]
+
+                _supabase_request(
+                    "PATCH",
+                    f"{base}/tuition_fee_records",
+                    headers=headers,
+                    params={
+                        "id": (
+                            f"eq.{quote(record_id)}"
+                        )
+                    },
+                    json=payload,
+                )
+
+            # ------------------------------------------------
+            # Create missing month
+            # ------------------------------------------------
+            else:
+
+                _supabase_request(
+                    "POST",
+                    f"{base}/tuition_fee_records",
+                    headers=headers,
+                    json=payload,
+                )
 
         logger.info(
-            "Supabase tuition sync successful: "
-            "profile=%s month=%s paid=%s due=%s status=%s",
+            "Supabase tuition history sync successful: "
+            "profile=%s months=%s through=%s",
             profile_id,
-            month_key,
-            amount_paid,
-            amount_due,
-            status,
+            len(months),
+            current_month,
         )
 
         return True
 
     except Exception:
+
         logger.exception(
-            "Supabase payment sync failed: "
-            "student=%s month=%s",
+            "Supabase payment history sync failed: "
+            "student=%s",
             student_id,
-            month_key,
         )
 
-        # IMPORTANT:
-        # Never fail the normal Tuition Manager
-        # operation because Supabase sync failed.
+        # NEVER break Tuition Manager because
+        # EduNotes/Supabase synchronization failed.
         return False
-
 
 # ---------- Batch routes ----------
 @api_router.get("/batches")
