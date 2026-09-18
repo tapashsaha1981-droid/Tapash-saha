@@ -1,88 +1,148 @@
-import { supabase } from "@/lib/supabase";
+const SUPABASE_URL = "https://pnpkdhngcqriuntdvyer.supabase.co";
+const SUPABASE_KEY = "sb_publishable_mm0-ChNNdlTwXq47Su76aQ_GqNSA0le";
 
-const VAPID_PUBLIC_KEY = process.env.REACT_APP_VAPID_PUBLIC_KEY;
+const PUSH_FUNCTION =
+  `${SUPABASE_URL}/functions/v1/push-notification`;
 
-function urlBase64ToUint8Array(base64String) {
-  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
-  const base64 = (base64String + padding)
+function base64ToUint8Array(base64) {
+  const padding = "=".repeat((4 - (base64.length % 4)) % 4);
+
+  const normalized = (base64 + padding)
     .replace(/-/g, "+")
     .replace(/_/g, "/");
 
-  const rawData = window.atob(base64);
-  return Uint8Array.from([...rawData].map((char) => char.charCodeAt(0)));
+  const rawData = window.atob(normalized);
+
+  return Uint8Array.from(
+    [...rawData].map((char) => char.charCodeAt(0))
+  );
 }
 
-export async function registerPushNotifications() {
-  try {
-    if (!("serviceWorker" in navigator)) {
-      console.log("Service workers are not supported.");
-      return null;
-    }
+async function getPushPublicKey() {
+  const response = await fetch(PUSH_FUNCTION, {
+    headers: {
+      apikey: SUPABASE_KEY,
+    },
+  });
 
-    if (!("PushManager" in window)) {
-      console.log("Push notifications are not supported.");
-      return null;
-    }
+  if (!response.ok) {
+    throw new Error("Push configuration could not be loaded.");
+  }
 
-    if (!VAPID_PUBLIC_KEY) {
-      console.log("VAPID public key is not configured.");
-      return null;
-    }
+  const data = await response.json();
 
+  if (!data.publicKey) {
+    throw new Error("VAPID public key is not configured.");
+  }
+
+  return data.publicKey;
+}
+
+export async function registerPushNotifications({
+  accessToken,
+  studentId,
+  board = null,
+  classId = null,
+  deviceId = null,
+} = {}) {
+  if (!accessToken || !studentId) {
+    throw new Error("Student session is not ready.");
+  }
+
+  if (!("Notification" in window)) {
+    throw new Error("Notifications are not supported on this device.");
+  }
+
+  if (!("serviceWorker" in navigator)) {
+    throw new Error("Service workers are not supported.");
+  }
+
+  if (!("PushManager" in window)) {
+    throw new Error("Web Push is not supported on this device.");
+  }
+
+  if (Notification.permission !== "granted") {
     const permission = await Notification.requestPermission();
 
     if (permission !== "granted") {
-      console.log("Notification permission was not granted.");
-      return null;
-    }
-
-    const registration = await navigator.serviceWorker.register("/sw.js");
-
-    await navigator.serviceWorker.ready;
-
-    let subscription = await registration.pushManager.getSubscription();
-
-    if (!subscription) {
-      subscription = await registration.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
-      });
-    }
-
-    const subscriptionJson = subscription.toJSON();
-
-    const endpoint = subscriptionJson.endpoint;
-    const p256dh = subscriptionJson.keys?.p256dh;
-    const auth = subscriptionJson.keys?.auth;
-
-    if (!endpoint || !p256dh || !auth) {
-      console.log("Invalid push subscription.");
-      return null;
-    }
-
-    const { error } = await supabase
-      .from("push_subscriptions")
-      .upsert(
-        {
-          endpoint,
-          p256dh,
-          auth,
-        },
-        {
-          onConflict: "endpoint",
-        }
+      throw new Error(
+        "Notifications are blocked. Please allow notifications for EduNotes Pro."
       );
-
-    if (error) {
-      console.error("Failed to save push subscription:", error);
-      return null;
     }
-
-    console.log("Push subscription saved successfully.");
-
-    return subscription;
-  } catch (error) {
-    console.error("Push notification setup failed:", error);
-    return null;
   }
+
+  const registration =
+    await navigator.serviceWorker.register("/sw.js");
+
+  await navigator.serviceWorker.ready;
+
+  let subscription =
+    await registration.pushManager.getSubscription();
+
+  if (!subscription) {
+    const publicKey = await getPushPublicKey();
+
+    subscription =
+      await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey:
+          base64ToUint8Array(publicKey),
+      });
+  }
+
+  const payload = {
+    student_id: studentId,
+    endpoint: subscription.endpoint,
+    subscription: subscription.toJSON(),
+    board,
+    class_id: classId,
+    device_id: deviceId,
+    updated_at: new Date().toISOString(),
+  };
+
+  /*
+   * Remove the student's previous device subscription.
+   * This follows the working V63 one-device policy.
+   */
+  const deleteResponse = await fetch(
+    `${SUPABASE_URL}/rest/v1/push_subscriptions?student_id=eq.${encodeURIComponent(
+      studentId
+    )}`,
+    {
+      method: "DELETE",
+      headers: {
+        apikey: SUPABASE_KEY,
+        Authorization: `Bearer ${accessToken}`,
+      },
+    }
+  );
+
+  if (!deleteResponse.ok) {
+    throw new Error(
+      "Could not update the existing push subscription."
+    );
+  }
+
+  const saveResponse = await fetch(
+    `${SUPABASE_URL}/rest/v1/push_subscriptions`,
+    {
+      method: "POST",
+      headers: {
+        apikey: SUPABASE_KEY,
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+        Prefer: "resolution=merge-duplicates,return=minimal",
+      },
+      body: JSON.stringify(payload),
+    }
+  );
+
+  if (!saveResponse.ok) {
+    const errorText = await saveResponse.text();
+    throw new Error(
+      errorText || "Could not save push subscription."
+    );
+  }
+
+  return subscription;
 }
