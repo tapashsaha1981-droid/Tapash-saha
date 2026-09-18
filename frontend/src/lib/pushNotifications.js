@@ -18,21 +18,51 @@ function base64ToUint8Array(base64) {
   );
 }
 
-async function getPushPublicKey() {
+async function callPushFunction(body = null) {
   const response = await fetch(PUSH_FUNCTION, {
+    method: body ? "POST" : "GET",
+
     headers: {
       apikey: SUPABASE_KEY,
+      "Content-Type": "application/json",
     },
+
+    ...(body
+      ? {
+          body: JSON.stringify(body),
+        }
+      : {}),
   });
 
-  if (!response.ok) {
-    throw new Error("Push configuration could not be loaded.");
+  const text = await response.text();
+
+  let data = null;
+
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    data = null;
   }
 
-  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(
+      data?.error ||
+        data?.message ||
+        text ||
+        `Push function failed (${response.status}).`
+    );
+  }
+
+  return data || {};
+}
+
+async function getPushPublicKey() {
+  const data = await callPushFunction();
 
   if (!data.publicKey) {
-    throw new Error("VAPID public key is not configured.");
+    throw new Error(
+      "VAPID public key is not configured."
+    );
   }
 
   return data.publicKey;
@@ -46,23 +76,33 @@ export async function registerPushNotifications({
   deviceId = null,
 } = {}) {
   if (!accessToken || !studentId) {
-    throw new Error("Student session is not ready.");
+    throw new Error(
+      "Student session is not ready."
+    );
   }
 
   if (!("Notification" in window)) {
-    throw new Error("Notifications are not supported on this device.");
+    throw new Error(
+      "Notifications are not supported on this device."
+    );
   }
 
   if (!("serviceWorker" in navigator)) {
-    throw new Error("Service workers are not supported.");
+    throw new Error(
+      "Service workers are not supported."
+    );
   }
 
   if (!("PushManager" in window)) {
-    throw new Error("Web Push is not supported on this device.");
+    throw new Error(
+      "Web Push is not supported on this device."
+    );
   }
 
+  // Ask for notification permission.
   if (Notification.permission !== "granted") {
-    const permission = await Notification.requestPermission();
+    const permission =
+      await Notification.requestPermission();
 
     if (permission !== "granted") {
       throw new Error(
@@ -71,78 +111,99 @@ export async function registerPushNotifications({
     }
   }
 
+  // Register service worker.
   const registration =
-    await navigator.serviceWorker.register("/sw.js");
+    await navigator.serviceWorker.register(
+      "/sw.js",
+      {
+        scope: "/",
+      }
+    );
 
   await navigator.serviceWorker.ready;
 
+  // Reuse existing subscription if available.
   let subscription =
     await registration.pushManager.getSubscription();
 
+  // Create subscription if none exists.
   if (!subscription) {
-    const publicKey = await getPushPublicKey();
+    const publicKey =
+      await getPushPublicKey();
 
     subscription =
       await registration.pushManager.subscribe({
         userVisibleOnly: true,
+
         applicationServerKey:
           base64ToUint8Array(publicKey),
       });
   }
 
   const payload = {
+    action: "register",
+
     student_id: studentId,
-    endpoint: subscription.endpoint,
-    subscription: subscription.toJSON(),
+
+    endpoint:
+      subscription.endpoint,
+
+    subscription:
+      subscription.toJSON(),
+
     board,
+
     class_id: classId,
+
     device_id: deviceId,
-    updated_at: new Date().toISOString(),
   };
 
   /*
-   * Remove the student's previous device subscription.
-   * This follows the working V63 one-device policy.
+   * IMPORTANT:
+   *
+   * Do NOT write directly to
+   * push_subscriptions from the browser.
+   *
+   * The Supabase Edge Function will handle
+   * the database insert using its server-side
+   * credentials.
    */
-  const deleteResponse = await fetch(
-    `${SUPABASE_URL}/rest/v1/push_subscriptions?student_id=eq.${encodeURIComponent(
-      studentId
-    )}`,
-    {
-      method: "DELETE",
-      headers: {
-        apikey: SUPABASE_KEY,
-        Authorization: `Bearer ${accessToken}`,
-      },
-    }
-  );
 
-  if (!deleteResponse.ok) {
-    throw new Error(
-      "Could not update the existing push subscription."
-    );
-  }
-
-  const saveResponse = await fetch(
-    `${SUPABASE_URL}/rest/v1/push_subscriptions`,
-    {
-      method: "POST",
-      headers: {
-        apikey: SUPABASE_KEY,
-        Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
-        Prefer: "resolution=merge-duplicates,return=minimal",
-      },
-      body: JSON.stringify(payload),
-    }
-  );
-
-  if (!saveResponse.ok) {
-    const errorText = await saveResponse.text();
-    throw new Error(
-      errorText || "Could not save push subscription."
-    );
-  }
+  await callPushFunction(payload);
 
   return subscription;
+}
+
+export async function unregisterPushNotifications({
+  accessToken,
+  studentId,
+} = {}) {
+  if (!accessToken || !studentId) {
+    throw new Error(
+      "Student session is not ready."
+    );
+  }
+
+  await callPushFunction({
+    action: "unregister",
+    student_id: studentId,
+  });
+
+  try {
+    const registration =
+      await navigator.serviceWorker.getRegistration(
+        "/"
+      );
+
+    const subscription =
+      await registration
+        ?.pushManager
+        ?.getSubscription();
+
+    if (subscription) {
+      await subscription.unsubscribe();
+    }
+  } catch {
+    // Local unsubscribe is best effort.
+  }
 }
