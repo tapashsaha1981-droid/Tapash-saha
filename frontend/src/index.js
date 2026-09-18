@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import "@/index.css";
 import App from "@/App";
+import { registerPushNotifications } from "@/lib/pushNotifications";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -13,7 +14,16 @@ const queryClient = new QueryClient({
   },
 });
 
+if (typeof window !== "undefined") {
+  window.addEventListener("load", () => {
+    registerPushNotifications().catch((error) => {
+      console.warn("Push notification setup failed:", error);
+    });
+  });
+}
+
 const root = ReactDOM.createRoot(document.getElementById("root"));
+
 root.render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
