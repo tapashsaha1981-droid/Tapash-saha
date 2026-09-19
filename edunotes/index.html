@@ -764,7 +764,7 @@ function closeSupabaseSetup() {
                     .from('profiles')
                     .select('*')
                     .eq('id', currentUser.id)
-                    .single();
+                    .maybeSingle();
 
                 if (error || !profile) {
                     console.error('Error fetching profile:', error);
