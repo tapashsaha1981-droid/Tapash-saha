@@ -640,31 +640,39 @@ let SUPABASE_ANON_KEY = '';
 let supabase = null;
 
 try {
-    SUPABASE_ANON_KEY = (localStorage.getItem('edunotes_supabase_key') || '').trim();
-    if (!SUPABASE_ANON_KEY) {
-        SUPABASE_ANON_KEY = (window.prompt(
-            'EduNotes Pro\n\nPaste your Supabase Publishable key here:'
-        ) || '').trim();
-        if (SUPABASE_ANON_KEY) {
-            localStorage.setItem('edunotes_supabase_key', SUPABASE_ANON_KEY);
-        }
+    // Get the Supabase Publishable key saved on this device.
+    SUPABASE_ANON_KEY =
+        (localStorage.getItem('edunotes_supabase_key') || '').trim();
+
+    // Remove the old invalid placeholder key, if it is still stored.
+    const OLD_INVALID_KEY =
+        'O3U86Yg5fT9V-xI0Q_CjYg4sJv4k7L2N4N4M5O6P7Q8';
+
+    if (SUPABASE_ANON_KEY.includes(OLD_INVALID_KEY)) {
+        localStorage.removeItem('edunotes_supabase_key');
+        SUPABASE_ANON_KEY = '';
     }
 } catch (e) {
+    console.error('Supabase key loading error:', e);
     SUPABASE_ANON_KEY = '';
 }
+            function openSupabaseSetup() {
+    const modal = document.getElementById('supabase-setup-modal');
+    const input = document.getElementById('supabase-key-input');
 
-        // Never use the placeholder key that appeared in earlier versions.
-        function openSupabaseSetup() {
-            const modal = document.getElementById('supabase-setup-modal');
-            const input = document.getElementById('supabase-key-input');
-            if (modal) modal.classList.remove('hidden');
-            if (input) { input.value = SUPABASE_ANON_KEY; setTimeout(() => input.focus(), 50); }
-        }
+    if (modal) modal.classList.remove('hidden');
 
-        function closeSupabaseSetup() {
-            const modal = document.getElementById('supabase-setup-modal');
-            if (modal) modal.classList.add('hidden');
-        }
+    if (input) {
+        input.value = SUPABASE_ANON_KEY;
+        setTimeout(() => input.focus(), 50);
+    }
+}
+
+function closeSupabaseSetup() {
+    const modal = document.getElementById('supabase-setup-modal');
+
+    if (modal) modal.classList.add('hidden');
+}
 
         function saveSupabaseKey() {
             const input = document.getElementById('supabase-key-input');
