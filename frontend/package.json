@@ -138,10 +138,10 @@
     "**/readdirp/picomatch": "2.3.2",
     "**/jest-util/picomatch": "2.3.2",
     "**/tinyglobby/picomatch": "4.0.4",
-    "http-proxy-middleware": "2.0.10"
-  }
-}
+"http-proxy-middleware": "2.0.10",
 "vaul": "1.1.2",
 "zod": "3.24.4",
 "ajv": "8.17.1",
 "ajv-keywords": "5.1.0"
+}
+}
