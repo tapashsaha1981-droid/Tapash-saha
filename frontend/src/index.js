@@ -13,7 +13,30 @@ const queryClient = new QueryClient({
   },
 });
 
-const root = ReactDOM.createRoot(document.getElementById("root"));
+// Register the EduNotes Pro service worker.
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker
+      .register("/sw.js", {
+        scope: "/",
+        updateViaCache: "none",
+      })
+      .then(() => {
+        console.log("EduNotes Pro service worker registered.");
+      })
+      .catch((error) => {
+        console.error(
+          "EduNotes Pro service worker registration failed:",
+          error,
+        );
+      });
+  });
+}
+
+const root = ReactDOM.createRoot(
+  document.getElementById("root"),
+);
+
 root.render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
