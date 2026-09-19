@@ -1395,6 +1395,142 @@ document.addEventListener('submit', function(e) {
   if (e.target && e.target.id === 'login-form') e.preventDefault();
 }, true);
 </script>
+<script id="EDUNOTES_LOGIN_PUSH_FIX_V1">
+(function () {
+  async function registerAfterLogin(retryCount) {
+    retryCount = retryCount || 0;
 
+    try {
+      if (!currentUser) return;
+
+      // The login event can fire before loadUserProfile() finishes.
+      if (!currentProfile) {
+        if (retryCount < 10) {
+          setTimeout(function () {
+            registerAfterLogin(retryCount + 1);
+          }, 500);
+        }
+        return;
+      }
+
+      // Never register push for admin accounts.
+      if (currentProfile.role === 'admin') return;
+
+      if (!supabase || !supabase.auth) return;
+
+      const sessionResult = await supabase.auth.getSession();
+      const session =
+        sessionResult &&
+        sessionResult.data &&
+        sessionResult.data.session;
+
+      if (!session || !session.access_token) return;
+
+      // Load the existing push registration module.
+      const pushModule =
+        await import('./pushNotifications.js?loginfix=1');
+
+      let deviceId = null;
+
+      try {
+        deviceId = localStorage.getItem('edunotes_device_id');
+
+        if (!deviceId) {
+          deviceId =
+            (crypto && crypto.randomUUID)
+              ? crypto.randomUUID()
+              : (
+                  'device-' +
+                  Date.now() +
+                  '-' +
+                  Math.random().toString(36).slice(2)
+                );
+
+          localStorage.setItem(
+            'edunotes_device_id',
+            deviceId
+          );
+        }
+      } catch (_) {}
+
+      await pushModule.registerPushNotifications({
+        accessToken: session.access_token,
+        studentId: currentUser.id,
+        board: currentProfile.board || null,
+        classId: currentProfile.class_id || null,
+        deviceId: deviceId
+      });
+
+      console.log(
+        '[EduNotes] Push subscription registered after login.'
+      );
+
+    } catch (err) {
+
+      // Push failure must NEVER log the student out.
+      console.warn(
+        '[EduNotes] Push registration after login failed:',
+        err && err.message ? err.message : err
+      );
+    }
+  }
+
+  function waitForSupabaseAndListen() {
+    let attempts = 0;
+
+    const timer = setInterval(async function () {
+      attempts++;
+
+      if (
+        typeof supabase !== 'undefined' &&
+        supabase &&
+        supabase.auth
+      ) {
+        clearInterval(timer);
+
+        supabase.auth.onAuthStateChange(
+          function (event, session) {
+
+            if (event === 'SIGNED_IN' && session) {
+              setTimeout(function () {
+                registerAfterLogin(0);
+              }, 0);
+            }
+
+          }
+        );
+
+        // Also handle an already logged-in student.
+        const existing =
+          await supabase.auth.getSession();
+
+        if (
+          existing &&
+          existing.data &&
+          existing.data.session
+        ) {
+          setTimeout(function () {
+            registerAfterLogin(0);
+          }, 0);
+        }
+
+      } else if (attempts >= 100) {
+        clearInterval(timer);
+      }
+
+    }, 100);
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener(
+      'DOMContentLoaded',
+      waitForSupabaseAndListen
+    );
+  } else {
+    waitForSupabaseAndListen();
+  }
+
+})();
+</script>
 </body>
 </html>
