@@ -597,7 +597,7 @@
           if (!result.data || !result.data.session) {
             throw new Error('Login succeeded but no session was returned.');
           }
-
+currentUser = result.data.user;
           msg('Login successful. Loading your dashboard...', false);
 
           if (typeof loadUserProfile === 'function') {
