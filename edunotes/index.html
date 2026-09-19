@@ -755,72 +755,12 @@ function closeSupabaseSetup() {
         async function loadUserProfile() {
             try {
                 // Fetch profile
-                let profile = null;
-let error = null;
+                const { data: profile, error } = await supabase
+                    .from('profiles')
+                    .select('*')
+                    .eq('id', currentUser.id)
+                    .single();
 
-const authEmail = String(currentUser?.email || '').trim().toLowerCase();
-const studentSuffix = '@students.edunotespro.local';
-
-if (authEmail.endsWith(studentSuffix)) {
-    const rawPhone = authEmail
-        .slice(0, -studentSuffix.length)
-        .replace(/\D/g, '');
-
-    let normalizedPhone = '';
-
-    if (rawPhone.length === 12 && rawPhone.startsWith('91')) {
-        normalizedPhone = rawPhone;
-    } else if (rawPhone.length === 10) {
-        normalizedPhone = '91' + rawPhone;
-    } else if (rawPhone.length === 11 && rawPhone.startsWith('0')) {
-        normalizedPhone = '91' + rawPhone.slice(1);
-    }
-
-    if (!normalizedPhone) {
-        throw new Error('The authenticated student mobile number is invalid.');
-    }
-
-    const phoneVariants = [
-        normalizedPhone,
-        normalizedPhone.slice(2),
-        '0' + normalizedPhone.slice(2),
-        '+' + normalizedPhone
-    ];
-
-    for (const phoneValue of phoneVariants) {
-        const result = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('phone', phoneValue)
-            .limit(1);
-
-        if (result.error) {
-            error = result.error;
-            continue;
-        }
-
-        if (result.data && result.data.length > 0) {
-            profile = result.data[0];
-            error = null;
-            break;
-        }
-    }
-
-    if (!profile && !error) {
-        error = new Error(
-            'No student profile was found for the registered mobile number.'
-        );
-    }
-} else {
-    const result = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', currentUser.id)
-        .single();
-
-    profile = result.data;
-    error = result.error;
-}
                 if (error || !profile) {
                     console.error('Error fetching profile:', error);
                     showView('login');
