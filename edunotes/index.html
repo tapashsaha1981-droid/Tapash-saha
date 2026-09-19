@@ -1,1379 +1,361 @@
 <html lang="en"><head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>EduNotes Pro - Mobile E-Notes Platform</title>
-    <!-- Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Lucide Icons -->
-    <script src="https://unpkg.com/lucide@latest"></script>
-    <!-- Supabase JS Client -->
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
-        body { font-family: 'Inter', sans-serif; }
-        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f1f1; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
-    </style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>EduNotes Pro</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#f8fafc;color:#0f172a}
+button,input{font:inherit}
+.hidden{display:none!important}
+.app{min-height:100vh}
+header{position:sticky;top:0;z-index:20;background:#fff;border-bottom:1px solid #e2e8f0}
+.wrap{max-width:1100px;margin:auto;padding:16px}
+.card{background:#fff;border:1px solid #e2e8f0;border-radius:18px;box-shadow:0 8px 30px rgba(15,23,42,.06)}
+.btn{border:0;border-radius:10px;padding:11px 16px;cursor:pointer;font-weight:700}
+.primary{background:#4f46e5;color:#fff}.secondary{background:#e2e8f0;color:#0f172a}
+.login{max-width:430px;margin:7vh auto;padding:28px}
+.tabs{display:flex;gap:8px;margin-bottom:22px}.tabs button{flex:1}
+.field{margin:14px 0}.field label{display:block;font-size:12px;font-weight:700;color:#475569;margin-bottom:6px;text-transform:uppercase}
+.field input{width:100%;padding:13px;border:1px solid #cbd5e1;border-radius:10px;outline:0}
+.field input:focus{border-color:#6366f1;box-shadow:0 0 0 3px rgba(99,102,241,.12)}
+.alert{padding:12px;border-radius:10px;margin:12px 0;font-size:14px}.error{background:#fef2f2;color:#b91c1c}.ok{background:#ecfdf5;color:#047857}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:16px}.stat{padding:20px}.stat b{font-size:30px}
+.hero{padding:25px;background:linear-gradient(135deg,#4338ca,#6366f1);color:#fff;border-radius:18px}
+.section{margin-top:20px}.item{padding:16px;border-bottom:1px solid #e2e8f0}.item:last-child{border-bottom:0}
+.small{font-size:13px;color:#64748b}.title{font-size:24px;font-weight:800;margin:0 0 5px}
+@media(max-width:600px){.wrap{padding:12px}.login{margin:3vh 12px;padding:22px}}
+</style>
 </head>
-<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col antialiased">
+<body>
+<div class="app">
+<header>
+  <div class="wrap" style="display:flex;align-items:center;justify-content:space-between">
+    <strong>EduNotes Pro</strong>
+    <span class="small">Tuition Management</span>
+  </div>
+</header>
 
-    <!-- TOP NAVIGATION BAR -->
-    <header class="bg-indigo-700 text-white shadow-md sticky top-0 z-30">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-            <div class="flex items-center space-x-3">
-                <div class="bg-white/10 p-2 rounded-lg">
-                    <i data-lucide="book-open" class="w-6 h-6 text-indigo-200"></i>
-                </div>
-                <div>
-                    <h1 class="text-lg font-bold leading-tight">EduNotes Pro</h1>
-                    <p class="text-xs text-indigo-200 hidden sm:block">Special Tutorial Home E-Learning Portal</p>
-                </div>
-            </div>
+<main class="wrap">
 
-            <!-- Dynamic Right Header Area -->
-            <div id="header-user-area" class="flex items-center space-x-3">
-                <!-- Populated via JS depending on login status -->
-            </div>
-        </div>
-    </header>
+<section id="login-view" class="login card">
+  <h1 class="title">Welcome back</h1>
+  <p class="small">Sign in to EduNotes Pro</p>
 
-    <!-- MAIN CONTAINER -->
-    <main class="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8">
+  <div class="tabs">
+    <button id="student-tab" class="btn primary" type="button">Student Login</button>
+    <button id="admin-tab" class="btn secondary" type="button">Admin Login</button>
+  </div>
 
-        <!-- ==================== LOGIN VIEW ==================== -->
-        <section id="view-login" class="max-w-md mx-auto my-8 bg-white rounded-2xl shadow-xl overflow-hidden border border-slate-100">
-            <div class="bg-gradient-to-r from-indigo-600 to-indigo-800 p-6 text-white text-center">
-                <div class="inline-flex bg-white/10 p-3 rounded-2xl mb-3">
-                    <i data-lucide="graduation-cap" class="w-10 h-10 text-white"></i>
-                </div>
-                <h2 class="text-2xl font-bold">EduNotes Pro Login</h2>
-                <p class="text-indigo-200 text-sm mt-1">Students use their registered mobile number. Admins use Admin Login.</p>
-            </div>
+  <div id="login-alert" class="alert hidden"></div>
 
-            <div class="p-6 sm:p-8">
-                <!-- Alert Box -->
-                <div id="login-alert" class="hidden mb-4 p-3 rounded-lg text-sm font-medium"></div>
-
-                <div class="flex gap-2 mb-5">
-                    <button type="button" id="student-login-tab" class="flex-1 py-2.5 rounded-lg bg-indigo-600 text-white text-sm font-semibold" onclick="window.setEduLoginMode('student')">👨‍🎓 Student Login</button>
-                    <button type="button" id="admin-login-tab" class="flex-1 py-2.5 rounded-lg bg-slate-100 text-slate-700 text-sm font-semibold" onclick="window.setEduLoginMode('admin')">👨‍💼 Admin Login</button>
-                </div>
-
-                <form id="form-login" class="space-y-4" onsubmit="return window.edunotesDirectLogin(event);">
-                    <div id="student-phone-field">
-                        <label class="block text-xs font-semibold uppercase text-slate-500 mb-1">Student Mobile Number</label>
-                        <div class="relative">
-                            <i data-lucide="phone" class="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
-                            <input type="tel" id="login-phone" inputmode="numeric" autocomplete="tel" maxlength="10" pattern="[0-9]{10}" placeholder="Enter 10-digit mobile number" class="w-full pl-10 pr-4 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none text-sm transition">
-                        </div>
-                        <p class="mt-2 text-xs text-slate-500">Students sign in with their registered mobile number only. No password is required.</p>
-                    </div>
-
-                    <div id="admin-login-fields" class="hidden space-y-4">
-                        <div>
-                            <label class="block text-xs font-semibold uppercase text-slate-500 mb-1">Admin Email</label>
-                            <input type="email" id="login-email" autocomplete="username" placeholder="Admin email address" class="w-full px-4 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none text-sm transition">
-                        </div>
-                        <div>
-                            <label class="block text-xs font-semibold uppercase text-slate-500 mb-1">Admin Password</label>
-                            <input type="password" id="login-password" autocomplete="current-password" placeholder="Enter admin password" class="w-full px-4 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none text-sm transition">
-                        </div>
-                    </div>
-
-                    <button type="submit" id="login-btn" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2.5 rounded-lg shadow-md hover:shadow-lg transition duration-200 flex items-center justify-center space-x-2 text-sm mt-2">
-                        <span>Sign In</span>
-                        <i data-lucide="arrow-right" class="w-4 h-4"></i>
-                    </button>
-                </form>
-
-                <div class="mt-6 pt-6 border-t border-slate-100 text-center">
-                    <p class="text-xs text-slate-500">Need account assistance? Contact center administration.</p>
-                </div>
-            </div>
-        </section>
-
-        <!-- ==================== STUDENT DASHBOARD ==================== -->
-        <section id="view-student" class="hidden space-y-6">
-            <!-- Welcome Banner -->
-            <div class="bg-gradient-to-r from-indigo-700 via-indigo-600 to-indigo-800 rounded-2xl p-6 text-white shadow-lg relative overflow-hidden">
-                <div class="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                    <div>
-                        <span class="inline-block bg-indigo-500/30 text-indigo-100 text-xs px-3 py-1 rounded-full font-medium mb-2 backdrop-blur-sm border border-white/10" id="student-badge-class">
-                            Loading Class...
-                        </span>
-                        <h2 class="text-2xl sm:text-3xl font-bold" id="student-welcome-name">Hello, Student</h2>
-                        <p class="text-indigo-200 text-sm mt-1">Subject Focus: <span class="font-semibold text-white">English</span></p>
-                    </div>
-                    <div class="flex items-center gap-3">
-                        <div class="bg-white/10 backdrop-blur-md px-4 py-2.5 rounded-xl border border-white/10 text-center">
-                            <span class="block text-2xl font-bold text-white" id="stat-student-notes-count">0</span>
-                            <span class="text-[10px] uppercase tracking-wider text-indigo-200">Notes Available</span>
-                        </div>
-                        <div class="bg-white/10 backdrop-blur-md px-4 py-2.5 rounded-xl border border-white/10 text-center">
-                            <span class="block text-2xl font-bold text-white" id="stat-student-bookmarks-count">0</span>
-                            <span class="text-[10px] uppercase tracking-wider text-indigo-200">Bookmarked</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Dashboard Navigation Tabs -->
-            <div class="flex border-b border-slate-200 space-x-6 overflow-x-auto">
-                <button onclick="switchStudentTab('notes')" id="tab-btn-notes" class="pb-3 text-sm font-semibold border-b-2 border-indigo-600 text-indigo-600 flex items-center space-x-2 whitespace-nowrap">
-                    <i data-lucide="file-text" class="w-4 h-4"></i>
-                    <span>English Study Material</span>
-                </button>
-                <button onclick="switchStudentTab('bookmarks')" id="tab-btn-bookmarks" class="pb-3 text-sm font-medium text-slate-500 hover:text-slate-800 border-b-2 border-transparent flex items-center space-x-2 whitespace-nowrap">
-                    <i data-lucide="bookmark" class="w-4 h-4"></i>
-                    <span>Saved Bookmarks</span>
-                </button>
-                <button onclick="switchStudentTab('announcements')" id="tab-btn-announcements" class="pb-3 text-sm font-medium text-slate-500 hover:text-slate-800 border-b-2 border-transparent flex items-center space-x-2 whitespace-nowrap">
-                    <i data-lucide="bell" class="w-4 h-4"></i>
-                    <span>Notice Board</span>
-                    <span id="badge-announcements-count" class="hidden bg-amber-500 text-white text-[10px] px-1.5 py-0.5 rounded-full font-bold">0</span>
-                </button>
-            </div>
-
-            <!-- STUDENT TAB 1: NOTES -->
-            <div id="student-tab-notes" class="space-y-4">
-                <!-- Search Filter -->
-                <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col sm:flex-row gap-3 items-center justify-between">
-                    <div class="relative w-full sm:w-80">
-                        <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
-                        <input type="text" id="student-search-notes" oninput="renderStudentNotes()" placeholder="Search notes or chapters..." class="w-full pl-9 pr-4 py-2 rounded-lg border border-slate-200 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm outline-none">
-                    </div>
-                    <div class="text-xs text-slate-500 w-full sm:w-auto text-right">
-                        Showing notes for: <strong class="text-slate-700">English</strong>
-                    </div>
-                </div>
-
-                <!-- Notes Grid -->
-                <div id="student-notes-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    <!-- Populated dynamically -->
-                </div>
-            </div>
-
-            <!-- STUDENT TAB 2: BOOKMARKS -->
-            <div id="student-tab-bookmarks" class="hidden space-y-4">
-                <div id="student-bookmarks-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    <!-- Populated dynamically -->
-                </div>
-            </div>
-
-            <!-- STUDENT TAB 3: ANNOUNCEMENTS -->
-            <div id="student-tab-announcements" class="hidden space-y-4">
-                <div id="student-announcements-list" class="space-y-3">
-                    <!-- Populated dynamically -->
-                </div>
-            </div>
-        </section>
-
-        <!-- ==================== ADMIN DASHBOARD ==================== -->
-        <section id="view-admin" class="hidden space-y-6">
-            <!-- Header & Action Bar -->
-            <div class="bg-slate-900 rounded-2xl p-6 text-white shadow-lg flex flex-col md:flex-row justify-between md:items-center gap-4">
-                <div>
-                    <span class="bg-emerald-500/20 text-emerald-300 text-xs px-3 py-1 rounded-full font-medium mb-2 inline-block border border-emerald-500/30">Admin Control Panel</span>
-                    <h2 class="text-2xl font-bold">Portal Management</h2>
-                    <p class="text-slate-400 text-sm">Upload notes, post notices, and review registered students</p>
-                </div>
-                <div class="flex flex-wrap gap-2">
-                    <button onclick="openNoteUploadModal()" class="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2.5 rounded-xl text-sm font-semibold flex items-center space-x-2 transition shadow-md">
-                        <i data-lucide="plus-circle" class="w-4 h-4"></i>
-                        <span>Upload New Note</span>
-                    </button>
-                    <button onclick="openAnnouncementModal()" class="bg-amber-600 hover:bg-amber-500 text-white px-4 py-2.5 rounded-xl text-sm font-semibold flex items-center space-x-2 transition shadow-md">
-                        <i data-lucide="megaphone" class="w-4 h-4"></i>
-                        <span>Publish Notice</span>
-                    </button>
-                </div>
-            </div>
-
-            <!-- Navigation Tabs -->
-            <div class="flex border-b border-slate-200 space-x-6 overflow-x-auto">
-                <button onclick="switchAdminTab('notes')" id="admin-tab-btn-notes" class="pb-3 text-sm font-semibold border-b-2 border-indigo-600 text-indigo-600 flex items-center space-x-2 whitespace-nowrap">
-                    <i data-lucide="file-text" class="w-4 h-4"></i>
-                    <span>Manage Notes</span>
-                </button>
-                <button onclick="switchAdminTab('students')" id="admin-tab-btn-students" class="pb-3 text-sm font-medium text-slate-500 hover:text-slate-800 border-b-2 border-transparent flex items-center space-x-2 whitespace-nowrap">
-                    <i data-lucide="users" class="w-4 h-4"></i>
-                    <span>Student Roster</span>
-                </button>
-                <button onclick="switchAdminTab('announcements')" id="admin-tab-btn-announcements" class="pb-3 text-sm font-medium text-slate-500 hover:text-slate-800 border-b-2 border-transparent flex items-center space-x-2 whitespace-nowrap">
-                    <i data-lucide="bell" class="w-4 h-4"></i>
-                    <span>Announcements Manager</span>
-                </button>
-            </div>
-
-            <!-- ADMIN TAB 1: NOTES MANAGEMENT -->
-            <div id="admin-tab-notes" class="space-y-4">
-                <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col sm:flex-row gap-3 justify-between items-center">
-                    <div class="relative w-full sm:w-80">
-                        <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
-                        <input type="text" id="admin-search-notes" oninput="renderAdminNotes()" placeholder="Search notes..." class="w-full pl-9 pr-4 py-2 rounded-lg border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-indigo-500">
-                    </div>
-                    <div class="flex items-center space-x-2 w-full sm:w-auto">
-                        <label class="text-xs font-semibold text-slate-500 uppercase whitespace-nowrap">Filter Class:</label>
-                        <select id="admin-filter-class" onchange="renderAdminNotes()" class="bg-slate-50 border border-slate-200 text-slate-700 text-sm rounded-lg p-2 outline-none w-full sm:w-auto">
-                            <option value="ALL">All Classes</option>
-                            <!-- Populated dynamically -->
-                        </select>
-                    </div>
-                </div>
-
-                <!-- Admin Notes Table -->
-                <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                    <div class="overflow-x-auto">
-                        <table class="w-full text-left border-collapse">
-                            <thead>
-                                <tr class="bg-slate-50 border-b border-slate-200 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                                    <th class="p-4">Title &amp; Chapter</th>
-                                    <th class="p-4">Target Class</th>
-                                    <th class="p-4">Subject</th>
-                                    <th class="p-4">Download Permission</th>
-                                    <th class="p-4 text-right">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody id="admin-notes-table-body" class="divide-y divide-slate-100 text-sm">
-                                <!-- Populated dynamically -->
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-
-            <!-- ADMIN TAB 2: STUDENTS ROSTER -->
-            <div id="admin-tab-students" class="hidden space-y-4">
-                <div class="bg-amber-50 border border-amber-200 rounded-xl p-4 text-amber-800 text-xs flex items-start space-x-3">
-                    <i data-lucide="info" class="w-5 h-5 text-amber-600 shrink-0 mt-0.5"></i>
-                    <div>
-                        <strong class="font-semibold block mb-0.5 text-amber-900">Student Account Provisioning Note</strong>
-                        Students receive their auth logins from the center admin. To securely register new student accounts into Supabase Auth without exposing service credentials in client JS, use the Supabase Auth Dashboard or an Edge Function.
-                    </div>
-                </div>
-
-                <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col sm:flex-row gap-3 justify-between items-center">
-                    <div class="relative w-full sm:w-80">
-                        <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
-                        <input type="text" id="admin-search-students" oninput="renderAdminStudents()" placeholder="Search profiles by name..." class="w-full pl-9 pr-4 py-2 rounded-lg border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-indigo-500">
-                    </div>
-                </div>
-
-                <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                    <div class="overflow-x-auto">
-                        <table class="w-full text-left border-collapse">
-                            <thead>
-                                <tr class="bg-slate-50 border-b border-slate-200 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                                    <th class="p-4">Student Name</th>
-                                    <th class="p-4">Role</th>
-                                    <th class="p-4">Assigned Class</th>
-                                    <th class="p-4">User ID</th>
-                                </tr>
-                            </thead>
-                            <tbody id="admin-students-table-body" class="divide-y divide-slate-100 text-sm">
-                                <!-- Populated dynamically -->
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-
-            <!-- ADMIN TAB 3: ANNOUNCEMENTS MANAGEMENT -->
-            <div id="admin-tab-announcements" class="hidden space-y-4">
-                <div id="admin-announcements-list" class="space-y-3">
-                    <!-- Populated dynamically -->
-                </div>
-            </div>
-        </section>
-
-    </main>
-
-    <!-- FOOTER -->
-    <footer class="bg-slate-900 text-slate-400 text-xs py-6 mt-12 border-t border-slate-800">
-        <div class="max-w-7xl mx-auto px-4 text-center space-y-2">
-            <p>© 2026 Special Tutorial Home • EduNotes Pro Suite</p>
-            <p class="text-slate-500">Connected to Supabase Cloud Infrastructure</p>
-        </div>
-    </footer>
-
-    <!-- ==================== MODALS ==================== -->
-
-    <!-- PDF VIEWER MODAL -->
-    <div id="modal-pdf" class="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-2 sm:p-4">
-        <div class="bg-white rounded-2xl w-full max-w-5xl h-[90vh] flex flex-col overflow-hidden shadow-2xl">
-            <div class="bg-slate-900 text-white p-4 flex items-center justify-between border-b border-slate-800">
-                <div class="flex items-center space-x-3 overflow-hidden">
-                    <i data-lucide="file-text" class="w-5 h-5 text-indigo-400 shrink-0"></i>
-                    <div>
-                        <h3 id="pdf-modal-title" class="font-semibold text-sm truncate">Document Viewer</h3>
-                        <p id="pdf-modal-subtitle" class="text-xs text-slate-400 truncate">Class Note</p>
-                    </div>
-                </div>
-                <div class="flex items-center space-x-2">
-                    <a id="pdf-modal-download-btn" href="#" target="_blank" download="" class="hidden bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition">
-                        <i data-lucide="download" class="w-3.5 h-3.5"></i>
-                        <span>Download</span>
-                    </a>
-                    <button onclick="closePdfModal()" class="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800">
-                        <i data-lucide="x" class="w-6 h-6"></i>
-                    </button>
-                </div>
-            </div>
-            <div class="flex-1 bg-slate-100 relative">
-                <iframe id="pdf-modal-iframe" class="w-full h-full border-0"></iframe>
-            </div>
-        </div>
+  <form id="login-form">
+    <div id="student-fields">
+      <div class="field">
+        <label>Student Mobile Number</label>
+        <input id="student-phone" type="tel" inputmode="numeric" autocomplete="tel" maxlength="10" placeholder="10-digit mobile number">
+      </div>
+      <p class="small">Use the mobile number registered with the tuition centre.</p>
     </div>
 
-    <!-- NOTE UPLOAD MODAL -->
-    <div id="modal-upload-note" class="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
-        <div class="bg-white rounded-2xl max-w-lg w-full shadow-2xl overflow-hidden border border-slate-100">
-            <div class="bg-indigo-700 p-5 text-white flex justify-between items-center">
-                <h3 class="font-bold text-lg flex items-center space-x-2">
-                    <i data-lucide="upload-cloud" class="w-5 h-5"></i>
-                    <span>Upload E-Note</span>
-                </h3>
-                <button onclick="closeNoteUploadModal()" class="text-indigo-200 hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
-            </div>
-            <form onsubmit="handleNoteUpload(event)" class="p-6 space-y-4">
-                <div>
-                    <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Title</label>
-                    <input type="text" id="upload-title" required="" placeholder="e.g. Determiners &amp; Articles Practice" class="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
-                </div>
-                <div class="grid grid-cols-2 gap-3">
-                    <div>
-                        <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Target Class</label>
-                        <select id="upload-class" required="" class="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
-                            <!-- Populated dynamically -->
-                        </select>
-                    </div>
-                    <div>
-                        <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Subject</label>
-                        <input type="text" value="English" readonly="" class="w-full px-3 py-2 border rounded-lg text-sm bg-slate-100 text-slate-500 font-semibold cursor-not-allowed">
-                    </div>
-                </div>
-                <div>
-                    <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Chapter / Unit</label>
-                    <input type="text" id="upload-chapter" required="" placeholder="e.g. Grammar - Chapter 3" class="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
-                </div>
-                <div>
-                    <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">PDF File</label>
-                    <input type="file" id="upload-file" accept="application/pdf" required="" class="w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100">
-                </div>
-                <div class="flex items-center space-x-2 pt-2">
-                    <input type="checkbox" id="upload-allow-download" checked="" class="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500">
-                    <label for="upload-allow-download" class="text-xs text-slate-700 font-medium">Permit students to download file</label>
-                </div>
-                <div class="pt-4 flex justify-end space-x-3 border-t">
-                    <button type="button" onclick="closeNoteUploadModal()" class="px-4 py-2 border rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50">Cancel</button>
-                    <button type="submit" id="upload-submit-btn" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold flex items-center space-x-1">
-                        <span>Save &amp; Upload</span>
-                    </button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <!-- ANNOUNCEMENT MODAL -->
-    <div id="modal-announcement" class="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
-        <div class="bg-white rounded-2xl max-w-lg w-full shadow-2xl overflow-hidden border border-slate-100">
-            <div class="bg-amber-600 p-5 text-white flex justify-between items-center">
-                <h3 class="font-bold text-lg flex items-center space-x-2">
-                    <i data-lucide="megaphone" class="w-5 h-5"></i>
-                    <span>Publish Announcement</span>
-                </h3>
-                <button onclick="closeAnnouncementModal()" class="text-amber-200 hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
-            </div>
-            <form onsubmit="handleAnnouncementSubmit(event)" class="p-6 space-y-4">
-                <div>
-                    <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Headline / Title</label>
-                    <input type="text" id="announce-title" required="" placeholder="e.g. Sunday Grammar Test Schedule" class="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-amber-500 outline-none">
-                </div>
-                <div>
-                    <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Target Audience</label>
-                    <select id="announce-class" required="" class="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-amber-500 outline-none">
-                        <option value="ALL">All Classes (Global Announcement)</option>
-                        <!-- Populated dynamically -->
-                    </select>
-                </div>
-                <div>
-                    <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Message Content</label>
-                    <textarea id="announce-message" rows="4" required="" placeholder="Type notice details here..." class="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-amber-500 outline-none"></textarea>
-                </div>
-                <div class="pt-4 flex justify-end space-x-3 border-t">
-                    <button type="button" onclick="closeAnnouncementModal()" class="px-4 py-2 border rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50">Cancel</button>
-                    <button type="submit" id="announce-submit-btn" class="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-semibold">Publish Notice</button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <!-- FORGOT PASSWORD MODAL -->
-    <div id="modal-forgot-password" class="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
-        <div class="bg-white rounded-2xl max-w-md w-full shadow-2xl p-6 space-y-4 border border-slate-100">
-            <div class="flex justify-between items-center border-b pb-3">
-                <h3 class="font-bold text-slate-800 text-base">Reset Your Password</h3>
-                <button onclick="closeForgotPasswordModal()" class="text-slate-400 hover:text-slate-600"><i data-lucide="x" class="w-5 h-5"></i></button>
-            </div>
-            <p class="text-xs text-slate-600">Enter your account email. If registered, Supabase Auth will send you a secure password reset link.</p>
-            <form onsubmit="handleForgotPassword(event)" class="space-y-3">
-                <div>
-                    <input type="email" id="reset-email" required="" placeholder="your.email@example.com" class="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
-                </div>
-                <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 rounded-lg text-xs shadow">Send Reset Email</button>
-            </form>
-        </div>
-    </div>
-
-    <div id="supabase-setup-modal" class="hidden fixed inset-0 z-[9999] bg-black/60 flex items-center justify-center p-5">
-      <div class="w-full max-w-md bg-white rounded-2xl shadow-2xl p-6">
-        <h2 class="text-xl font-bold text-slate-800">Connect EduNotes Pro</h2>
-        <p class="text-sm text-slate-600 mt-2">Paste your Supabase Publishable key below. It stays in this browser and is not sent to ChatGPT.</p>
-        <input id="supabase-key-input" type="text" class="w-full mt-4 px-4 py-3 border rounded-xl text-xs" placeholder="Paste Publishable key here">
-        <button type="button" id="save-supabase-key" class="w-full mt-4 py-3 rounded-xl bg-indigo-600 text-white font-semibold">Connect Supabase</button>
-        <button type="button" id="cancel-supabase-key" class="w-full mt-2 py-2 text-slate-500 text-sm">Cancel</button>
+    <div id="admin-fields" class="hidden">
+      <div class="field">
+        <label>Admin Email</label>
+        <input id="admin-email" type="email" autocomplete="username">
+      </div>
+      <div class="field">
+        <label>Admin Password</label>
+        <input id="admin-password" type="password" autocomplete="current-password">
       </div>
     </div>
-    
 
-    <!-- ROBUST iOS SAFARI BOOTSTRAP -->
-    <script>
-    (function () {
-      function getKey() {
-        try { return localStorage.getItem('edunotes_supabase_key') || ''; } catch (_) { return ''; }
-      }
-      function setKey(k) {
-        try { localStorage.setItem('edunotes_supabase_key', k); } catch (_) {}
-      }
-      window.edunotesDirectForgot = function () {
-        var email = window.prompt('Enter your EduNotes email address:');
-        if (!email) return false;
-        var alertBox = document.getElementById('login-alert');
-        if (alertBox) { alertBox.className='mb-4 p-3 rounded-lg text-sm font-medium bg-indigo-50 text-indigo-700'; alertBox.textContent='Password reset is available. Please use the Forgot Password option in the next version after connection is confirmed.'; }
-        return false;
-      };
-      function normalizeEduPhone(v) {
-        let x = String(v || '').replace(/\D/g, '');
-        if (x.length === 10) x = '91' + x;
-        if (x.startsWith('0') && x.length === 11) x = '91' + x.slice(1);
-        return x;
-      }
+    <button id="login-btn" class="btn primary" style="width:100%;margin-top:10px" type="submit">Sign In</button>
+  </form>
+</section>
 
-      function syntheticEduEmail(phone) {
-        return normalizeEduPhone(phone) + '@students.edunotespro.local';
-      }
+<section id="student-view" class="hidden">
+  <div class="hero">
+    <div class="small" style="color:#c7d2fe" id="student-class">Loading class…</div>
+    <h1 class="title" style="color:#fff">Hello, <span id="student-name">Student</span></h1>
+    <p style="margin:0;color:#e0e7ff">Your EduNotes dashboard</p>
+  </div>
 
-      window.edunotesLoginMode = 'student';
+  <div class="grid section">
+    <div class="card stat"><div class="small">Notes Available</div><b id="notes-count">0</b></div>
+    <div class="card stat"><div class="small">Bookmarked</div><b id="bookmark-count">0</b></div>
+  </div>
 
-      window.setEduLoginMode = function(mode) {
-        window.edunotesLoginMode = mode === 'admin' ? 'admin' : 'student';
-        var studentField = document.getElementById('student-phone-field');
-        var adminFields = document.getElementById('admin-login-fields');
-        var studentTab = document.getElementById('student-login-tab');
-        var adminTab = document.getElementById('admin-login-tab');
-        var phone = document.getElementById('login-phone');
-        var email = document.getElementById('login-email');
-        var password = document.getElementById('login-password');
+  <div class="card section">
+    <div class="item"><b>Notes</b></div>
+    <div id="notes-list"></div>
+  </div>
 
-        if (window.edunotesLoginMode === 'student') {
-          if (studentField) studentField.classList.remove('hidden');
-          if (adminFields) adminFields.classList.add('hidden');
-          if (studentTab) {
-            studentTab.className = 'flex-1 py-2.5 rounded-lg bg-indigo-600 text-white text-sm font-semibold';
-          }
-          if (adminTab) {
-            adminTab.className = 'flex-1 py-2.5 rounded-lg bg-slate-100 text-slate-700 text-sm font-semibold';
-          }
-          if (phone) phone.required = true;
-          if (email) email.required = false;
-          if (password) password.required = false;
-        } else {
-          if (studentField) studentField.classList.add('hidden');
-          if (adminFields) adminFields.classList.remove('hidden');
-          if (studentTab) {
-            studentTab.className = 'flex-1 py-2.5 rounded-lg bg-slate-100 text-slate-700 text-sm font-semibold';
-          }
-          if (adminTab) {
-            adminTab.className = 'flex-1 py-2.5 rounded-lg bg-indigo-600 text-white text-sm font-semibold';
-          }
-          if (phone) phone.required = false;
-          if (email) email.required = true;
-          if (password) password.required = true;
-        }
-      };
+  <div class="card section">
+    <div class="item"><b>Announcements</b></div>
+    <div id="ann-list"></div>
+  </div>
 
-      window.edunotesDirectLogin = async function (e) {
-        if (e && e.preventDefault) e.preventDefault();
+  <button id="logout-student" class="btn secondary section">Sign Out</button>
+</section>
 
-        var btn = document.getElementById('login-btn');
-        var alertBox = document.getElementById('login-alert');
+<section id="admin-view" class="hidden">
+  <div class="hero">
+    <div class="small" style="color:#c7d2fe">Administrator</div>
+    <h1 class="title" style="color:#fff">Welcome, <span id="admin-name">Administrator</span></h1>
+    <p style="margin:0;color:#e0e7ff">EduNotes Pro Admin Dashboard</p>
+  </div>
+  <div class="card section" style="padding:20px">
+    <b>Admin authentication is working.</b>
+    <p class="small">The existing full admin-management interface is intentionally not copied into this clean rebuild until the login system is confirmed stable.</p>
+  </div>
+  <button id="logout-admin" class="btn secondary section">Sign Out</button>
+</section>
 
-        function msg(t, err) {
-          if (!alertBox) return;
-          alertBox.className = 'mb-4 p-3 rounded-lg text-sm font-medium ' +
-            (err ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700');
-          alertBox.textContent = t;
-        }
+</main>
+</div>
 
-        if (btn) {
-          btn.disabled = true;
-          btn.innerHTML = '<span>Signing in...</span>';
-        }
+<script>
 
-        try {
-          var key = '';
-          try { key = localStorage.getItem('edunotes_supabase_key') || ''; } catch (_) {}
-
-          if (!key) {
-            key = (window.prompt('EduNotes Pro\\n\\nPaste your Supabase Publishable key here:') || '').trim();
-            if (key) {
-              try { localStorage.setItem('edunotes_supabase_key', key); } catch (_) {}
-            }
-          }
-
-          if (!key) throw new Error('Supabase Publishable key is required.');
-
-          if (!window.supabase || !window.supabase.createClient) {
-            await new Promise(function(resolve, reject) {
-              var sc = document.createElement('script');
-              sc.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2';
-              sc.onload = resolve;
-              sc.onerror = reject;
-              document.head.appendChild(sc);
-            });
-          }
-
-          if (!window.supabase || !window.supabase.createClient) {
-            throw new Error('Supabase library could not load.');
-          }
-
-          if (!supabase || !supabase.auth) {
-            supabase = window.supabase.createClient('https://pnpkdhngcqriuntdvyer.supabase.co', key);
-          }
-
-          var email;
-          var password;
-
-          if (window.edunotesLoginMode === 'admin') {
-            email = (document.getElementById('login-email')?.value || '').trim().toLowerCase();
-            password = document.getElementById('login-password')?.value || '';
-
-            if (!email || !password) {
-              throw new Error('Enter the admin email and password.');
-            }
-          } else {
-            var phoneInput = (document.getElementById('login-phone')?.value || '').trim();
-            var phone = normalizeEduPhone(phoneInput);
-
-            if (phone.length !== 12 || !phone.startsWith('91')) {
-              throw new Error('Enter a valid 10-digit mobile number.');
-            }
-
-            email = syntheticEduEmail(phone);
-            password = phone;
-          }
-
-          var result = await supabase.auth.signInWithPassword({
-            email: email,
-            password: password
-          });
-
-          if (result.error) throw result.error;
-          if (!result.data || !result.data.session || !result.data.user) {
-            throw new Error('Login succeeded but no user session was returned.');
-          }
-
-          // CRITICAL iPhone/iPad Safari login fix:
-          // Supabase returned a valid user/session, but the old handler
-          // did not copy the user into currentUser before loadUserProfile().
-          // That caused currentUser.id to fail and returned the user to login.
-          currentUser = result.data.user;
-
-          msg('Login successful. Loading your dashboard...', false);
-
-          if (typeof loadUserProfile === 'function') {
-            await loadUserProfile();
-          }
-        } catch (err) {
-          try { if (supabase?.auth) await supabase.auth.signOut(); } catch (_) {}
-          msg(err?.message || String(err), true);
-        } finally {
-          if (btn) {
-            btn.disabled = false;
-            btn.innerHTML = '<span>Sign In</span><i data-lucide="arrow-right" class="w-4 h-4"></i>';
-          }
-          try {
-            if (window.lucide && typeof window.lucide.createIcons === 'function') {
-              window.lucide.createIcons();
-            }
-          } catch (_) {}
-        }
-
-        return false;
-      };
-    })();
-    </script>
-
-    <!-- APPLICATION LOGIC & SUPABASE INTEGRATION -->
-    <script>
-        // 1. SUPABASE CLIENT INITIALIZATION
-        const SUPABASE_URL = 'https://pnpkdhngcqriuntdvyer.supabase.co';
-let SUPABASE_ANON_KEY = '';
+const SUPABASE_URL = 'https://pnpkdhngcqriuntdvyer.supabase.co';
 let supabase = null;
+let currentUser = null;
+let currentProfile = null;
+let loginMode = "student";
 
-try {
-    // Get the Supabase Publishable key saved on this device.
-    SUPABASE_ANON_KEY =
-        (localStorage.getItem('edunotes_supabase_key') || '').trim();
+const $ = id => document.getElementById(id);
+const safeText = v => v == null ? "" : String(v);
 
-    // Remove the old invalid placeholder key, if it is still stored.
-    const OLD_INVALID_KEY =
-        'O3U86Yg5fT9V-xI0Q_CjYg4sJv4k7L2N4N4M5O6P7Q8';
+function setAlert(message, type="error"){
+  const el=$("login-alert");
+  if(!el)return;
+  el.className="alert "+(type==="ok"?"ok":"error");
+  el.textContent=message;
+  el.classList.remove("hidden");
+}
 
-    if (SUPABASE_ANON_KEY.includes(OLD_INVALID_KEY)) {
-        localStorage.removeItem('edunotes_supabase_key');
-        SUPABASE_ANON_KEY = '';
+function normalizePhone(v){
+  let x=String(v||"").replace(/\D/g,"");
+  if(x.length===10)x="91"+x;
+  if(x.startsWith("0")&&x.length===11)x="91"+x.slice(1);
+  return x;
+}
+
+function studentEmail(phone){
+  return normalizePhone(phone)+"@students.edunotespro.local";
+}
+
+function setMode(mode){
+  loginMode=mode==="admin"?"admin":"student";
+  $("student-fields").classList.toggle("hidden",loginMode!=="student");
+  $("admin-fields").classList.toggle("hidden",loginMode!=="admin");
+  $("student-tab").className="btn "+(loginMode==="student"?"primary":"secondary");
+  $("admin-tab").className="btn "+(loginMode==="admin"?"primary":"secondary");
+  $("login-alert").classList.add("hidden");
+}
+
+function show(view){
+  $("login-view").classList.toggle("hidden",view!=="login");
+  $("student-view").classList.toggle("hidden",view!=="student");
+  $("admin-view").classList.toggle("hidden",view!=="admin");
+}
+
+function setBusy(busy){
+  const b=$("login-btn");
+  b.disabled=busy;
+  b.textContent=busy?"Signing in…":"Sign In";
+}
+
+async function loadProfile(user){
+  const {data,error}=await supabase
+    .from("profiles").select("*").eq("id",user.id).single();
+
+  if(error||!data){
+    throw new Error("Your login succeeded, but your student profile could not be loaded.");
+  }
+  currentProfile=data;
+  return data;
+}
+
+async function loadStudentData(){
+  const classId=currentProfile?.class_id;
+  let notesQuery=supabase.from("notes").select("*").order("created_at",{ascending:false});
+  if(classId)notesQuery=notesQuery.eq("class_id",classId);
+
+  const {data:notes,error:notesError}=await notesQuery;
+  if(notesError)console.warn("Notes:",notesError.message);
+
+  let annsQuery=supabase.from("announcements").select("*").order("created_at",{ascending:false});
+  if(classId)annsQuery=annsQuery.or(`target_class_id.eq.${classId},target_class_id.is.null`);
+  else annsQuery=annsQuery.is("target_class_id",null);
+
+  const {data:anns,error:annsError}=await annsQuery;
+  if(annsError)console.warn("Announcements:",annsError.message);
+
+  const {data:bookmarks,error:bmError}=await supabase
+    .from("bookmarks").select("note_id").eq("user_id",currentUser.id);
+  if(bmError)console.warn("Bookmarks:",bmError.message);
+
+  $("student-name").textContent=currentProfile.full_name||currentProfile.name||"Student";
+  $("student-class").textContent=currentProfile.class_id ? "Class "+currentProfile.class_id : "Class not assigned";
+  $("notes-count").textContent=(notes||[]).length;
+  $("bookmark-count").textContent=(bookmarks||[]).length;
+
+  $("notes-list").innerHTML=(notes||[]).length
+    ? (notes||[]).map(n=>`<div class="item"><b>${safeText(n.title||n.name||"Note")}</b><div class="small">${safeText(n.description||"")}</div></div>`).join("")
+    : `<div class="item small">No notes available yet.</div>`;
+
+  $("ann-list").innerHTML=(anns||[]).length
+    ? (anns||[]).map(a=>`<div class="item"><b>${safeText(a.title||a.headline||"Announcement")}</b><div class="small">${safeText(a.message||a.content||"")}</div></div>`).join("")
+    : `<div class="item small">No announcements yet.</div>`;
+}
+
+async function tryRegisterPush(){
+  // Push registration is deliberately isolated from login.
+  // A push failure must NEVER prevent the user from entering the dashboard.
+  try{
+    if(!currentUser)return;
+    if(currentProfile?.role==="admin")return;
+    const module=await import("./pushNotifications.js?v=login");
+    const {data:{session}}=await supabase.auth.getSession();
+    if(!session?.access_token)return;
+    let deviceId=localStorage.getItem("edunotes_device_id");
+    if(!deviceId){
+      deviceId=(crypto?.randomUUID?crypto.randomUUID():"device-"+Date.now());
+      localStorage.setItem("edunotes_device_id",deviceId);
     }
-} catch (e) {
-    console.error('Supabase key loading error:', e);
-    SUPABASE_ANON_KEY = '';
-}
-            function openSupabaseSetup() {
-    const modal = document.getElementById('supabase-setup-modal');
-    const input = document.getElementById('supabase-key-input');
-
-    if (modal) modal.classList.remove('hidden');
-
-    if (input) {
-        input.value = SUPABASE_ANON_KEY;
-        setTimeout(() => input.focus(), 50);
+    if(typeof module.registerPushNotifications==="function"){
+      await module.registerPushNotifications({
+        accessToken:session.access_token,
+        studentId:currentUser.id,
+        board:currentProfile?.board||null,
+        classId:currentProfile?.class_id||null,
+        deviceId
+      });
     }
+  }catch(e){
+    console.warn("Push registration skipped:",e);
+  }
 }
 
-function closeSupabaseSetup() {
-    const modal = document.getElementById('supabase-setup-modal');
+async function login(event){
+  event?.preventDefault();
+  setBusy(true);
+  $("login-alert").classList.add("hidden");
 
-    if (modal) modal.classList.add('hidden');
+  try{
+    const key=(localStorage.getItem("edunotes_supabase_key")||"").trim();
+    if(!key)throw new Error("Supabase key is not configured on this device.");
+
+    if(!window.supabase?.createClient){
+      throw new Error("Supabase library could not be loaded.");
+    }
+    if(!supabase){
+      supabase=window.supabase.createClient(SUPABASE_URL,key,{
+        auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:false}
+      });
+    }
+
+    let email,password;
+    if(loginMode==="admin"){
+      email=$("admin-email").value.trim().toLowerCase();
+      password=$("admin-password").value;
+      if(!email||!password)throw new Error("Enter the admin email and password.");
+    }else{
+      const phone=normalizePhone($("student-phone").value);
+      if(phone.length!==12||!phone.startsWith("91"))throw new Error("Enter a valid 10-digit mobile number.");
+      email=studentEmail(phone);
+      password=phone;
+    }
+
+    const {data,error}=await supabase.auth.signInWithPassword({email,password});
+    if(error)throw error;
+    if(!data?.user||!data?.session)throw new Error("Login succeeded but no session was returned.");
+
+    // Set these BEFORE any profile/dashboard call.
+    currentUser=data.user;
+    const profile=await loadProfile(currentUser);
+
+    // Successful authentication is complete here.
+    show(profile.role==="admin"?"admin":"student");
+
+    if(profile.role==="admin"){
+      $("admin-name").textContent=profile.full_name||profile.name||"Administrator";
+    }else{
+      $("student-name").textContent=profile.full_name||profile.name||"Student";
+      $("student-class").textContent=profile.class_id?"Class "+profile.class_id:"Class not assigned";
+      // Dashboard data is best-effort and can never undo login.
+      loadStudentData().catch(e=>console.warn("Student data:",e));
+      tryRegisterPush();
+    }
+
+    setAlert("Login successful.","ok");
+  }catch(e){
+    console.error("Login error:",e);
+    try{await supabase?.auth?.signOut();}catch(_){}
+    currentUser=null;
+    currentProfile=null;
+    show("login");
+    setAlert(e?.message||String(e),"error");
+  }finally{
+    setBusy(false);
+  }
 }
 
-        function saveSupabaseKey() {
-            const input = document.getElementById('supabase-key-input');
-            const key = input ? input.value.trim() : '';
-            if (!key) { alert('Please paste your Supabase Publishable key.'); return; }
-            localStorage.setItem('edunotes_supabase_key', key);
-            SUPABASE_ANON_KEY = key;
-            location.reload();
-        }
-
-        // Application State
-        let currentUser = null;
-        let currentProfile = null;
-        let classesList = [];
-        let englishSubjectId = null;
-        let notesData = [];
-        let bookmarksData = [];
-        let announcementsData = [];
-        let profilesData = [];
-
-        // Active Tabs
-        let activeStudentTab = 'notes';
-        let activeAdminTab = 'notes';
-
-        // Initialize Application
-        document.addEventListener('DOMContentLoaded', async () => {
-            try { if (window.lucide) if (window.lucide && typeof window.lucide.createIcons === 'function') window.lucide.createIcons(); } catch(e) {}
-
-            const modal = document.getElementById('supabase-setup-modal');
-            const saveBtn = document.getElementById('save-supabase-key');
-            const cancelBtn = document.getElementById('cancel-supabase-key');
-                        const loginForm = document.getElementById('form-login');
-
-            if (saveBtn) saveBtn.addEventListener('click', saveSupabaseKey);
-            if (cancelBtn) cancelBtn.addEventListener('click', closeSupabaseSetup);
-                        // Login is handled by the direct iPhone-safe onsubmit handler above; do not attach a second handler.
-
-            if (!SUPABASE_ANON_KEY) {
-                if (modal) modal.classList.remove('hidden');
-                return;
-            }
-
-            if (!window.supabase || !window.supabase.createClient) {
-                showLoginAlert('Supabase library did not load. Please refresh the page.', 'error');
-                return;
-            }
-
-            try {
-                supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-                if (modal) modal.classList.add('hidden');
-                await checkAuthSession();
-            } catch (e) {
-                showLoginAlert('Supabase setup error: ' + (e?.message || String(e)), 'error');
-                if (modal) modal.classList.remove('hidden');
-            }
-        });
-
-        // 2. AUTHENTICATION HANDLERS
-        async function checkAuthSession() {
-            const { data: { session } } = await supabase.auth.getSession();
-            if (session) {
-                currentUser = session.user;
-                await loadUserProfile();
-            } else {
-                showView('login');
-                renderHeader();
-            }
-
-            // Auth state changes listener
-            supabase.auth.onAuthStateChange(async (event, session) => {
-                if (event === 'SIGNED_OUT') {
-                    currentUser = null;
-                    currentProfile = null;
-                    showView('login');
-                    renderHeader();
-                }
-            });
-        }
-
-        async function loadUserProfile() {
-            try {
-                // Fetch profile
-                const { data: profile, error } = await supabase
-                    .from('profiles')
-                    .select('*')
-                    .eq('id', currentUser.id)
-                    .single();
-
-                if (error || !profile) {
-                    console.error('Error fetching profile:', error);
-                    showView('login');
-                    showLoginAlert('Login worked, but the student profile could not be loaded: ' + (error?.message || 'profile not found') + '. Please try once more.', 'error');
-                    return;
-                }
-
-                currentProfile = profile;
-                renderHeader();
-
-                // IMPORTANT: Students do not need the admin metadata (classes/subjects)
-                // before their dashboard can open. Loading that first could bounce a
-                // perfectly valid student back to the login screen if one metadata
-                // query was blocked by RLS.
-                if (currentProfile.role === 'admin') {
-                    await loadMetaData();
-                    showView('admin');
-                    await loadAdminDashboardData();
-                } else {
-                    showView('student');
-                    try {
-                        await loadStudentDashboardData();
-                    } catch (dashboardErr) {
-                        console.error('Student dashboard data error:', dashboardErr);
-                        // Keep the authenticated student on the dashboard instead of
-                        // sending them back to login.
-                        const grid = document.getElementById('student-notes-grid');
-                        if (grid) {
-                            grid.innerHTML = `<div class=\"col-span-full text-center py-12 text-slate-500 bg-white rounded-2xl border border-slate-200\"><p class=\"font-semibold text-slate-700 mb-1\">Dashboard opened successfully.</p><p class=\"text-sm\">Notes are still loading. Please refresh once.</p></div>`;
-                        }
-                    }
-                }
-            } catch (err) {
-                console.error('Dashboard load error:', err);
-                showView('login');
-                showLoginAlert('Login worked, but the dashboard could not load: ' + (err?.message || String(err)), 'error');
-            }
-        }
-
-        async function handleLogin(e) {
-            if (e) e.preventDefault();
-            const email = document.getElementById('login-email').value.trim();
-            const password = document.getElementById('login-password').value;
-            const btn = document.getElementById('login-btn');
-
-            btn.disabled = true;
-            btn.innerHTML = `<span>Authenticating...</span>`;
-            try {
-                if (!supabase) throw new Error('Supabase is not connected. Tap Configure Supabase and save your Publishable key.');
-                const result = await supabase.auth.signInWithPassword({ email, password });
-                if (result.error) throw result.error;
-                if (!result.data?.session) throw new Error('Login succeeded but no session was returned.');
-            } catch (err) {
-                showLoginAlert(err?.message || String(err), 'error');
-            } finally {
-                btn.disabled = false;
-                btn.innerHTML = `<span>Sign In</span><i data-lucide="arrow-right" class="w-4 h-4"></i>`;
-                try { if (window.lucide && typeof window.lucide.createIcons === 'function') window.lucide.createIcons(); } catch(e) {}
-            }
-        }
-
-        async function handleLogout() {
-            await supabase.auth.signOut();
-        }
-
-        function showLoginAlert(msg, type) {
-            const alert = document.getElementById('login-alert');
-            alert.classList.remove('hidden', 'bg-red-50', 'text-red-700', 'bg-green-50', 'text-green-700');
-            if (type === 'error') {
-                alert.classList.add('bg-red-50', 'text-red-700');
-            } else {
-                alert.classList.add('bg-green-50', 'text-green-700');
-            }
-            alert.innerText = msg;
-        }
-
-        // 3. META DATA FETCHING (Classes & English Subject ID)
-        async function loadMetaData() {
-            // Fetch classes
-            const { data: classes, error: classesError } = await supabase.from('classes').select('*').order('name');
-            if (classesError) throw new Error('Classes could not be loaded: ' + classesError.message);
-            classesList = classes || [];
-
-            // Populate class selectors
-            const uploadClassSel = document.getElementById('upload-class');
-            const announceClassSel = document.getElementById('announce-class');
-            const filterClassSel = document.getElementById('admin-filter-class');
-
-            if (uploadClassSel) {
-                uploadClassSel.innerHTML = classesList.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
-            }
-            if (announceClassSel) {
-                announceClassSel.innerHTML = `<option value="ALL">All Classes (Global Announcement)</option>` + 
-                    classesList.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
-            }
-            if (filterClassSel) {
-                filterClassSel.innerHTML = `<option value="ALL">All Classes</option>` + 
-                    classesList.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
-            }
-
-            // Find or confirm 'English' subject ID
-            const { data: sub, error: subError } = await supabase.from('subjects').select('id').ilike('name', 'English').limit(1);
-            if (subError) throw new Error('English subject could not be loaded: ' + subError.message);
-            if (sub && sub.length > 0) {
-                englishSubjectId = sub[0].id;
-            }
-        }
-
-        // 4. STUDENT DASHBOARD LOGIC
-        async function loadStudentDashboardData() {
-            // Update Student Info Banner
-            document.getElementById('student-welcome-name').innerText = `Hello, ${currentProfile.full_name || 'Student'}`;
-            
-            const userClass = classesList.find(c => String(c.id) === String(currentProfile.class_id));
-            document.getElementById('student-badge-class').innerText = userClass ? userClass.name : (currentProfile.class_id ? `Class ${currentProfile.class_id}` : 'Class Not Assigned');
-
-            // 1. Fetch Notes for Student's Class
-            let notesQuery = supabase.from('notes').select('*');
-            if (currentProfile.class_id) {
-                notesQuery = notesQuery.eq('class_id', currentProfile.class_id);
-            }
-            const { data: notes, error: notesError } = await notesQuery.order('created_at', { ascending: false });
-            if (notesError) throw new Error('Notes could not be loaded: ' + notesError.message);
-            notesData = notes || [];
-
-            // 2. Fetch Student's Bookmarks
-            const { data: bmarks, error: bmarksError } = await supabase.from('bookmarks').select('note_id').eq('user_id', currentUser.id);
-            if (bmarksError) {
-                console.warn('Bookmarks could not be loaded:', bmarksError.message);
-                bookmarksData = [];
-            } else {
-                bookmarksData = (bmarks || []).map(b => b.note_id);
-            }
-
-            // 3. Fetch Announcements for Class or ALL
-            let annQuery = supabase.from('announcements').select('*');
-            if (currentProfile.class_id) {
-                annQuery = annQuery.or(`target_class_id.eq.${currentProfile.class_id},target_class_id.is.null`);
-            } else {
-                annQuery = annQuery.is('target_class_id', null);
-            }
-            const { data: anns, error: annsError } = await annQuery.order('created_at', { ascending: false });
-            if (annsError) {
-                console.warn('Announcements could not be loaded:', annsError.message);
-                announcementsData = [];
-            } else {
-                announcementsData = anns || [];
-            }
-
-            // Stats
-            document.getElementById('stat-student-notes-count').innerText = notesData.length;
-            document.getElementById('stat-student-bookmarks-count').innerText = bookmarksData.length;
-            
-            const badgeAnn = document.getElementById('badge-announcements-count');
-            if (announcementsData.length > 0) {
-                badgeAnn.innerText = announcementsData.length;
-                badgeAnn.classList.remove('hidden');
-            }
-
-            renderStudentNotes();
-            renderStudentBookmarks();
-            renderStudentAnnouncements();
-        }
-
-        function renderStudentNotes() {
-            const container = document.getElementById('student-notes-grid');
-            const search = document.getElementById('student-search-notes').value.toLowerCase();
-
-            const filtered = notesData.filter(n => 
-                n.title.toLowerCase().includes(search) || 
-                (n.chapter && n.chapter.toLowerCase().includes(search))
-            );
-
-            if (filtered.length === 0) {
-                container.innerHTML = `<div class="col-span-full text-center py-12 text-slate-400 bg-white rounded-2xl border border-slate-200">
-                    <i data-lucide="book-open" class="w-12 h-12 mx-auto mb-2 text-slate-300"></i>
-                    <p>No English notes found for your class.</p>
-                </div>`;
-                if (window.lucide && typeof window.lucide.createIcons === 'function') window.lucide.createIcons();
-                return;
-            }
-
-            container.innerHTML = filtered.map(note => {
-                const isBookmarked = bookmarksData.includes(note.id);
-                return `
-                <div class="bg-white rounded-xl border border-slate-200 p-5 shadow-sm hover:shadow-md transition flex flex-col justify-between">
-                    <div>
-                        <div class="flex justify-between items-start gap-2 mb-2">
-                            <span class="bg-indigo-50 text-indigo-700 text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider">
-                                ${note.chapter || 'Chapter Material'}
-                            </span>
-                            <button onclick="toggleBookmark('${note.id}')" class="text-slate-400 hover:text-amber-500 transition">
-                                <i data-lucide="bookmark" class="w-5 h-5 ${isBookmarked ? 'fill-amber-500 text-amber-500' : ''}"></i>
-                            </button>
-                        </div>
-                        <h4 class="font-bold text-slate-800 text-base mb-1 line-clamp-2">${note.title}</h4>
-                        <p class="text-xs text-slate-500 mb-4">Subject: <strong class="text-indigo-600">English</strong></p>
-                    </div>
-                    <div class="pt-4 border-t border-slate-100 flex items-center justify-between">
-                        <button onclick="openPdfModal('${note.pdf_path}', '${escapeHtml(note.title)}', '${escapeHtml(note.chapter)}', ${note.allow_download})" class="bg-indigo-600 hover:bg-indigo-700 text-white text-xs px-3 py-2 rounded-lg font-semibold flex items-center space-x-1.5 transition">
-                            <i data-lucide="eye" class="w-4 h-4"></i>
-                            <span>View Note</span>
-                        </button>
-                        ${note.allow_download ? `
-                            <a href="${note.pdf_path}" target="_blank" download class="text-slate-500 hover:text-indigo-600 p-2 rounded-lg hover:bg-slate-50" title="Download Enabled">
-                                <i data-lucide="download" class="w-4 h-4"></i>
-                            </a>
-                        ` : `
-                            <span class="text-[10px] text-slate-400 italic flex items-center gap-1">
-                                <i data-lucide="lock" class="w-3 h-3"></i> View Only
-                            </span>
-                        `}
-                    </div>
-                </div>`;
-            }).join('');
-
-            if (window.lucide && typeof window.lucide.createIcons === 'function') window.lucide.createIcons();
-        }
-
-        function renderStudentBookmarks() {
-            const container = document.getElementById('student-bookmarks-grid');
-            const bookmarkedNotes = notesData.filter(n => bookmarksData.includes(n.id));
-
-            if (bookmarkedNotes.length === 0) {
-                container.innerHTML = `<div class="col-span-full text-center py-12 text-slate-400 bg-white rounded-2xl border border-slate-200">
-                    <i data-lucide="bookmark" class="w-12 h-12 mx-auto mb-2 text-slate-300"></i>
-                    <p>No saved notes bookmarked yet.</p>
-                </div>`;
-                if (window.lucide && typeof window.lucide.createIcons === 'function') window.lucide.createIcons();
-                return;
-            }
-
-            container.innerHTML = bookmarkedNotes.map(note => `
-                <div class="bg-white rounded-xl border border-slate-200 p-5 shadow-sm flex flex-col justify-between">
-                    <div>
-                        <div class="flex justify-between items-start gap-2 mb-2">
-                            <span class="bg-indigo-50 text-indigo-700 text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider">
-                                ${note.chapter || 'Chapter Material'}
-                            </span>
-                            <button onclick="toggleBookmark('${note.id}')" class="text-amber-500 hover:text-slate-400 transition">
-                                <i data-lucide="bookmark" class="w-5 h-5 fill-amber-500"></i>
-                            </button>
-                        </div>
-                        <h4 class="font-bold text-slate-800 text-base mb-1">${note.title}</h4>
-                    </div>
-                    <div class="pt-4 border-t border-slate-100 flex items-center justify-between">
-                        <button onclick="openPdfModal('${note.pdf_path}', '${escapeHtml(note.title)}', '${escapeHtml(note.chapter)}', ${note.allow_download})" class="bg-indigo-600 hover:bg-indigo-700 text-white text-xs px-3 py-2 rounded-lg font-semibold flex items-center space-x-1.5">
-                            <i data-lucide="eye" class="w-4 h-4"></i>
-                            <span>View Note</span>
-                        </button>
-                    </div>
-                </div>
-            `).join('');
-
-            if (window.lucide && typeof window.lucide.createIcons === 'function') window.lucide.createIcons();
-        }
-
-        function renderStudentAnnouncements() {
-            const container = document.getElementById('student-announcements-list');
-
-            if (announcementsData.length === 0) {
-                container.innerHTML = `<div class="text-center py-12 text-slate-400 bg-white rounded-2xl border border-slate-200">
-                    <i data-lucide="bell-off" class="w-12 h-12 mx-auto mb-2 text-slate-300"></i>
-                    <p>No active notices at this time.</p>
-                </div>`;
-                if (window.lucide && typeof window.lucide.createIcons === 'function') window.lucide.createIcons();
-                return;
-            }
-
-            container.innerHTML = announcementsData.map(ann => {
-                const date = new Date(ann.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-                return `
-                <div class="bg-white rounded-xl border-l-4 border-l-amber-500 border-y border-r border-slate-200 p-5 shadow-sm">
-                    <div class="flex justify-between items-center mb-1">
-                        <h4 class="font-bold text-slate-800 text-base">${ann.title}</h4>
-                        <span class="text-xs text-slate-400">${date}</span>
-                    </div>
-                    <p class="text-sm text-slate-600 whitespace-pre-line">${ann.message}</p>
-                </div>`;
-            }).join('');
-
-            if (window.lucide && typeof window.lucide.createIcons === 'function') window.lucide.createIcons();
-        }
-
-        async function toggleBookmark(noteId) {
-            const isBookmarked = bookmarksData.includes(noteId);
-
-            if (isBookmarked) {
-                // Delete
-                await supabase.from('bookmarks').delete().eq('student_id', currentUser.id).eq('note_id', noteId);
-                bookmarksData = bookmarksData.filter(id => id !== noteId);
-            } else {
-                // Insert
-                await supabase.from('bookmarks').insert([{ student_id: currentUser.id, note_id: noteId }]);
-                bookmarksData.push(noteId);
-            }
-
-            document.getElementById('stat-student-bookmarks-count').innerText = bookmarksData.length;
-            renderStudentNotes();
-            renderStudentBookmarks();
-        }
-
-        // 5. ADMIN DASHBOARD LOGIC
-        async function loadAdminDashboardData() {
-            // 1. Fetch All Notes
-            const { data: notes } = await supabase.from('notes').select('*').order('created_at', { ascending: false });
-            notesData = notes || [];
-
-            // 2. Fetch Profiles Roster
-            const { data: profs } = await supabase.from('profiles').select('*').order('full_name');
-            profilesData = profs || [];
-
-            // 3. Fetch All Announcements
-            const { data: anns } = await supabase.from('announcements').select('*').order('created_at', { ascending: false });
-            announcementsData = anns || [];
-
-            renderAdminNotes();
-            renderAdminStudents();
-            renderAdminAnnouncements();
-        }
-
-        function renderAdminNotes() {
-            const container = document.getElementById('admin-notes-table-body');
-            const search = document.getElementById('admin-search-notes').value.toLowerCase();
-            const filterClass = document.getElementById('admin-filter-class').value;
-
-            const filtered = notesData.filter(n => {
-                const matchesSearch = n.title.toLowerCase().includes(search) || (n.chapter && n.chapter.toLowerCase().includes(search));
-                const matchesClass = filterClass === 'ALL' || n.class_id === filterClass;
-                return matchesSearch && matchesClass;
-            });
-
-            if (filtered.length === 0) {
-                container.innerHTML = `<tr><td colspan="5" class="p-6 text-center text-slate-400">No matching study notes uploaded.</td></tr>`;
-                return;
-            }
-
-            container.innerHTML = filtered.map(note => {
-                const targetClass = classesList.find(c => c.id === note.class_id);
-                return `
-                <tr class="hover:bg-slate-50 border-b border-slate-100">
-                    <td class="p-4 font-semibold text-slate-800">
-                        <div>${note.title}</div>
-                        <div class="text-xs font-normal text-slate-400">${note.chapter || 'General Note'}</div>
-                    </td>
-                    <td class="p-4 text-xs font-medium text-slate-600">${targetClass ? targetClass.name : 'All Classes'}</td>
-                    <td class="p-4 text-xs font-semibold text-indigo-600">English</td>
-                    <td class="p-4">
-                        <span class="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full font-medium ${note.allow_download ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-600'}">
-                            <i data-lucide="${note.allow_download ? 'check-circle' : 'lock'}" class="w-3 h-3"></i>
-                            ${note.allow_download ? 'Allowed' : 'View Only'}
-                        </span>
-                    </td>
-                    <td class="p-4 text-right space-x-2">
-                        <button onclick="openPdfModal('${note.pdf_path}', '${escapeHtml(note.title)}', '${escapeHtml(note.chapter)}', true)" class="p-1.5 text-slate-500 hover:text-indigo-600 rounded-lg hover:bg-slate-100">
-                            <i data-lucide="eye" class="w-4 h-4"></i>
-                        </button>
-                        <button onclick="deleteNote('${note.id}', '${note.pdf_path}')" class="p-1.5 text-slate-500 hover:text-red-600 rounded-lg hover:bg-slate-100">
-                            <i data-lucide="trash-2" class="w-4 h-4"></i>
-                        </button>
-                    </td>
-                </tr>`;
-            }).join('');
-
-            if (window.lucide && typeof window.lucide.createIcons === 'function') window.lucide.createIcons();
-        }
-
-        function renderAdminStudents() {
-            const container = document.getElementById('admin-students-table-body');
-            const search = document.getElementById('admin-search-students').value.toLowerCase();
-
-            const filtered = profilesData.filter(p => (p.full_name || '').toLowerCase().includes(search));
-
-            if (filtered.length === 0) {
-                container.innerHTML = `<tr><td colspan="4" class="p-6 text-center text-slate-400">No user profiles located.</td></tr>`;
-                return;
-            }
-
-            container.innerHTML = filtered.map(p => {
-                const assignedClass = classesList.find(c => c.id === p.class_id);
-                return `
-                <tr class="hover:bg-slate-50 border-b border-slate-100">
-                    <td class="p-4 font-semibold text-slate-800">${p.full_name || 'Unnamed Profile'}</td>
-                    <td class="p-4 text-xs">
-                        <span class="px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${p.role === 'admin' ? 'bg-amber-100 text-amber-800' : 'bg-indigo-100 text-indigo-800'}">
-                            ${p.role}
-                        </span>
-                    </td>
-                    <td class="p-4 text-xs font-medium text-slate-600">${assignedClass ? assignedClass.name : 'N/A'}</td>
-                    <td class="p-4 text-xs font-mono text-slate-400">${p.id}</td>
-                </tr>`;
-            }).join('');
-        }
-
-        function renderAdminAnnouncements() {
-            const container = document.getElementById('admin-announcements-list');
-
-            if (announcementsData.length === 0) {
-                container.innerHTML = `<div class="text-center py-12 text-slate-400 bg-white rounded-2xl border border-slate-200">
-                    <i data-lucide="bell-off" class="w-12 h-12 mx-auto mb-2 text-slate-300"></i>
-                    <p>No active portal notices created.</p>
-                </div>`;
-                if (window.lucide && typeof window.lucide.createIcons === 'function') window.lucide.createIcons();
-                return;
-            }
-
-            container.innerHTML = announcementsData.map(ann => {
-                const targetClass = classesList.find(c => c.id === ann.target_class_id);
-                const date = new Date(ann.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-
-                return `
-                <div class="bg-white rounded-xl border border-slate-200 p-5 shadow-sm flex justify-between items-start gap-4">
-                    <div class="space-y-1">
-                        <div class="flex items-center space-x-2">
-                            <span class="bg-amber-100 text-amber-800 text-[10px] font-bold px-2 py-0.5 rounded">
-                                Target: ${targetClass ? targetClass.name : 'All Classes'}
-                            </span>
-                            <span class="text-xs text-slate-400">${date}</span>
-                        </div>
-                        <h4 class="font-bold text-slate-800 text-base">${ann.title}</h4>
-                        <p class="text-sm text-slate-600 whitespace-pre-line">${ann.message}</p>
-                    </div>
-                    <button onclick="deleteAnnouncement('${ann.id}')" class="text-slate-400 hover:text-red-600 p-2 rounded-lg hover:bg-slate-50">
-                        <i data-lucide="trash-2" class="w-5 h-5"></i>
-                    </button>
-                </div>`;
-            }).join('');
-
-            if (window.lucide && typeof window.lucide.createIcons === 'function') window.lucide.createIcons();
-        }
-
-        // 6. UPLOAD & RECORD CREATION LOGIC
-        async function handleNoteUpload(e) {
-            e.preventDefault();
-            const btn = document.getElementById('upload-submit-btn');
-            const fileInput = document.getElementById('upload-file');
-            const file = fileInput.files[0];
-
-            if (!file) return;
-
-            btn.disabled = true;
-            btn.innerHTML = `<i data-lucide="loader" class="w-4 h-4 animate-spin"></i> Uploading...`;
-
-            try {
-                // Upload File to Supabase Storage Bucket 'notes-files'
-                const filePath = `${Date.now()}_${file.name.replace(/\s+/g, '_')}`;
-                const { data: storageData, error: storageErr } = await supabase.storage
-                    .from('notes-files')
-                    .upload(filePath, file);
-
-                if (storageErr) throw storageErr;
-
-                // Get Public Link
-                const { data: { publicUrl } } = supabase.storage
-                    .from('notes-files')
-                    .getPublicUrl(filePath);
-
-                // Insert into Database
-                const { error: dbErr } = await supabase.from('notes').insert([{
-                    title: document.getElementById('upload-title').value,
-                    class_id: document.getElementById('upload-class').value,
-                    subject_id: englishSubjectId,
-                    chapter: document.getElementById('upload-chapter').value,
-                    pdf_path: publicUrl,
-                    allow_download: document.getElementById('upload-allow-download').checked
-                }]);
-
-                if (dbErr) throw dbErr;
-
-                closeNoteUploadModal();
-                await loadAdminDashboardData();
-            } catch (err) {
-                alert(`Upload failed: ${err.message}`);
-            } finally {
-                btn.disabled = false;
-                btn.innerHTML = `<span>Save & Upload</span>`;
-            }
-        }
-
-        async function deleteNote(id, pdfUrl) {
-            if (!confirm("Are you sure you want to remove this study note?")) return;
-
-            try {
-                // Extract filename from URL
-                if (pdfUrl) {
-                    const fileName = pdfUrl.split('/').pop();
-                    await supabase.storage.from('notes-files').remove([fileName]);
-                }
-
-                await supabase.from('notes').delete().eq('id', id);
-                await loadAdminDashboardData();
-            } catch (err) {
-                alert(`Error deleting note: ${err.message}`);
-            }
-        }
-
-        async function handleAnnouncementSubmit(e) {
-            e.preventDefault();
-            const btn = document.getElementById('announce-submit-btn');
-            btn.disabled = true;
-
-            const targetClassVal = document.getElementById('announce-class').value;
-
-            const payload = {
-                title: document.getElementById('announce-title').value,
-                message: document.getElementById('announce-message').value,
-                target_class_id: targetClassVal === 'ALL' ? null : targetClassVal
-            };
-
-            const { error } = await supabase.from('announcements').insert([payload]);
-
-            btn.disabled = false;
-
-            if (error) {
-                alert(`Failed to publish notice: ${error.message}`);
-            } else {
-                closeAnnouncementModal();
-                await loadAdminDashboardData();
-            }
-        }
-
-        async function deleteAnnouncement(id) {
-            if (!confirm("Remove this announcement?")) return;
-            await supabase.from('announcements').delete().eq('id', id);
-            await loadAdminDashboardData();
-        }
-
-        async function handleForgotPassword(e) {
-            e.preventDefault();
-            const email = document.getElementById('reset-email').value;
-            const { error } = await supabase.auth.resetPasswordForEmail(email);
-
-            if (error) {
-                alert(`Error: ${error.message}`);
-            } else {
-                alert('Password reset instructions sent! Please check your inbox.');
-                closeForgotPasswordModal();
-            }
-        }
-
-        // 7. UI NAVIGATION & MODAL HELPERS
-        function showView(viewName) {
-            document.getElementById('view-login').classList.add('hidden');
-            document.getElementById('view-student').classList.add('hidden');
-            document.getElementById('view-admin').classList.add('hidden');
-
-            if (viewName === 'login') document.getElementById('view-login').classList.remove('hidden');
-            if (viewName === 'student') document.getElementById('view-student').classList.remove('hidden');
-            if (viewName === 'admin') document.getElementById('view-admin').classList.remove('hidden');
-        }
-
-        function renderHeader() {
-            const area = document.getElementById('header-user-area');
-            if (!currentUser) {
-                area.innerHTML = `<span class="text-xs bg-indigo-800 text-indigo-200 px-3 py-1.5 rounded-lg border border-indigo-600 font-medium"> Portal Authentication Required</span>`;
-                return;
-            }
-
-            const name = currentProfile ? (currentProfile.full_name || 'User') : 'User';
-            area.innerHTML = `
-                <div class="flex items-center space-x-3">
-                    <div class="text-right hidden sm:block">
-                        <div class="text-xs font-bold leading-none">${name}</div>
-                        <div class="text-[10px] text-indigo-200 uppercase font-semibold mt-0.5">${currentProfile?.role || 'Student'}</div>
-                    </div>
-                    <button onclick="handleLogout()" class="bg-indigo-800 hover:bg-indigo-900 text-indigo-100 p-2 rounded-lg transition" title="Sign Out">
-                        <i data-lucide="log-out" class="w-4 h-4"></i>
-                    </button>
-                </div>`;
-            if (window.lucide && typeof window.lucide.createIcons === 'function') window.lucide.createIcons();
-        }
-
-        function switchStudentTab(tab) {
-            activeStudentTab = tab;
-            ['notes', 'bookmarks', 'announcements'].forEach(t => {
-                document.getElementById(`student-tab-${t}`).classList.add('hidden');
-                document.getElementById(`tab-btn-${t}`).className = "pb-3 text-sm font-medium text-slate-500 hover:text-slate-800 border-b-2 border-transparent flex items-center space-x-2 whitespace-nowrap";
-            });
-
-            document.getElementById(`student-tab-${tab}`).classList.remove('hidden');
-            document.getElementById(`tab-btn-${tab}`).className = "pb-3 text-sm font-semibold border-b-2 border-indigo-600 text-indigo-600 flex items-center space-x-2 whitespace-nowrap";
-        }
-
-        function switchAdminTab(tab) {
-            activeAdminTab = tab;
-            ['notes', 'students', 'announcements'].forEach(t => {
-                document.getElementById(`admin-tab-${t}`).classList.add('hidden');
-                document.getElementById(`admin-tab-btn-${t}`).className = "pb-3 text-sm font-medium text-slate-500 hover:text-slate-800 border-b-2 border-transparent flex items-center space-x-2 whitespace-nowrap";
-            });
-
-            document.getElementById(`admin-tab-${tab}`).classList.remove('hidden');
-            document.getElementById(`admin-tab-btn-${tab}`).className = "pb-3 text-sm font-semibold border-b-2 border-indigo-600 text-indigo-600 flex items-center space-x-2 whitespace-nowrap";
-        }
-
-        function openPdfModal(url, title, subtitle, allowDownload) {
-            document.getElementById('pdf-modal-title').innerText = title;
-            document.getElementById('pdf-modal-subtitle').innerText = subtitle || 'Class Note';
-            document.getElementById('pdf-modal-iframe').src = url;
-
-            const downloadBtn = document.getElementById('pdf-modal-download-btn');
-            if (allowDownload) {
-                downloadBtn.href = url;
-                downloadBtn.classList.remove('hidden');
-            } else {
-                downloadBtn.classList.add('hidden');
-            }
-
-            document.getElementById('modal-pdf').classList.remove('hidden');
-        }
-
-        function closePdfModal() {
-            document.getElementById('modal-pdf').classList.add('hidden');
-            document.getElementById('pdf-modal-iframe').src = '';
-        }
-
-        function openNoteUploadModal() { document.getElementById('modal-upload-note').classList.remove('hidden'); }
-        function closeNoteUploadModal() { document.getElementById('modal-upload-note').classList.add('hidden'); }
-
-        function openAnnouncementModal() { document.getElementById('modal-announcement').classList.remove('hidden'); }
-        function closeAnnouncementModal() { document.getElementById('modal-announcement').classList.add('hidden'); }
-
-        function showForgotPasswordModal() { document.getElementById('modal-forgot-password').classList.remove('hidden'); }
-        function closeForgotPasswordModal() { document.getElementById('modal-forgot-password').classList.add('hidden'); }
-
-        function escapeHtml(str) {
-            return (str || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
-        }
-    </script>
-
+async function restoreSession(){
+  try{
+    const {data:{session}}=await supabase.auth.getSession();
+    if(!session?.user){show("login");return;}
+    currentUser=session.user;
+    const profile=await loadProfile(currentUser);
+    show(profile.role==="admin"?"admin":"student");
+    if(profile.role==="admin"){
+      $("admin-name").textContent=profile.full_name||profile.name||"Administrator";
+    }else{
+      loadStudentData().catch(e=>console.warn(e));
+      tryRegisterPush();
+    }
+  }catch(e){
+    console.warn("Session restore:",e);
+    try{await supabase.auth.signOut();}catch(_){}
+    currentUser=null; currentProfile=null; show("login");
+  }
+}
+
+async function logout(){
+  try{await supabase?.auth?.signOut();}catch(_){}
+  currentUser=null;currentProfile=null;show("login");
+}
+
+async function init(){
+  if(!window.supabase?.createClient){
+    setAlert("Supabase library did not load.");
+    return;
+  }
+  const key=(localStorage.getItem("edunotes_supabase_key")||"").trim();
+  if(!key){
+    setAlert("Supabase key is not configured on this device.");
+    return;
+  }
+  supabase=window.supabase.createClient(SUPABASE_URL,key,{
+    auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:false}
+  });
+  supabase.auth.onAuthStateChange((event)=>{
+    if(event==="SIGNED_OUT"){currentUser=null;currentProfile=null;show("login");}
+  });
+  await restoreSession();
+}
+
+document.addEventListener("DOMContentLoaded",()=>{
+  $("student-tab").onclick=()=>setMode("student");
+  $("admin-tab").onclick=()=>setMode("admin");
+  $("login-form").onsubmit=login;
+  $("logout-student").onclick=logout;
+  $("logout-admin").onclick=logout;
+  setMode("student");
+  init();
+});
+
+</script>
 
 
 </body></html>
