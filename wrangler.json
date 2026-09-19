@@ -3,7 +3,7 @@
   "name": "edunotes-pro",
   "compatibility_date": "2026-09-19",
   "assets": {
-    "directory": "./frontend/build",
+    "directory": "./edunotes",
     "not_found_handling": "single-page-application"
   }
 }
