@@ -760,11 +760,7 @@ function closeSupabaseSetup() {
         async function loadUserProfile() {
             try {
                 // Fetch profile
-                const { data: profile, error } = await supabase
-                    .from('profiles')
-                    .select('*')
-                    .eq('id', currentUser.id)
-                    .maybeSingle();
+                const { data: profile, error } = await supabase.rpc('get_my_profile');
 
                 if (error || !profile) {
                     console.error('Error fetching profile:', error);
