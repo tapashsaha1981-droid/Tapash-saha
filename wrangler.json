@@ -1,0 +1,9 @@
+{
+  "$schema": "https://developers.cloudflare.com/workers/wrangler/config-schema.json",
+  "name": "edunotes-pro",
+  "compatibility_date": "2026-09-19",
+  "assets": {
+    "directory": "./frontend/build",
+    "not_found_handling": "single-page-application"
+  }
+}
