@@ -598,11 +598,25 @@
             throw new Error('Login succeeded but no session was returned.');
           }
 currentUser = result.data.user;
-          msg('Login successful. Loading your dashboard...', false);
+msg('Login successful. Loading your dashboard...', false);
 
-          if (typeof loadUserProfile === 'function') {
-            await loadUserProfile();
-          }
+// Open dashboard immediately after successful login
+if (typeof showView === 'function') {
+  showView(window.edunotesLoginMode === 'admin' ? 'admin' : 'student');
+}
+
+if (typeof loadUserProfile === 'function') {
+  loadUserProfile().catch(function (dashboardErr) {
+    console.error('Dashboard load error:', dashboardErr);
+    var text = dashboardErr && dashboardErr.message
+      ? dashboardErr.message
+      : String(dashboardErr);
+    msg(
+      'Login succeeded, but some dashboard data could not be loaded: ' + text,
+      true
+    );
+  });
+}
         } catch (err) {
           try { if (supabase?.auth) await supabase.auth.signOut(); } catch (_) {}
           msg(err?.message || String(err), true);
