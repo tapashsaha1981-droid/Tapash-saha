@@ -1,361 +1,298 @@
 <html lang="en"><head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>EduNotes Pro</title>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>EduNotes Pro — Student Learning Portal</title><link rel="manifest" href="./manifest.webmanifest"><meta name="theme-color" content="#0f172a"><meta name="edunotes-version" content="V63-REAL-PUSH-POPUP-2026-09-18">
 <style>
-*{box-sizing:border-box}
-body{margin:0;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#f8fafc;color:#0f172a}
-button,input{font:inherit}
-.hidden{display:none!important}
-.app{min-height:100vh}
-header{position:sticky;top:0;z-index:20;background:#fff;border-bottom:1px solid #e2e8f0}
-.wrap{max-width:1100px;margin:auto;padding:16px}
-.card{background:#fff;border:1px solid #e2e8f0;border-radius:18px;box-shadow:0 8px 30px rgba(15,23,42,.06)}
-.btn{border:0;border-radius:10px;padding:11px 16px;cursor:pointer;font-weight:700}
-.primary{background:#4f46e5;color:#fff}.secondary{background:#e2e8f0;color:#0f172a}
-.login{max-width:430px;margin:7vh auto;padding:28px}
-.tabs{display:flex;gap:8px;margin-bottom:22px}.tabs button{flex:1}
-.field{margin:14px 0}.field label{display:block;font-size:12px;font-weight:700;color:#475569;margin-bottom:6px;text-transform:uppercase}
-.field input{width:100%;padding:13px;border:1px solid #cbd5e1;border-radius:10px;outline:0}
-.field input:focus{border-color:#6366f1;box-shadow:0 0 0 3px rgba(99,102,241,.12)}
-.alert{padding:12px;border-radius:10px;margin:12px 0;font-size:14px}.error{background:#fef2f2;color:#b91c1c}.ok{background:#ecfdf5;color:#047857}
-.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:16px}.stat{padding:20px}.stat b{font-size:30px}
-.hero{padding:25px;background:linear-gradient(135deg,#4338ca,#6366f1);color:#fff;border-radius:18px}
-.section{margin-top:20px}.item{padding:16px;border-bottom:1px solid #e2e8f0}.item:last-child{border-bottom:0}
-.small{font-size:13px;color:#64748b}.title{font-size:24px;font-weight:800;margin:0 0 5px}
-@media(max-width:600px){.wrap{padding:12px}.login{margin:3vh 12px;padding:22px}}
+:root{--navy:#0f172a;--blue:#2563eb;--blue2:#eff6ff;--text:#172033;--muted:#64748b;--line:#e5e7eb;--bg:#f5f7fb;--white:#fff;--green:#059669;--red:#dc2626;--shadow:0 12px 35px rgba(15,23,42,.08)}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:14px Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}button,input,select,textarea{font:inherit}button{cursor:pointer}.hidden{display:none!important}.startup{position:fixed;inset:0;z-index:999;background:rgba(245,247,251,.96);display:grid;place-items:center}.startup-box{background:#fff;border:1px solid var(--line);border-radius:18px;padding:24px 30px;box-shadow:var(--shadow);text-align:center;min-width:240px}.spinner{width:30px;height:30px;border:3px solid #dbeafe;border-top-color:var(--blue);border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 12px}@keyframes spin{to{transform:rotate(360deg)}}
+.top{min-height:66px;height:auto;background:var(--navy);color:#fff;display:flex;align-items:center;justify-content:space-between;padding:0 28px;position:sticky;top:0;z-index:20}.brand{display:flex;align-items:center;gap:12px}.logo{width:38px;height:38px;border-radius:11px;background:linear-gradient(135deg,#60a5fa,#2563eb);display:grid;place-items:center;font-weight:900}.brand b{font-size:18px}.brand small{display:block;color:#94a3b8;font-size:11px;margin-top:1px}.top-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}.iconbtn{background:#1e293b;color:#fff;border:1px solid #334155;border-radius:10px;padding:9px 11px}.iconbtn:hover{background:#334155}.reloadbtn{display:none!important}.recover{margin-top:12px;display:none}.admin-only{display:none}.shell{display:flex;min-height:calc(100vh - 66px)}.side{width:235px;background:#fff;border-right:1px solid var(--line);padding:22px 14px;flex:none}.side-title{font-size:10px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:.12em;padding:8px 11px}.nav{width:100%;border:0;background:transparent;text-align:left;padding:11px 12px;border-radius:10px;font-weight:700;color:#475569;margin:2px 0}.nav:hover,.nav.on{background:var(--blue2);color:var(--blue)}.content{flex:1;max-width:1250px;width:100%;padding:30px}.pagehead{display:flex;align-items:flex-start;justify-content:space-between;gap:15px;margin-bottom:24px}.pagehead h1{margin:0;font-size:26px;letter-spacing:-.03em}.pagehead p{margin:6px 0 0;color:var(--muted)}.pill{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:6px 10px;background:var(--blue2);color:#1d4ed8;font-weight:800;font-size:11px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(255px,1fr));gap:16px}.card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:20px;box-shadow:0 3px 14px rgba(15,23,42,.03)}.card h2,.card h3{margin:0 0 8px}.muted{color:var(--muted)}.stat{display:flex;align-items:center;justify-content:space-between}.stat strong{font-size:28px}.stat .ico{width:42px;height:42px;border-radius:12px;background:var(--blue2);display:grid;place-items:center;font-size:20px}.note-title{font-size:17px;margin:12px 0 5px}.note-meta{font-size:12px;color:var(--muted);margin-bottom:15px}.btn{border:0;border-radius:10px;padding:10px 14px;font-weight:800}.primary{background:var(--blue);color:#fff}.primary:hover{background:#1d4ed8}.secondary{background:#fff;color:#334155;border:1px solid #cbd5e1}.danger{background:#fef2f2;color:#b91c1c;border:1px solid #fecaca}.success{background:#ecfdf5;color:#047857}.full{width:100%}.actions{display:flex;gap:8px;flex-wrap:wrap}.tabs{display:flex;gap:7px;overflow:auto;margin:0 0 20px}.tab{border:1px solid var(--line);background:#fff;padding:9px 13px;border-radius:10px;font-weight:800;color:#64748b;white-space:nowrap}.tab.on{background:var(--navy);border-color:var(--navy);color:#fff}.alert{padding:11px 13px;border-radius:10px;margin:12px 0;font-weight:600}.alert.error{background:#fef2f2;color:#b91c1c}.alert.success{background:#ecfdf5;color:#047857}.notice{border-left:4px solid var(--blue)}.empty{text-align:center;padding:35px;color:var(--muted);background:#fff;border:1px dashed #cbd5e1;border-radius:15px}.search{max-width:320px}.search input{margin:0}.field{margin:13px 0}.field label{display:block;font-size:12px;font-weight:800;margin:0 0 6px;color:#475569}.field input,.field select,.field textarea{width:100%;padding:11px 12px;border:1px solid #cbd5e1;border-radius:10px;background:#fff;outline:none}.field input:focus,.field select:focus,.field textarea:focus{border-color:#60a5fa;box-shadow:0 0 0 3px #dbeafe}.modal{position:fixed;inset:0;background:rgba(2,6,23,.68);display:flex;align-items:center;justify-content:center;padding:16px;z-index:50}.modalbox{background:#fff;border-radius:18px;width:min(760px,100%);max-height:92vh;overflow:auto;padding:22px;box-shadow:var(--shadow)}iframe{width:100%;height:70vh;border:1px solid var(--line);border-radius:12px}.pdf-modalbox{background:#fff;border-radius:18px;width:min(1100px,100%);height:96vh;max-height:96vh;overflow:hidden;padding:14px;box-shadow:var(--shadow);display:flex;flex-direction:column}.pdf-head{flex:none;padding-bottom:10px}.pdf-frame{flex:1;min-height:0;width:100%;height:auto!important;border:1px solid var(--line);border-radius:12px;background:#f8fafc}.tablewrap{overflow:auto}table{width:100%;border-collapse:collapse;min-width:700px}th,td{text-align:left;padding:13px 10px;border-bottom:1px solid var(--line);white-space:nowrap}th{font-size:11px;text-transform:uppercase;color:#94a3b8;letter-spacing:.06em}.status{display:inline-flex;border-radius:999px;padding:5px 9px;font-size:11px;font-weight:900}.active{background:#ecfdf5;color:#047857}.inactive{background:#fef2f2;color:#b91c1c}.student-list{display:grid;gap:12px}.student-item{border:1px solid var(--line);border-radius:14px;padding:15px;background:#fff}.student-item-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.student-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.student-id{font-size:11px;word-break:break-all;margin-top:3px}.student-tools{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:12px;background:#f8fafc;border:1px solid var(--line);border-radius:12px;margin-bottom:4px}.student-tools input,.student-tools select{width:100%;padding:11px 12px;border:1px solid #cbd5e1;border-radius:10px;background:#fff;outline:none}.student-tools input:focus,.student-tools select:focus{border-color:#60a5fa;box-shadow:0 0 0 3px #dbeafe}.student-group{display:grid;gap:10px}.student-group-title{position:sticky;top:72px;z-index:5;padding:10px 13px;border-radius:10px;background:#eff6ff;color:#1e40af;border:1px solid #dbeafe}.student-group-title b{font-size:14px}.student-group-title .muted{margin-left:6px;font-size:12px}.notes-tools{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:12px;background:#f8fafc;border:1px solid var(--line);border-radius:12px;margin:0 0 14px}.notes-tools input,.notes-tools select{width:100%;padding:11px 12px;border:1px solid #cbd5e1;border-radius:10px;background:#fff;outline:none}.notes-tools input:focus,.notes-tools select:focus{border-color:#60a5fa;box-shadow:0 0 0 3px #dbeafe}.notes-group{display:grid;gap:10px;margin-top:14px}.notes-group-title{padding:10px 13px;border-radius:10px;background:#eff6ff;color:#1e40af;border:1px solid #dbeafe}.notes-group-title b{font-size:14px}.note-row-card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:14px}.note-row-main{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.note-row-meta{font-size:12px;color:var(--muted);margin-top:4px}
+.login-page{min-height:100vh;background:radial-gradient(circle at 20% 10%,#dbeafe 0,#f8fafc 36%,#eef2ff 100%);display:grid;place-items:center;padding:20px}.login-card{width:min(440px,100%);background:#fff;border:1px solid var(--line);border-radius:22px;padding:32px;box-shadow:var(--shadow)}.login-logo{display:flex;align-items:center;gap:12px;margin-bottom:25px}.login-logo .logo{width:48px;height:48px}.login-card h1{font-size:27px;margin:0 0 7px}.login-card .sub{color:var(--muted);margin:0 0 20px}.footer{text-align:center;color:#94a3b8;font-size:11px;margin-top:22px}
+@media(max-width:800px){.side{width:72px;padding:15px 8px}.side-title{display:none}.nav{font-size:0;text-align:center}.nav::first-letter{font-size:18px}.content{padding:20px 14px;min-width:0}.top{padding:0 15px}.brand small{display:none}.pagehead{flex-direction:column}.pagehead .actions{width:100%;flex-wrap:wrap}.pagehead .actions .btn{flex:1;min-width:130px}.search{max-width:none;width:100%}.tablewrap{overflow-x:auto}.student-item-head{flex-direction:column}.student-actions .btn{flex:1;min-width:120px}}
+
+/* V39: Student-only Light/Dark mode. Admin appearance is unchanged. */
+body.student-theme-dark{--bg:#0b1220;--white:#111827;--text:#e5e7eb;--muted:#94a3b8;--line:#243244;--blue2:#172554;--shadow:0 12px 35px rgba(0,0,0,.22);background:var(--bg);color:var(--text)}
+body.student-theme-dark #student-view{background:var(--bg);color:var(--text)}
+body.student-theme-dark #student-side{background:#111827;border-color:#243244}
+body.student-theme-dark #student-side .nav{color:#cbd5e1}
+body.student-theme-dark #student-side .nav:hover,body.student-theme-dark #student-side .nav.on{background:#172554;color:#93c5fd;border-color:#1e3a8a}
+body.student-theme-dark #student-view .card,body.student-theme-dark #student-view .empty,body.student-theme-dark #student-view .learning-card,body.student-theme-dark #student-view .student-hero{background:#111827;border-color:#243244;color:var(--text)}
+body.student-theme-dark #student-view .student-hero{background:linear-gradient(135deg,#172554 0%,#111827 62%,#1e1b4b 100%)}
+body.student-theme-dark #student-view .student-hero p,body.student-theme-dark #student-view .learning-meta,body.student-theme-dark #student-view .muted{color:#94a3b8}
+body.student-theme-dark #student-view .student-hero-badge,body.student-theme-dark #student-view .student-notes-intro,body.student-theme-dark #student-view .student-note-group-title{background:#172033;border-color:#2b3a50;color:#bfdbfe}
+body.student-theme-dark #student-view .student-note-card .new-badge{background:#1e3a8a;color:#bfdbfe}
+body.student-theme-dark #student-view .pill{background:#172554;color:#bfdbfe}
+body.student-theme-dark #student-view .secondary{background:#172033;color:#e2e8f0;border-color:#334155}
+body.student-theme-dark #student-view .secondary:hover{background:#243244}
+body.student-theme-dark #student-view input,body.student-theme-dark #student-view select,body.student-theme-dark #student-view textarea{background:#0f172a;color:#e5e7eb;border-color:#334155}
+body.student-theme-dark #student-view input::placeholder,body.student-theme-dark #student-view textarea::placeholder{color:#64748b}
+body.student-theme-dark #student-view .student-progress-bar{background:#334155}
+body.student-theme-dark #student-view .student-progress small{color:#93c5fd}
+body.student-theme-dark #student-view .alert{background:#172554!important;color:#bfdbfe!important}
+body.student-theme-dark #student-view .notice{background:#111827;border-color:#243244}
+body.student-theme-dark #student-view .modalbox{background:#111827;color:#e5e7eb;border-color:#243244}
+
+</style>
+<style>.student-class-label{margin-top:10px;font-weight:900;font-size:16px;line-height:1.35}
+</style>
+<style>
+.student-hero{background:linear-gradient(135deg,#eff6ff 0%,#ffffff 60%,#eef2ff 100%);border:1px solid #dbeafe;padding:24px;border-radius:20px;margin-bottom:18px;box-shadow:0 8px 28px rgba(37,99,235,.07)}.student-hero-top{display:flex;align-items:flex-start;justify-content:space-between;gap:18px}.student-hero h2{margin:0;font-size:25px;letter-spacing:-.03em}.student-hero p{margin:7px 0 0;color:#64748b}.student-hero-badge{background:#fff;border:1px solid #dbeafe;color:#1d4ed8;border-radius:999px;padding:8px 12px;font-weight:900;font-size:12px;white-space:nowrap}.learning-card{display:flex;align-items:center;justify-content:space-between;gap:18px;background:#fff;border:1px solid #e5e7eb;border-radius:16px;padding:18px;margin-top:18px}.learning-label{font-size:11px;font-weight:900;color:#2563eb;text-transform:uppercase;letter-spacing:.08em}.learning-title{font-size:18px;font-weight:900;margin-top:5px}.learning-meta{color:#64748b;font-size:12px;margin-top:5px}.student-note-group{margin-bottom:20px}.student-note-group-title{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 10px;padding:11px 14px;border-radius:12px;background:#eff6ff;border:1px solid #dbeafe;color:#1e40af}.student-note-group-title b{font-size:15px}.student-note-group-title span{font-size:11px;font-weight:800;color:#64748b}.student-note-card{position:relative}.student-note-card .new-badge{position:absolute;top:16px;right:16px;background:#dbeafe;color:#1d4ed8;border-radius:999px;padding:4px 7px;font-size:10px;font-weight:900}.student-notes-intro{padding:14px 16px;border-radius:14px;background:#f8fafc;border:1px solid #e5e7eb;margin-bottom:16px;color:#475569}.student-progress{display:flex;align-items:center;gap:12px;margin-top:10px}.student-progress-bar{height:8px;background:#e2e8f0;border-radius:999px;overflow:hidden;flex:1}.student-progress-fill{height:100%;background:#2563eb;border-radius:999px;width:100%}.student-progress small{font-weight:900;color:#1e40af}
+@media(max-width:800px){.student-hero-top{flex-direction:column}.student-hero-badge{align-self:flex-start}.learning-card{align-items:flex-start;flex-direction:column}.learning-card .btn{width:100%}}
+
+</style>
+<style>
+/* V33: Student navigation moved from side to a clean top navigation bar. Admin sidebar stays unchanged. */
+.shell:has(#student-side:not(.hidden)){display:block}
+#student-side{width:100%;height:auto;box-sizing:border-box;border-right:0;border-bottom:1px solid var(--line);padding:10px 18px;display:flex;align-items:center;gap:8px;overflow-x:auto;position:sticky;top:66px;z-index:15;background:#fff}
+#student-side .side-title{display:none}
+#student-side .nav{width:auto;flex:0 0 auto;margin:0;padding:10px 14px;border:1px solid transparent;white-space:nowrap;text-align:center}
+#student-side .nav.on{border-color:#dbeafe;background:#eff6ff}
+#student-side + #admin-side{display:none!important}
+#student-side ~ .content{width:100%;max-width:none;box-sizing:border-box;padding:30px clamp(18px,4vw,48px)}
+@media(max-width:800px){
+  #student-side{top:66px;padding:8px 10px;gap:6px;box-shadow:0 4px 14px rgba(15,23,42,.06)}
+  #student-side .nav{padding:9px 12px;font-size:13px}
+  #student-side .nav span{display:inline}
+  #student-side ~ .content{padding:20px 14px}
+}
+
+</style>
+
+<style>
+/* V34: Professional admin navigation + dashboard. */
+#student-side.hidden + #admin-side{width:100%;height:auto;box-sizing:border-box;border-right:0;border-bottom:1px solid var(--line);padding:10px 18px;display:flex!important;align-items:center;gap:8px;overflow-x:auto;position:sticky;top:66px;z-index:15;background:#fff;box-shadow:0 4px 14px rgba(15,23,42,.05)}
+#student-side.hidden + #admin-side .side-title{display:none!important}
+#student-side.hidden + #admin-side .nav{width:auto;flex:0 0 auto;margin:0;padding:10px 14px;border:1px solid transparent;white-space:nowrap;text-align:center}
+#student-side.hidden + #admin-side .nav.on{border-color:#dbeafe;background:#eff6ff;color:var(--blue)}
+#student-side.hidden ~ .content{width:100%;max-width:none;box-sizing:border-box;padding:30px clamp(18px,4vw,48px)}
+.admin-kicker{font-size:10px;font-weight:900;letter-spacing:.14em;color:#2563eb}
+.admin-stat{min-height:112px;transition:transform .15s ease,box-shadow .15s ease}.admin-stat:hover{transform:translateY(-2px);box-shadow:0 10px 24px rgba(15,23,42,.08)}
+.admin-stat strong{display:block;margin:3px 0}.admin-stat small{display:block;color:#94a3b8;font-size:11px}
+.admin-quick-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.admin-action-card{display:flex;align-items:center;gap:13px;text-align:left;width:100%;border:1px solid #e2e8f0;background:#fff;border-radius:16px;padding:17px;box-shadow:0 3px 14px rgba(15,23,42,.04);color:var(--text);transition:transform .15s ease,box-shadow .15s ease,border-color .15s ease}
+.admin-action-card:hover{transform:translateY(-2px);border-color:#bfdbfe;box-shadow:0 10px 24px rgba(37,99,235,.09)}
+.admin-action-icon{width:42px;height:42px;display:grid;place-items:center;border-radius:12px;background:#eff6ff;font-size:21px;flex:none}
+.admin-action-card b{display:block;font-size:14px}.admin-action-card small{display:block;color:#64748b;margin-top:4px;line-height:1.35}.arrow{margin-left:auto;font-size:20px;color:#94a3b8}
+.admin-tip{display:flex;gap:10px;align-items:flex-start;margin-top:16px;padding:13px 15px;border-radius:14px;background:#eff6ff;border:1px solid #dbeafe;color:#1e40af;line-height:1.4}.admin-tip b{white-space:nowrap}
+@media(max-width:800px){#student-side.hidden + #admin-side{top:66px;padding:8px 10px}.admin-quick-grid{grid-template-columns:1fr}.admin-tip{flex-direction:column;gap:3px}}
+
+</style>
+
+<style>
+/* V36: Robust admin/student panel visibility and navigation. */
+#admin-view:not(.hidden), #student-view:not(.hidden){display:block!important}
+#admin-side.hidden, #student-side.hidden{display:none!important}
+#student-side.hidden + #admin-side:not(.hidden){display:flex!important}
+#admin-side .nav,#student-side .nav{display:block!important}
+
+</style>
+
+<style>
+/* V38: Stable admin top navigation. */
+.shell:has(#admin-side:not(.hidden)){display:block!important;min-height:calc(100vh - 66px)}
+#admin-side:not(.hidden){width:100%!important;display:flex!important;align-items:center;gap:6px;background:#fff;border-right:0;border-bottom:1px solid var(--line);padding:10px 18px;box-sizing:border-box;overflow-x:auto;position:sticky;top:66px;z-index:15}
+#admin-side:not(.hidden) .side-title{display:none}
+#admin-side:not(.hidden) .nav{width:auto;white-space:nowrap;text-align:center;margin:0;padding:10px 15px;border-radius:10px}
+#admin-side:not(.hidden) + .content{display:block!important;width:100%!important;max-width:none!important;padding:30px clamp(18px,4vw,48px);box-sizing:border-box}
+@media(max-width:800px){#admin-side:not(.hidden){padding:8px 10px;top:66px}#admin-side:not(.hidden) .nav{font-size:14px;text-align:center;padding:10px 12px}.content{width:100%!important;max-width:none!important}}
+
+</style>
+<style>@media(max-width:700px){.modal{padding:6px}.pdf-modalbox{width:100%;height:calc(100vh - 12px);max-height:none;padding:10px;border-radius:12px}.pdf-frame{min-height:0}.pdf-head h2{font-size:16px}.pdf-head p{font-size:11px}}</style>
+<style>
+.student-fee-card{padding:22px}.student-fee-feature{border-radius:22px;background:linear-gradient(135deg,#eff6ff 0%,#ffffff 62%,#eef2ff 100%);border:1px solid #cfe0ff;box-shadow:0 10px 28px rgba(37,99,235,.08)}.student-fee-head{display:flex;justify-content:space-between;align-items:center;gap:14px}.student-fee-title-wrap{display:flex;align-items:center;gap:13px}.student-fee-icon{width:52px;height:52px;border-radius:16px;background:linear-gradient(135deg,#7c3aed,#4f46e5);display:grid;place-items:center;font-size:25px;box-shadow:0 8px 20px rgba(79,70,229,.22)}.student-fee-title{font-size:24px;font-weight:900;letter-spacing:-.03em}.student-fee-head h3{font-size:15px;color:#64748b}.fee-status{display:inline-flex;align-items:center;gap:7px;border:2px solid #10b981;border-radius:999px;padding:9px 15px;background:#ecfdf5;color:#047857;font-weight:900;font-size:13px;white-space:nowrap}.fee-status::after{content:'✓';width:20px;height:20px;border-radius:50%;background:#10b981;color:white;display:grid;place-items:center;font-size:12px}.student-fee-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:18px}.fee-box{padding:16px;border-radius:16px;border:1px solid #dbeafe;background:#f8fbff}.fee-box small{display:block;font-size:13px;font-weight:700;color:#64748b}.fee-box strong{display:block;font-size:24px;font-weight:900;margin-top:5px}.fee-paid-box{background:#ecfdf5;border-color:#a7f3d0}.fee-paid-box strong{color:#059669}.fee-balance-box{background:#fffbeb;border-color:#fde68a}.fee-balance-box strong{color:#d97706}.fee-due-box strong{color:#1d4ed8}.student-fee-details{margin-top:14px;padding:14px 16px;border:1px solid #c7d8ff;border-radius:15px;background:#f8fbff;display:flex;align-items:center;gap:9px;font-weight:800;color:#334155}.fee-arrow{margin-left:auto;font-size:30px;line-height:20px;color:#2563eb}.student-fee-details span:nth-child(2){font-size:12px;font-weight:600;color:#64748b}.student-fee-details{cursor:default}@media(max-width:600px){.student-fee-card{padding:18px}.student-fee-title{font-size:21px}.student-fee-grid{grid-template-columns:1fr 1fr}.fee-box:last-child{grid-column:1/-1}.fee-box strong{font-size:21px}.fee-status{padding:8px 11px;font-size:12px}}
+body.student-theme-dark .student-fee-feature{background:linear-gradient(135deg,#172554 0%,#111827 62%,#1e1b4b 100%);border-color:#1e40af;box-shadow:0 12px 35px rgba(0,0,0,.24)}body.student-theme-dark .student-fee-title{color:#f8fafc}body.student-theme-dark .student-fee-head h3{color:#a5b4fc}body.student-theme-dark .fee-box{background:#172554;border-color:#1e3a8a}.body.student-theme-dark .fee-box small{color:#94a3b8}body.student-theme-dark .fee-due-box strong{color:#bfdbfe}body.student-theme-dark .fee-paid-box{background:#064e3b;border-color:#047857}body.student-theme-dark .fee-paid-box strong{color:#6ee7b7}body.student-theme-dark .fee-balance-box{background:#422006;border-color:#92400e}body.student-theme-dark .fee-balance-box strong{color:#fbbf24}body.student-theme-dark .student-fee-details{background:#172554;border-color:#1e40af;color:#e2e8f0}body.student-theme-dark .student-fee-details span:nth-child(2){color:#94a3b8}body.student-theme-dark .fee-status{background:#064e3b;color:#6ee7b7;border-color:#10b981}</style>
+<style>
+.fee-monthly-wrap{margin-top:18px;border-top:1px solid #e2e8f0;padding-top:16px}.fee-monthly-title{font-size:15px;font-weight:900;color:#334155;margin-bottom:8px}.fee-month-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 2px;border-bottom:1px solid #eef2f7}.fee-month-row:last-child{border-bottom:0}.fee-month-row b{display:block;font-size:14px;color:#334155}.fee-month-row small{display:block;margin-top:3px;font-size:12px;color:#64748b}.fee-month-status{display:inline-flex;align-items:center;justify-content:center;min-width:74px;padding:7px 10px;border-radius:999px;font-size:12px;font-weight:900}.fee-paid-status{background:#dcfce7;color:#15803d}.fee-partial-status{background:#fef3c7;color:#b45309}.fee-pending-status{background:#fee2e2;color:#b91c1c}.fee-empty-months{padding:10px 0;color:#64748b;font-size:13px}.fee-month-row{cursor:default}body.student-theme-dark .fee-monthly-wrap{border-color:#1e3a8a}body.student-theme-dark .fee-monthly-title{color:#e2e8f0}body.student-theme-dark .fee-month-row{border-color:#1e3a8a}body.student-theme-dark .fee-month-row b{color:#f8fafc}body.student-theme-dark .fee-month-row small,.body.student-theme-dark .fee-empty-months{color:#94a3b8}body.student-theme-dark .fee-paid-status{background:#064e3b;color:#6ee7b7}body.student-theme-dark .fee-partial-status{background:#422006;color:#fbbf24}body.student-theme-dark .fee-pending-status{background:#450a0a;color:#fca5a5}@media(max-width:600px){.fee-monthly-title{font-size:14px}.fee-month-row{padding:11px 1px}.fee-month-row b{font-size:13px}}
+</style>
+<style>
+/* V54 — Student Dashboard matched to the approved dark reference design.
+   All existing data, login, fee sync, notes and navigation remain unchanged. */
+body.student-theme-dark #student-view{background:#061a55;color:#f8fafc}
+body.student-theme-dark #student-view .pagehead h1{color:#f8fafc}
+body.student-theme-dark #student-view .pagehead p{color:#b9c8ef}
+body.student-theme-dark #student-view .pill{background:#063cf5;color:#fff;border:0}
+body.student-theme-dark #student-side{background:#061a55;border-color:#1746a8;box-shadow:none}
+body.student-theme-dark #student-side .nav{color:#f8fafc}
+body.student-theme-dark #student-side .nav:hover,body.student-theme-dark #student-side .nav.on{background:#1f14f4;color:#fff;border-color:#2d5cff}
+body.student-theme-dark #student-dashboard .student-fee-feature{background:linear-gradient(145deg,#06206c 0%,#06205f 58%,#061a55 100%);border:1px solid #1f5fe9;box-shadow:0 10px 30px rgba(0,0,0,.22);border-radius:24px;padding:28px}
+body.student-theme-dark #student-dashboard .student-fee-title{font-size:31px;color:#fff}
+body.student-theme-dark #student-dashboard .student-fee-head h3{font-size:18px;color:#c7d6ff}
+body.student-theme-dark #student-dashboard .student-fee-icon{width:68px;height:68px;border-radius:18px;background:linear-gradient(135deg,#8b24ff,#5b16ee);font-size:31px}
+body.student-theme-dark #student-dashboard .student-fee-grid{gap:18px;margin-top:24px}
+body.student-theme-dark #student-dashboard .fee-box{min-height:112px;padding:22px 24px;border-radius:20px;background:rgba(15,69,170,.55);border:1px solid #1e55b8}
+body.student-theme-dark #student-dashboard .fee-box small{font-size:16px;color:#c2d1f5}
+body.student-theme-dark #student-dashboard .fee-box strong{font-size:31px;margin-top:8px}
+body.student-theme-dark #student-dashboard .fee-due-box strong{color:#f8fafc}
+body.student-theme-dark #student-dashboard .fee-paid-box{background:rgba(0,112,89,.72);border-color:#007f6a}
+body.student-theme-dark #student-dashboard .fee-paid-box small,body.student-theme-dark #student-dashboard .fee-paid-box strong{color:#22e6b1}
+body.student-theme-dark #student-dashboard .fee-balance-box{background:rgba(104,58,5,.78);border-color:#a56a10}
+body.student-theme-dark #student-dashboard .fee-balance-box small,body.student-theme-dark #student-dashboard .fee-balance-box strong{color:#fff01a}
+body.student-theme-dark #student-dashboard .student-fee-details{margin-top:20px;padding:18px 20px;border-radius:18px;background:rgba(10,57,145,.8);border:1px solid #2160d8;color:#fff;font-size:17px;cursor:pointer}
+body.student-theme-dark #student-dashboard .student-fee-details span:nth-child(2){font-size:inherit;font-weight:800;color:#fff}
+body.student-theme-dark #student-dashboard .fee-arrow{font-size:34px;color:#fff}
+body.student-theme-dark #student-dashboard .fee-monthly-wrap{margin-top:22px;padding-top:20px;border-top:1px solid #1d56b9}
+body.student-theme-dark #student-dashboard .fee-monthly-title{font-size:24px;color:#fff;margin-bottom:12px}
+body.student-theme-dark #student-dashboard .fee-month-row{padding:14px 8px;border-bottom:1px solid #15499f}
+body.student-theme-dark #student-dashboard .fee-month-row b{font-size:16px;color:#fff}
+body.student-theme-dark #student-dashboard .fee-month-row small{font-size:13px;color:#b7c8ef}
+body.student-theme-dark #student-dashboard .fee-month-status{min-width:112px;padding:9px 14px;font-size:15px}
+body.student-theme-dark #student-dashboard .fee-paid-status{background:rgba(0,142,103,.65);color:#18f0b6}
+body.student-theme-dark #student-dashboard .fee-partial-status{background:rgba(0,126,104,.55);color:#19e6b4}
+body.student-theme-dark #student-dashboard .fee-pending-status{background:#b92b3c;color:#fff}
+body.student-theme-dark #student-dashboard .student-fee-feature .fee-status{background:transparent;border-color:#14e9b2;color:#16edb4;padding:11px 17px;font-size:17px}
+body.student-theme-dark #student-dashboard .student-fee-feature .fee-status::after{background:#14e9b2;color:#07345c}
+body.student-theme-dark #student-dashboard .student-fee-feature .fee-status.fee-status-partial::after{content:'◔'}
+body.student-theme-dark #student-dashboard .student-fee-feature .fee-status.fee-status-unpaid{background:#c52c3d;border-color:#e64c5c;color:#fff}
+body.student-theme-dark #student-dashboard .student-fee-feature .fee-status.fee-status-unpaid::after{content:'◷';background:transparent;color:#fff;font-size:19px}
+body.student-theme-dark #student-dashboard>.grid .card.stat{background:#062060;border-color:#1b55b5;color:#fff}
+body.student-theme-dark #student-dashboard>.grid .card.stat .muted{color:#c1cff0}
+body.student-theme-dark #student-dashboard>.grid .card.stat .ico{background:#153a9a}
+body.student-theme-dark #student-dashboard>.grid .card.stat:nth-child(n+2){display:none}
+body.student-theme-dark #student-dashboard>.grid .card.stat:first-child{grid-column:1/-1;min-height:120px;padding:25px;border-radius:22px}
+body.student-theme-dark #student-dashboard>.grid .card.stat:first-child strong{font-size:40px;color:#fff}
+body.student-theme-dark #student-dashboard>.pagehead h2{color:#fff}
+body.student-theme-dark #student-dashboard>.pagehead p{color:#b9c8ef}
+@media(max-width:600px){body.student-theme-dark #student-dashboard .student-fee-feature{padding:18px;border-radius:22px}body.student-theme-dark #student-dashboard .student-fee-title{font-size:24px}body.student-theme-dark #student-dashboard .student-fee-icon{width:58px;height:58px;font-size:27px}body.student-theme-dark #student-dashboard .student-fee-head{gap:8px}body.student-theme-dark #student-dashboard .student-fee-head h3{font-size:15px}body.student-theme-dark #student-dashboard .fee-box{min-height:98px;padding:17px 18px}body.student-theme-dark #student-dashboard .fee-box small{font-size:14px}body.student-theme-dark #student-dashboard .fee-box strong{font-size:26px}body.student-theme-dark #student-dashboard .student-fee-feature .fee-status{font-size:14px;padding:8px 11px}body.student-theme-dark #student-dashboard .student-fee-feature .fee-status::after{width:18px;height:18px}body.student-theme-dark #student-dashboard .fee-monthly-title{font-size:20px}body.student-theme-dark #student-dashboard .fee-month-row b{font-size:14px}body.student-theme-dark #student-dashboard .fee-month-status{min-width:92px;font-size:13px;padding:8px 9px}}
+</style>
+
+<style>
+/* V55 — compact mobile tuition card + working fee details */
+#student-dashboard .student-fee-feature{max-width:100%;}
+@media(max-width:600px){
+  body.student-theme-dark #student-dashboard .student-fee-feature{padding:14px;border-radius:18px;margin-bottom:14px!important;}
+  body.student-theme-dark #student-dashboard .student-fee-head{align-items:center;gap:6px;}
+  body.student-theme-dark #student-dashboard .student-fee-title-wrap{gap:9px;min-width:0;}
+  body.student-theme-dark #student-dashboard .student-fee-icon{width:46px;height:46px;border-radius:13px;font-size:22px;flex:none;}
+  body.student-theme-dark #student-dashboard .student-fee-title{font-size:20px;line-height:1.05;}
+  body.student-theme-dark #student-dashboard .student-fee-head h3{font-size:13px;margin-top:3px!important;}
+  body.student-theme-dark #student-dashboard .student-fee-feature .fee-status{font-size:11px;padding:6px 8px;gap:4px;flex:none;}
+  body.student-theme-dark #student-dashboard .student-fee-feature .fee-status::after{width:15px;height:15px;font-size:10px;}
+  body.student-theme-dark #student-dashboard .student-fee-feature .fee-status.fee-status-unpaid::after{font-size:14px;}
+  body.student-theme-dark #student-dashboard .student-fee-grid{grid-template-columns:repeat(3,1fr);gap:7px;margin-top:13px;}
+  body.student-theme-dark #student-dashboard .fee-box{min-height:76px;padding:10px 8px;border-radius:13px;}
+  body.student-theme-dark #student-dashboard .fee-box small{font-size:11px;line-height:1.1;}
+  body.student-theme-dark #student-dashboard .fee-box strong{font-size:18px;margin-top:5px;white-space:nowrap;}
+  body.student-theme-dark #student-dashboard .student-fee-details{margin-top:9px;padding:11px 12px;border-radius:12px;font-size:13px;min-height:42px;}
+  body.student-theme-dark #student-dashboard .student-fee-details span:nth-child(2){font-size:13px;}
+  body.student-theme-dark #student-dashboard .fee-arrow{font-size:25px;}
+  body.student-theme-dark #student-dashboard .fee-monthly-wrap{margin-top:13px;padding-top:12px;}
+  body.student-theme-dark #student-dashboard .fee-monthly-title{font-size:16px;margin-bottom:7px;}
+  body.student-theme-dark #student-dashboard .fee-month-row{padding:9px 2px;}
+  body.student-theme-dark #student-dashboard .fee-month-row b{font-size:12px;}
+  body.student-theme-dark #student-dashboard .fee-month-row small{font-size:10px;margin-top:2px;}
+  body.student-theme-dark #student-dashboard .fee-month-status{min-width:70px;padding:6px 7px;font-size:10px;}
+}
+.fee-detail-modal h2{margin:0 0 4px;font-size:22px}.fee-detail-modal .fee-detail-sub{margin:0 0 16px;color:#64748b}.fee-detail-total{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px}.fee-detail-total>div{padding:11px;border-radius:12px;background:#f8fafc;border:1px solid #e2e8f0}.fee-detail-total small{display:block;color:#64748b;font-weight:700;font-size:11px}.fee-detail-total b{display:block;font-size:18px;margin-top:3px}.fee-detail-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid #e5e7eb}.fee-detail-row:last-child{border-bottom:0}.fee-detail-row small{display:block;color:#64748b;margin-top:2px}.fee-current-pending{margin:10px 0 14px;padding:11px 13px;border-radius:12px;background:#fee2e2;border:1px solid #fecaca;display:flex;align-items:center;justify-content:space-between;gap:10px}.fee-current-pending small{font-weight:800;color:#991b1b}.fee-current-pending b{font-size:18px;color:#b91c1c}.fee-detail-list{max-height:46vh;overflow:auto;padding-right:2px}body.student-theme-dark .fee-current-pending{background:#450a0a;border-color:#7f1d1d}.body.student-theme-dark .fee-current-pending small{color:#fca5a5}body.student-theme-dark .fee-current-pending b{color:#fca5a5}@media(max-width:600px){.fee-detail-modal{max-height:88vh;overflow:auto}.fee-detail-total{gap:6px}.fee-detail-total>div{padding:9px 7px}.fee-detail-total b{font-size:15px}.fee-current-pending{font-size:12px}.fee-current-pending b{font-size:16px}.fee-detail-row{padding:9px 0}}.fee-detail-close{margin-top:14px;width:100%}
+body.student-theme-dark .fee-detail-modal .fee-detail-sub{color:#94a3b8}.fee-detail-modal .fee-detail-total>div{background:#172554;border-color:#1e3a8a}.fee-detail-modal .fee-detail-total small{color:#b9c8ef}.fee-detail-modal .fee-detail-total b{color:#fff}.fee-detail-modal .fee-detail-row{border-color:#1e3a8a;color:#fff}.fee-detail-modal .fee-detail-row small{color:#b9c8ef}
+ .login-tabs .btn{border:1px solid #dbe3ef;min-height:44px}.login-tabs .active-tab{background:#2563eb;color:#fff;border-color:#2563eb}.login-tabs .inactive-tab{background:#f8fafc;color:#475569}
 </style>
 </head>
 <body>
-<div class="app">
-<header>
-  <div class="wrap" style="display:flex;align-items:center;justify-content:space-between">
-    <strong>EduNotes Pro</strong>
-    <span class="small">Tuition Management</span>
+<div id="login" class="login-page"> <div class="login-card">
+  <div class="login-logo"><div class="logo">E</div><div><b>EduNotes Pro</b><small class="muted">Special Tutorial Home</small></div></div>
+  <h1>Welcome back</h1><p class="sub">Students: enter your registered mobile number. Admin: use your admin email and password.</p>
+  <div class="login-tabs" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:18px 0 14px">
+   <button type="button" id="student-login-tab" class="btn primary">👨‍🎓 Student Login</button>
+   <button type="button" id="admin-login-tab" class="btn secondary">👨‍💼 Admin Login</button>
   </div>
-</header>
-
-<main class="wrap">
-
-<section id="login-view" class="login card">
-  <h1 class="title">Welcome back</h1>
-  <p class="small">Sign in to EduNotes Pro</p>
-
-  <div class="tabs">
-    <button id="student-tab" class="btn primary" type="button">Student Login</button>
-    <button id="admin-tab" class="btn secondary" type="button">Admin Login</button>
-  </div>
-
-  <div id="login-alert" class="alert hidden"></div>
-
+  <div id="login-mode-hint" class="small" style="margin:-5px 0 12px;color:#64748b">Student: use your registered mobile number.</div>
+  <div id="login-msg"></div>
   <form id="login-form">
-    <div id="student-fields">
-      <div class="field">
-        <label>Student Mobile Number</label>
-        <input id="student-phone" type="tel" inputmode="numeric" autocomplete="tel" maxlength="10" placeholder="10-digit mobile number">
-      </div>
-      <p class="small">Use the mobile number registered with the tuition centre.</p>
-    </div>
-
-    <div id="admin-fields" class="hidden">
-      <div class="field">
-        <label>Admin Email</label>
-        <input id="admin-email" type="email" autocomplete="username">
-      </div>
-      <div class="field">
-        <label>Admin Password</label>
-        <input id="admin-password" type="password" autocomplete="current-password">
-      </div>
-    </div>
-
-    <button id="login-btn" class="btn primary" style="width:100%;margin-top:10px" type="submit">Sign In</button>
+   <div class="field"><label>Registered Mobile Number / Admin Email</label><input id="login-id" autocomplete="username" placeholder="e.g. 9876543210" required=""></div>
+   <div class="field" id="password-field"><label>Password</label><input id="password" type="password" autocomplete="current-password" placeholder="Admin password"></div>
+   <button id="signin" class="btn primary full" style="margin-top:8px">Login</button>
   </form>
-</section>
+  
+  <div class="alert" style="background:#eff6ff;color:#1e40af;margin-top:12px">Your Board and Class are assigned by the administrator. Students cannot change them.</div>
+  <div class="footer">English Learning Portal • CBSE / TBSE class-wise access<br>Students: your first successful login registers this device. Another device is blocked until the admin resets it.</div>
+ </div>
+</div>
 
+<div id="app" class="hidden">
+<header class="top"><div class="brand"><div class="logo">E</div><div><b>EduNotes Pro</b><small>Special Tutorial Home • Learning Portal</small></div></div><div class="top-actions"><button id="admin-add-top" class="iconbtn admin-only">＋ Add Student</button><button id="notif-top" class="iconbtn" title="Notifications">🔔 <span id="notif-count">0</span></button><button id="student-theme-toggle" class="iconbtn student-only-control" title="Change theme" style="display:none">🌙 Dark</button><button id="logout" class="iconbtn">Logout</button></div></header>
+<div class="shell">
+<aside class="side" id="student-side">
+ <div class="side-title">Student</div>
+ <button class="nav on" data-snav="dashboard">🏠 <span>Dashboard</span></button>
+ <button class="nav" data-snav="notes">📚 <span>My Notes</span></button>
+ <button class="nav" data-snav="bookmarks">⭐ <span>Bookmarks</span></button>
+ <button class="nav" data-snav="announcements">📢 <span>Announcements</span></button>
+</aside>
+<aside class="side hidden" id="admin-side">
+ <div class="side-title">Administration</div>
+ <button class="nav on" data-anav="dashboard">📊 <span>Dashboard</span></button>
+ <button class="nav" data-anav="notes">📚 <span>Notes</span></button>
+ <button class="nav" data-anav="students">👨‍🎓 <span>Students</span></button>
+ <button class="nav" data-anav="announcements">📢 <span>Announcements</span></button>
+</aside>
+<main class="content">
 <section id="student-view" class="hidden">
-  <div class="hero">
-    <div class="small" style="color:#c7d2fe" id="student-class">Loading class…</div>
-    <h1 class="title" style="color:#fff">Hello, <span id="student-name">Student</span></h1>
-    <p style="margin:0;color:#e0e7ff">Your EduNotes dashboard</p>
+ <div class="pagehead"><div><h1 id="student-title">Student Dashboard</h1><p id="welcome"></p></div><div class="actions"><span id="class-pill" class="pill">Board • Class • English</span></div></div>
+ <div id="student-msg"></div>
+ <div id="student-dashboard">
+  <!-- Tuition Fee replaces the old Ready to learn / Continue Learning banner. -->
+  <div id="student-fee-card" class="card student-fee-card student-fee-feature" style="margin-bottom:18px">
+   <div class="student-fee-head">
+    <div class="student-fee-title-wrap"><div class="student-fee-icon">💼</div><div><div class="student-fee-title">Tuition Fee</div><h3 id="fee-month" style="margin:4px 0 0">Loading…</h3></div></div>
+    <span id="fee-status" class="fee-status">Checking</span>
+   </div>
+   <div class="student-fee-grid">
+    <div class="fee-box fee-due-box"><small>Fee Due</small><strong id="fee-due">—</strong></div>
+    <div class="fee-box fee-paid-box"><small>Paid</small><strong id="fee-paid">—</strong></div>
+    <div class="fee-box fee-balance-box"><small>Balance</small><strong id="fee-balance">—</strong></div>
+   </div>
+   <div id="fee-details-btn" class="student-fee-details">📄 <span id="fee-note">View Fee Details</span><span class="fee-arrow">›</span></div>
+   <div class="fee-monthly-wrap"><div class="fee-monthly-title">Monthly Payment Status</div><div id="fee-monthly-list"></div></div>
   </div>
-
-  <div class="grid section">
-    <div class="card stat"><div class="small">Notes Available</div><b id="notes-count">0</b></div>
-    <div class="card stat"><div class="small">Bookmarked</div><b id="bookmark-count">0</b></div>
-  </div>
-
-  <div class="card section">
-    <div class="item"><b>Notes</b></div>
-    <div id="notes-list"></div>
-  </div>
-
-  <div class="card section">
-    <div class="item"><b>Announcements</b></div>
-    <div id="ann-list"></div>
-  </div>
-
-  <button id="logout-student" class="btn secondary section">Sign Out</button>
+  <div class="grid" style="margin-bottom:18px"><div class="card stat"><div><div class="muted">Available Notes</div><strong id="stat-notes">0</strong></div><div class="ico">📚</div></div><div class="card stat"><div><div class="muted">My Bookmarks</div><strong id="stat-bookmarks">0</strong></div><div class="ico">⭐</div></div><div class="card stat"><div><div class="muted">Notifications</div><strong id="stat-notif">0</strong></div><div class="ico">🔔</div></div></div>
+  <div class="pagehead" style="margin-bottom:12px"><div><h2 style="font-size:19px">Latest Released Notes</h2><p>Only notes published for your Board and Class are shown.</p></div><button class="btn secondary" data-snav="notes">View all</button></div><div id="dash-notes" class="grid"></div>
+  <div style="height:22px"></div><div class="pagehead" style="margin-bottom:12px"><div><h2 style="font-size:19px">Latest Updates</h2><p>Notes and announcements for your class.</p></div></div><div id="dash-updates"></div>
+ </div>
+ <div id="student-notes" class="hidden"><div class="pagehead"><div><h2>My Notes</h2><p>English notes released for <b id="notes-class"></b>.</p></div><input id="note-search" class="search" placeholder="🔎 Search notes..."></div><div class="student-notes-intro">📖 Notes are arranged chapter-wise. Your teacher releases them one by one after class.</div><div id="notes"></div></div>
+ <div id="student-bookmarks" class="hidden"><div class="pagehead"><div><h2>My Bookmarks</h2><p>Your saved notes.</p></div></div><div id="bookmarks" class="grid"></div></div>
+ <div id="student-announcements" class="hidden"><div class="pagehead"><div><h2>Announcements</h2><p>Updates from your institute.</p></div></div><div id="announcements"></div></div>
 </section>
 
 <section id="admin-view" class="hidden">
-  <div class="hero">
-    <div class="small" style="color:#c7d2fe">Administrator</div>
-    <h1 class="title" style="color:#fff">Welcome, <span id="admin-name">Administrator</span></h1>
-    <p style="margin:0;color:#e0e7ff">EduNotes Pro Admin Dashboard</p>
+ <div class="pagehead"><div><h1 id="admin-title">Admin Dashboard</h1><p>Manage students, English notes and class-wise announcements.</p></div><div class="actions"><button id="upload-open" class="btn primary">＋ Upload Note</button><button id="notice-open" class="btn secondary">＋ Announcement</button><button id="admin-add-page" class="btn secondary">＋ Add Student</button></div></div>
+ <div id="admin-msg"></div>
+ <div id="admin-dashboard">
+  <div class="grid admin-stats" style="margin-bottom:18px"><div class="card stat admin-stat"><div><div class="muted">Total Students</div><strong id="a-students">0</strong><small>All registered students</small></div><div class="ico">👨‍🎓</div></div><div class="card stat admin-stat"><div><div class="muted">Active Students</div><strong id="a-active">0</strong><small>Currently active</small></div><div class="ico">🟢</div></div><div class="card stat admin-stat"><div><div class="muted">CBSE Students</div><strong id="a-cbse">0</strong><small>Board-wise count</small></div><div class="ico">📘</div></div><div class="card stat admin-stat"><div><div class="muted">TBSE Students</div><strong id="a-tbse">0</strong><small>Board-wise count</small></div><div class="ico">📕</div></div><div class="card stat admin-stat"><div><div class="muted">Notes</div><strong id="a-notes">0</strong><small>Uploaded to library</small></div><div class="ico">📚</div></div><div class="card stat admin-stat"><div><div class="muted">Announcements</div><strong id="a-anns">0</strong><small>Published updates</small></div><div class="ico">📢</div></div></div>
+  <div class="admin-quick-grid">
+   <button class="admin-action-card" data-anav="students"><span class="admin-action-icon">👨‍🎓</span><span><b>Student Management</b><small>Add, move, activate, reset device</small></span><span class="arrow">→</span></button>
+   <button class="admin-action-card" data-anav="notes"><span class="admin-action-icon">📚</span><span><b>Notes Library</b><small>Upload and publish chapters one by one</small></span><span class="arrow">→</span></button>
+   <button class="admin-action-card" data-anav="announcements"><span class="admin-action-icon">📢</span><span><b>Announcements</b><small>Send updates to your classes</small></span><span class="arrow">→</span></button>
   </div>
-  <div class="card section" style="padding:20px">
-    <b>Admin authentication is working.</b>
-    <p class="small">The existing full admin-management interface is intentionally not copied into this clean rebuild until the login system is confirmed stable.</p>
-  </div>
-  <button id="logout-admin" class="btn secondary section">Sign Out</button>
+  <div class="admin-tip"><b>💡 Quick tip</b><span>Upload your chapters in advance and keep them 🔒 Locked. Publish each chapter after you teach it.</span></div>
+ </div>
+ <div id="admin-notes-view" class="hidden"><div class="card"><div class="pagehead" style="margin-bottom:12px"><div><h2>Notes Library</h2><p>Manage notes class-wise, with CBSE and TBSE kept separately. Upload all chapters in advance, then publish them one by one after class.</p></div></div><div class="notes-tools"><div style="width:100%;font-weight:900;color:#334155">Select Class</div><div style="min-width:220px;flex:1"><select id="notes-class-filter" aria-label="Select note class"><option value="">Select a class</option></select></div><div style="flex:1;min-width:220px"><input id="notes-search" placeholder="🔎 Search notes within this class" aria-label="Search notes"></div><div style="min-width:150px"><select id="notes-board-filter" aria-label="Filter notes by board"><option value="">CBSE + TBSE</option><option value="CBSE">CBSE only</option><option value="TBSE">TBSE only</option></select></div></div><div id="notes-count" class="muted" style="margin:12px 0 4px"></div><div id="admin-notes"></div><div class="alert" style="margin-top:14px;background:#eff6ff;color:#1e40af">Select a class to view its notes. Each chapter/note starts 🔒 Locked, so students cannot see it until you tap 📢 Publish. After teaching a chapter, publish that note. You can tap 🔒 Hide again anytime.</div></div></div>
+ <div id="admin-students-view" class="hidden"><div class="card"><div class="pagehead" style="margin-bottom:12px"><div><h2>Student Management</h2><p>Assign classes and control account access.</p></div><div class="actions"><button id="add-student-open" class="btn primary">＋ Add Student</button></div></div><div class="student-tools"><div style="width:100%;font-weight:900;color:#334155">Select Class</div><div style="min-width:220px;flex:1"><select id="student-class-filter" aria-label="Select class"><option value="">Select a class</option></select></div><div class="search" style="flex:1;min-width:220px"><input id="student-search" placeholder="🔎 Search within this class" aria-label="Search students"></div><div style="min-width:150px"><select id="student-board-filter" aria-label="Filter students by board"><option value="">CBSE + TBSE</option><option value="CBSE">CBSE only</option><option value="TBSE">TBSE only</option></select></div></div><div id="student-count" class="muted" style="margin:12px 0 4px"></div><div id="students" class="student-list"></div><div class="alert" style="margin-top:14px;background:#eff6ff;color:#1e40af">Select a class to view its students. Inside each class, CBSE and TBSE students are kept separately. Use search to find a student quickly, then Deactivate, Activate, Register Phone or Reset Device.</div></div></div>
+ <div id="admin-announcements-view" class="hidden"><div class="pagehead"><div><h2>Announcements</h2><p>Send updates to one class or everyone.</p></div></div><div id="admin-announcements"></div></div>
 </section>
-
-</main>
+</main></div></div>
+<div id="modal" class="modal hidden"><div id="modal-box" class="modalbox"></div></div><div id="recovery" class="startup hidden" style="z-index:1001"><div class="startup-box"><b>EduNotes Pro</b><p class="muted">The app is taking longer than expected.</p><button id="open-login" class="btn primary full">Open Login</button></div></div>
+<div id="startup" class="startup hidden" aria-hidden="true"><div class="startup-box"><div class="spinner"></div><b>Checking your session…</b><div class="muted" style="margin-top:6px">Please wait</div></div></div>
+<style id="live-notification-popup-style">
+.live-notification-popup{position:fixed;top:82px;left:50%;transform:translateX(-50%) translateY(-24px);width:min(520px,calc(100vw - 28px));background:#0f172a;color:#fff;border:1px solid #334155;border-radius:18px;box-shadow:0 18px 50px rgba(0,0,0,.28);padding:16px 18px;z-index:2000;display:flex;gap:13px;align-items:flex-start;opacity:0;pointer-events:none;transition:opacity .22s ease,transform .22s ease}
+.live-notification-popup.show{opacity:1;transform:translateX(-50%) translateY(0);pointer-events:auto}
+.live-notification-popup-icon{width:42px;height:42px;border-radius:13px;background:#2563eb;display:grid;place-items:center;font-size:22px;flex:none}
+.live-notification-popup-main{min-width:0;flex:1}.live-notification-popup-title{font-weight:900;font-size:15px}.live-notification-popup-text{margin-top:4px;color:#cbd5e1;font-size:13px;line-height:1.45}.live-notification-popup-close{border:0;background:#1e293b;color:#cbd5e1;border-radius:9px;width:30px;height:30px;font-size:18px;line-height:1;flex:none}.live-notification-popup-close:hover{background:#334155}
+@media(max-width:600px){.live-notification-popup{top:74px;padding:14px}.live-notification-popup-icon{width:38px;height:38px}}
+</style>
+<div id="live-notification-popup" class="live-notification-popup" role="alert" aria-live="assertive">
+  <div class="live-notification-popup-icon">🔔</div>
+  <div class="live-notification-popup-main"><div id="live-notification-popup-title" class="live-notification-popup-title">New update</div><div id="live-notification-popup-text" class="live-notification-popup-text"></div></div>
+  <button id="live-notification-popup-close" class="live-notification-popup-close" aria-label="Close">×</button>
 </div>
 
-<script>
 
-const SUPABASE_URL = 'https://pnpkdhngcqriuntdvyer.supabase.co';
-let supabase = null;
-let currentUser = null;
-let currentProfile = null;
-let loginMode = "student";
-
-const $ = id => document.getElementById(id);
-const safeText = v => v == null ? "" : String(v);
-
-function setAlert(message, type="error"){
-  const el=$("login-alert");
-  if(!el)return;
-  el.className="alert "+(type==="ok"?"ok":"error");
-  el.textContent=message;
-  el.classList.remove("hidden");
-}
-
-function normalizePhone(v){
-  let x=String(v||"").replace(/\D/g,"");
-  if(x.length===10)x="91"+x;
-  if(x.startsWith("0")&&x.length===11)x="91"+x.slice(1);
-  return x;
-}
-
-function studentEmail(phone){
-  return normalizePhone(phone)+"@students.edunotespro.local";
-}
-
-function setMode(mode){
-  loginMode=mode==="admin"?"admin":"student";
-  $("student-fields").classList.toggle("hidden",loginMode!=="student");
-  $("admin-fields").classList.toggle("hidden",loginMode!=="admin");
-  $("student-tab").className="btn "+(loginMode==="student"?"primary":"secondary");
-  $("admin-tab").className="btn "+(loginMode==="admin"?"primary":"secondary");
-  $("login-alert").classList.add("hidden");
-}
-
-function show(view){
-  $("login-view").classList.toggle("hidden",view!=="login");
-  $("student-view").classList.toggle("hidden",view!=="student");
-  $("admin-view").classList.toggle("hidden",view!=="admin");
-}
-
-function setBusy(busy){
-  const b=$("login-btn");
-  b.disabled=busy;
-  b.textContent=busy?"Signing in…":"Sign In";
-}
-
-async function loadProfile(user){
-  const {data,error}=await supabase
-    .from("profiles").select("*").eq("id",user.id).single();
-
-  if(error||!data){
-    throw new Error("Your login succeeded, but your student profile could not be loaded.");
-  }
-  currentProfile=data;
-  return data;
-}
-
-async function loadStudentData(){
-  const classId=currentProfile?.class_id;
-  let notesQuery=supabase.from("notes").select("*").order("created_at",{ascending:false});
-  if(classId)notesQuery=notesQuery.eq("class_id",classId);
-
-  const {data:notes,error:notesError}=await notesQuery;
-  if(notesError)console.warn("Notes:",notesError.message);
-
-  let annsQuery=supabase.from("announcements").select("*").order("created_at",{ascending:false});
-  if(classId)annsQuery=annsQuery.or(`target_class_id.eq.${classId},target_class_id.is.null`);
-  else annsQuery=annsQuery.is("target_class_id",null);
-
-  const {data:anns,error:annsError}=await annsQuery;
-  if(annsError)console.warn("Announcements:",annsError.message);
-
-  const {data:bookmarks,error:bmError}=await supabase
-    .from("bookmarks").select("note_id").eq("user_id",currentUser.id);
-  if(bmError)console.warn("Bookmarks:",bmError.message);
-
-  $("student-name").textContent=currentProfile.full_name||currentProfile.name||"Student";
-  $("student-class").textContent=currentProfile.class_id ? "Class "+currentProfile.class_id : "Class not assigned";
-  $("notes-count").textContent=(notes||[]).length;
-  $("bookmark-count").textContent=(bookmarks||[]).length;
-
-  $("notes-list").innerHTML=(notes||[]).length
-    ? (notes||[]).map(n=>`<div class="item"><b>${safeText(n.title||n.name||"Note")}</b><div class="small">${safeText(n.description||"")}</div></div>`).join("")
-    : `<div class="item small">No notes available yet.</div>`;
-
-  $("ann-list").innerHTML=(anns||[]).length
-    ? (anns||[]).map(a=>`<div class="item"><b>${safeText(a.title||a.headline||"Announcement")}</b><div class="small">${safeText(a.message||a.content||"")}</div></div>`).join("")
-    : `<div class="item small">No announcements yet.</div>`;
-}
-
-async function tryRegisterPush(){
-  // Push registration is deliberately isolated from login.
-  // A push failure must NEVER prevent the user from entering the dashboard.
-  try{
-    if(!currentUser)return;
-    if(currentProfile?.role==="admin")return;
-    const module=await import("./pushNotifications.js?v=login");
-    const {data:{session}}=await supabase.auth.getSession();
-    if(!session?.access_token)return;
-    let deviceId=localStorage.getItem("edunotes_device_id");
-    if(!deviceId){
-      deviceId=(crypto?.randomUUID?crypto.randomUUID():"device-"+Date.now());
-      localStorage.setItem("edunotes_device_id",deviceId);
-    }
-    if(typeof module.registerPushNotifications==="function"){
-      await module.registerPushNotifications({
-        accessToken:session.access_token,
-        studentId:currentUser.id,
-        board:currentProfile?.board||null,
-        classId:currentProfile?.class_id||null,
-        deviceId
-      });
-    }
-  }catch(e){
-    console.warn("Push registration skipped:",e);
-  }
-}
-
-async function login(event){
-  event?.preventDefault();
-  setBusy(true);
-  $("login-alert").classList.add("hidden");
-
-  try{
-    const key=(localStorage.getItem("edunotes_supabase_key")||"").trim();
-    if(!key)throw new Error("Supabase key is not configured on this device.");
-
-    if(!window.supabase?.createClient){
-      throw new Error("Supabase library could not be loaded.");
-    }
-    if(!supabase){
-      supabase=window.supabase.createClient(SUPABASE_URL,key,{
-        auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:false}
-      });
-    }
-
-    let email,password;
-    if(loginMode==="admin"){
-      email=$("admin-email").value.trim().toLowerCase();
-      password=$("admin-password").value;
-      if(!email||!password)throw new Error("Enter the admin email and password.");
-    }else{
-      const phone=normalizePhone($("student-phone").value);
-      if(phone.length!==12||!phone.startsWith("91"))throw new Error("Enter a valid 10-digit mobile number.");
-      email=studentEmail(phone);
-      password=phone;
-    }
-
-    const {data,error}=await supabase.auth.signInWithPassword({email,password});
-    if(error)throw error;
-    if(!data?.user||!data?.session)throw new Error("Login succeeded but no session was returned.");
-
-    // Set these BEFORE any profile/dashboard call.
-    currentUser=data.user;
-    const profile=await loadProfile(currentUser);
-
-    // Successful authentication is complete here.
-    show(profile.role==="admin"?"admin":"student");
-
-    if(profile.role==="admin"){
-      $("admin-name").textContent=profile.full_name||profile.name||"Administrator";
-    }else{
-      $("student-name").textContent=profile.full_name||profile.name||"Student";
-      $("student-class").textContent=profile.class_id?"Class "+profile.class_id:"Class not assigned";
-      // Dashboard data is best-effort and can never undo login.
-      loadStudentData().catch(e=>console.warn("Student data:",e));
-      tryRegisterPush();
-    }
-
-    setAlert("Login successful.","ok");
-  }catch(e){
-    console.error("Login error:",e);
-    try{await supabase?.auth?.signOut();}catch(_){}
-    currentUser=null;
-    currentProfile=null;
-    show("login");
-    setAlert(e?.message||String(e),"error");
-  }finally{
-    setBusy(false);
-  }
-}
-
-async function restoreSession(){
-  try{
-    const {data:{session}}=await supabase.auth.getSession();
-    if(!session?.user){show("login");return;}
-    currentUser=session.user;
-    const profile=await loadProfile(currentUser);
-    show(profile.role==="admin"?"admin":"student");
-    if(profile.role==="admin"){
-      $("admin-name").textContent=profile.full_name||profile.name||"Administrator";
-    }else{
-      loadStudentData().catch(e=>console.warn(e));
-      tryRegisterPush();
-    }
-  }catch(e){
-    console.warn("Session restore:",e);
-    try{await supabase.auth.signOut();}catch(_){}
-    currentUser=null; currentProfile=null; show("login");
-  }
-}
-
-async function logout(){
-  try{await supabase?.auth?.signOut();}catch(_){}
-  currentUser=null;currentProfile=null;show("login");
-}
-
-async function init(){
-  if(!window.supabase?.createClient){
-    setAlert("Supabase library did not load.");
-    return;
-  }
-  const key=(localStorage.getItem("edunotes_supabase_key")||"").trim();
-  if(!key){
-    setAlert("Supabase key is not configured on this device.");
-    return;
-  }
-  supabase=window.supabase.createClient(SUPABASE_URL,key,{
-    auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:false}
-  });
-  supabase.auth.onAuthStateChange((event)=>{
-    if(event==="SIGNED_OUT"){currentUser=null;currentProfile=null;show("login");}
-  });
-  await restoreSession();
-}
-
-document.addEventListener("DOMContentLoaded",()=>{
-  $("student-tab").onclick=()=>setMode("student");
-  $("admin-tab").onclick=()=>setMode("admin");
-  $("login-form").onsubmit=login;
-  $("logout-student").onclick=logout;
-  $("logout-admin").onclick=logout;
-  setMode("student");
-  init();
-});
-
-</script>
-
+<style>
+.pdf-modalbox{background:#f1f5f9;border-radius:18px;width:min(1100px,100%);height:96vh;max-height:96vh;overflow:hidden;padding:10px;box-shadow:var(--shadow);display:flex;flex-direction:column}
+.pdf-head{flex:none;padding:4px 4px 10px}
+.pdf-scroll{flex:1;min-height:0;overflow:auto;background:#64748b;border:1px solid var(--line);border-radius:12px;padding:12px;-webkit-overflow-scrolling:touch}
+.pdf-page{display:block;width:100%;height:auto;max-width:1000px;margin:0 auto 12px;background:#fff;box-shadow:0 2px 10px rgba(0,0,0,.18)}
+.pdf-loading{text-align:center;color:#e2e8f0;padding:30px;font-weight:700}
+@media(max-width:700px){.pdf-modalbox{width:100%;height:calc(100vh - 12px);max-height:none;padding:6px;border-radius:12px}.pdf-scroll{padding:6px}.pdf-page{margin-bottom:8px}}
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="script.js"></script>
 
 </body></html>
