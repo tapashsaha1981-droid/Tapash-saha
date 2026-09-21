@@ -869,7 +869,181 @@ async def sync_payment_for_student(
         # ----------------------------------------------------
 
         return False
+# ============================================================
+# AUTOMATIC EDUNOTES STUDENT REGISTRATION
+# ============================================================
 
+async def ensure_edunotes_student(student):
+    """
+    Automatically create a new Tuition Manager student
+    in EduNotes Pro.
+
+    This is intentionally non-blocking:
+    failure here must NEVER prevent the student from
+    being created successfully in Tuition Manager.
+    """
+
+    try:
+        supabase_url = os.environ.get(
+            "SUPABASE_URL",
+            ""
+        ).rstrip("/")
+
+        supabase_key = os.environ.get(
+            "SUPABASE_SERVICE_ROLE_KEY",
+            ""
+        ).strip()
+
+        if not supabase_url or not supabase_key:
+            logger.warning(
+                "EduNotes registration skipped: "
+                "Supabase credentials not configured"
+            )
+            return False
+
+        phone = _normalise_phone(
+            student.get("phone")
+        )
+
+        if not phone or len(phone) != 10:
+            logger.warning(
+                "EduNotes registration skipped: "
+                "invalid phone for student %s",
+                student.get("name")
+            )
+            return False
+
+        base = f"{supabase_url}/rest/v1"
+        headers = _supabase_headers()
+
+        # ----------------------------------------------------
+        # 1. Check whether the student already exists
+        # ----------------------------------------------------
+
+        profile_response = _supabase_request(
+            "GET",
+            f"{base}/profiles",
+            headers=headers,
+            params={
+                "select": "id,phone",
+                "role": "eq.student",
+            }
+        )
+
+        profiles = profile_response.json()
+
+        existing_profile = None
+
+        for profile in profiles:
+            if (
+                _normalise_phone(
+                    profile.get("phone")
+                )
+                == phone
+            ):
+                existing_profile = profile
+                break
+
+        # ----------------------------------------------------
+        # Existing EduNotes student:
+        # do NOT modify the profile.
+        # ----------------------------------------------------
+
+        if existing_profile:
+            logger.info(
+                "EduNotes student already exists: %s",
+                phone
+            )
+            return True
+
+        # ----------------------------------------------------
+        # 2. Create Supabase Auth account
+        # ----------------------------------------------------
+
+        student_email = (
+            f"{phone}@students.edunotespro.local"
+        )
+
+        auth_response = requests.post(
+            f"{supabase_url}/auth/v1/admin/users",
+            headers={
+                "apikey": supabase_key,
+                "Authorization": (
+                    f"Bearer {supabase_key}"
+                ),
+                "Content-Type": "application/json",
+            },
+            json={
+                "email": student_email,
+                "password": phone,
+                "email_confirm": True,
+                "user_metadata": {
+                    "full_name": student.get(
+                        "name",
+                        ""
+                    ),
+                    "phone": phone,
+                },
+            },
+            timeout=15,
+        )
+
+        if auth_response.status_code >= 400:
+            raise RuntimeError(
+                "Supabase Auth user creation failed "
+                f"({auth_response.status_code}): "
+                f"{auth_response.text[:500]}"
+            )
+
+        auth_user = auth_response.json()
+
+        auth_user_id = auth_user.get("id")
+
+        if not auth_user_id:
+            raise RuntimeError(
+                "Supabase Auth did not return a user id"
+            )
+
+        # ----------------------------------------------------
+        # 3. Create EduNotes profile
+        # ----------------------------------------------------
+
+        profile_payload = {
+            "id": auth_user_id,
+            "full_name": student.get(
+                "name",
+                ""
+            ),
+            "username": phone,
+            "phone": phone,
+            "role": "student",
+            "active": True,
+        }
+
+        _supabase_request(
+            "POST",
+            f"{base}/profiles",
+            headers=headers,
+            json=profile_payload,
+        )
+
+        logger.info(
+            "New EduNotes student registered automatically: "
+            "%s (%s)",
+            student.get("name"),
+            phone,
+        )
+
+        return True
+
+    except Exception:
+        logger.exception(
+            "Automatic EduNotes student registration failed "
+            "for student=%s",
+            student.get("name"),
+        )
+
+        return False
 # ---------- Batch routes ----------
 @api_router.get("/batches")
 async def list_batches():
@@ -1006,6 +1180,13 @@ async def create_student(
 
     student = Student(**data)
 
+    # --------------------------------------------------------
+    # EXISTING TUITION MANAGER BEHAVIOUR
+    # --------------------------------------------------------
+    # The student is saved to MongoDB FIRST.
+    # Nothing related to EduNotes can prevent registration.
+    # --------------------------------------------------------
+
     await db.students.insert_one(
         student.model_dump()
     )
@@ -1014,9 +1195,32 @@ async def create_student(
         f"Added student: {student.name}"
     )
 
+    # --------------------------------------------------------
+    # NEW: AUTOMATIC EDUNOTES REGISTRATION
+    # --------------------------------------------------------
+    # This is deliberately non-blocking.
+    # If Supabase/EduNotes fails, the Tuition Manager
+    # student has already been successfully created.
+    # --------------------------------------------------------
+
+    try:
+        edunotes_created = await ensure_edunotes_student(
+            student.model_dump()
+        )
+
+        if edunotes_created:
+            await sync_payment_for_student(
+                student.id
+            )
+
+    except Exception:
+        logger.exception(
+            "EduNotes automatic registration/sync failed "
+            "for student=%s",
+            student.name,
+        )
+
     return student.model_dump()
-
-
 @api_router.put("/students/{student_id}")
 async def update_student(
     student_id: str,
