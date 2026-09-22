@@ -210,7 +210,7 @@ class StudentUpdate(BaseModel):
     phone: Optional[str] = None
     parent_phone: Optional[str] = None
     batch_id: Optional[str] = None
-     board: Optional[str] = None
+    board: Optional[str] = None
     monthly_fee: Optional[float] = None
     parent_name: Optional[str] = None
     admission_date: Optional[str] = None
