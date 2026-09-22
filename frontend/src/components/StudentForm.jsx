@@ -25,6 +25,7 @@ const EMPTY_FORM = {
   phone: "",
   parent_phone: "",
   batch_id: "",
+  board: "",
   admission_date: "",
   monthly_fee: "",
   join_month: "",
@@ -37,6 +38,7 @@ const formFromStudent = (s) => ({
   phone: s.phone || "",
   parent_phone: s.parent_phone || "",
   batch_id: s.batch_id || "",
+  board: s.board || "",
   admission_date: s.admission_date || "",
   monthly_fee: s.monthly_fee
     ? String(s.monthly_fee)
@@ -54,8 +56,7 @@ export const StudentForm = ({
   defaultBatchId,
   onSave,
 }) => {
-  const [form, setForm] =
-    useState(EMPTY_FORM);
+  const [form, setForm] = useState(EMPTY_FORM);
 
   useEffect(() => {
     if (!open) return;
@@ -71,6 +72,7 @@ export const StudentForm = ({
           defaultBatchId ||
           batches[0]?.id ||
           "",
+        board: "",
         join_month:
           today.format("YYYY-MM"),
         admission_date:
@@ -113,9 +115,21 @@ export const StudentForm = ({
       );
     }
 
+    if (!form.phone.trim()) {
+      return toast.error(
+        "Student phone number is required"
+      );
+    }
+
     if (!form.batch_id) {
       return toast.error(
         "Please select a batch"
+      );
+    }
+
+    if (!form.board) {
+      return toast.error(
+        "Please select CBSE or TBSE"
       );
     }
 
@@ -131,6 +145,7 @@ export const StudentForm = ({
       parent_phone:
         form.parent_phone.trim(),
       batch_id: form.batch_id,
+      board: form.board,
       admission_date:
         form.admission_date.trim(),
       monthly_fee:
@@ -185,7 +200,6 @@ export const StudentForm = ({
             />
           </div>
 
-
           {/* Student Phone */}
           <div>
             <Label>
@@ -206,7 +220,6 @@ export const StudentForm = ({
             />
           </div>
 
-
           {/* Parent Phone */}
           <div>
             <Label>
@@ -226,7 +239,6 @@ export const StudentForm = ({
               className="mt-1.5"
             />
           </div>
-
 
           {/* Batch */}
           <div>
@@ -258,6 +270,43 @@ export const StudentForm = ({
             </Select>
           </div>
 
+          {/* BOARD */}
+          <div>
+            <Label>
+              Board
+            </Label>
+
+            <p className="text-xs text-muted-foreground mt-1">
+              Used for EduNotes Pro class separation
+            </p>
+
+            <Select
+              value={form.board}
+              onValueChange={(board) =>
+                setForm((f) => ({
+                  ...f,
+                  board,
+                }))
+              }
+            >
+              <SelectTrigger
+                data-testid="student-board-select"
+                className="mt-1.5"
+              >
+                <SelectValue placeholder="Select board" />
+              </SelectTrigger>
+
+              <SelectContent>
+                <SelectItem value="CBSE">
+                  CBSE
+                </SelectItem>
+
+                <SelectItem value="TBSE">
+                  TBSE
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
 
           {/* Admission Date */}
           <div>
@@ -273,7 +322,6 @@ export const StudentForm = ({
               className="mt-1.5"
             />
           </div>
-
 
           {/* Monthly Fee */}
           <div>
@@ -291,7 +339,6 @@ export const StudentForm = ({
               className="mt-1.5"
             />
           </div>
-
 
           {/* Join Month */}
           <div>
@@ -312,7 +359,6 @@ export const StudentForm = ({
             />
           </div>
 
-
           {/* Parent / Guardian Name */}
           <div>
             <Label>
@@ -330,7 +376,6 @@ export const StudentForm = ({
               className="mt-1.5"
             />
           </div>
-
 
           {/* Notes */}
           <div>
@@ -352,7 +397,6 @@ export const StudentForm = ({
           </div>
 
         </div>
-
 
         <DialogFooter className="mt-5">
           <Button
