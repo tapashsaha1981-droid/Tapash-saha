@@ -1292,10 +1292,14 @@ async def move_student(
 async def delete_student(
     student_id: str
 ):
+    # ---------------------------------------------------------
+    # Get the Tuition Manager student BEFORE deletion
+    # ---------------------------------------------------------
     st = await db.students.find_one(
         {"id": student_id},
         {
             "_id": 0,
+            "id": 1,
             "name": 1,
             "phone": 1
         }
@@ -1307,9 +1311,17 @@ async def delete_student(
             "Student not found"
         )
 
-    # ----------------------------------------------------
-    # Remove this student's tuition history from EduNotes
-    # ----------------------------------------------------
+    # ---------------------------------------------------------
+    # Synchronise deletion with EduNotes Pro
+    #
+    # IMPORTANT:
+    # We identify the EduNotes student by phone number.
+    # The phone number is normalised first so that:
+    # 9876543210
+    # +91 9876543210
+    # +919876543210
+    # are treated as the same number.
+    # ---------------------------------------------------------
     try:
         supabase_url = os.environ.get(
             "SUPABASE_URL",
@@ -1332,13 +1344,16 @@ async def delete_student(
                 base = f"{supabase_url}/rest/v1"
                 headers = _supabase_headers()
 
+                # -------------------------------------------------
+                # Find the EduNotes student profile by phone
+                # -------------------------------------------------
                 profile_response = _supabase_request(
                     "GET",
                     f"{base}/profiles",
                     headers=headers,
                     params={
                         "select": "id,phone",
-                        "role": "eq.student",
+                        "role": "eq.student"
                     }
                 )
 
@@ -1347,6 +1362,7 @@ async def delete_student(
                 profile_id = None
 
                 for profile in profiles:
+
                     profile_phone = _normalise_phone(
                         profile.get("phone")
                     )
@@ -1355,6 +1371,10 @@ async def delete_student(
                         profile_id = profile.get("id")
                         break
 
+                # -------------------------------------------------
+                # If matching EduNotes profile exists,
+                # delete its tuition records FIRST.
+                # -------------------------------------------------
                 if profile_id:
 
                     _supabase_request(
@@ -1362,43 +1382,64 @@ async def delete_student(
                         f"{base}/tuition_fee_records",
                         headers=headers,
                         params={
-                            "profile_id": (
-                                f"eq.{quote(profile_id)}"
-                            )
+                            "profile_id": f"eq.{profile_id}"
+                        }
+                    )
+
+                    # -------------------------------------------------
+                    # Now delete the actual EduNotes student profile.
+                    #
+                    # THIS is the important part that was missing.
+                    # -------------------------------------------------
+                    _supabase_request(
+                        "DELETE",
+                        f"{base}/profiles",
+                        headers=headers,
+                        params={
+                            "id": f"eq.{profile_id}"
                         }
                     )
 
                     logger.info(
-                        "Removed EduNotes tuition history "
+                        "Removed EduNotes profile and tuition history "
                         "for deleted student: %s",
                         st["name"]
                     )
 
     except Exception:
+        # ---------------------------------------------------------
+        # Do not stop Tuition Manager deletion if EduNotes cleanup
+        # encounters an error. The error is recorded in the logs.
+        # ---------------------------------------------------------
         logger.exception(
-            "EduNotes tuition cleanup failed "
-            "for deleted student: %s",
+            "EduNotes cleanup failed for deleted student: %s",
             st["name"]
         )
 
-    # ----------------------------------------------------
-    # Delete Tuition Manager student and payments
-    # ----------------------------------------------------
-
+    # ---------------------------------------------------------
+    # Delete Tuition Manager student
+    # ---------------------------------------------------------
     await db.students.delete_one(
         {"id": student_id}
     )
 
+    # ---------------------------------------------------------
+    # Delete Tuition Manager payments
+    # ---------------------------------------------------------
     await db.payments.delete_many(
         {"student_id": student_id}
     )
 
+    # ---------------------------------------------------------
+    # Activity log
+    # ---------------------------------------------------------
     await log_activity(
         f"Deleted student: {st['name']}"
     )
 
-    return {"ok": True}
-
+    return {
+        "ok": True
+    }
 
 # ---------- Payment routes ----------
 @api_router.get("/payments")
