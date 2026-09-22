@@ -167,6 +167,7 @@ class Student(BaseModel):
     phone: str = ""
     parent_phone: str = ""
     batch_id: str
+    board: str = ""
     monthly_fee: float = 0
     parent_name: str = ""
     admission_date: str = ""
@@ -195,7 +196,7 @@ class StudentIn(BaseModel):
     parent_phone: Optional[str] = ""
 
     batch_id: str
-
+    board: str = ""
     monthly_fee: Optional[float] = 0
     parent_name: Optional[str] = ""
     admission_date: Optional[str] = ""
@@ -209,6 +210,7 @@ class StudentUpdate(BaseModel):
     phone: Optional[str] = None
     parent_phone: Optional[str] = None
     batch_id: Optional[str] = None
+     board: Optional[str] = None
     monthly_fee: Optional[float] = None
     parent_name: Optional[str] = None
     admission_date: Optional[str] = None
