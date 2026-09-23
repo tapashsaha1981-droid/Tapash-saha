@@ -166,6 +166,7 @@ class Student(BaseModel):
     name: str
     phone: str = ""
     parent_phone: str = ""
+    board: str = ""
     batch_id: str
     monthly_fee: float = 0
     parent_name: str = ""
@@ -193,6 +194,7 @@ class StudentIn(BaseModel):
     name: str
     phone: Optional[str] = ""
     parent_phone: Optional[str] = ""
+    board: Optional[str] = ""
 
     batch_id: str
 
@@ -208,6 +210,7 @@ class StudentUpdate(BaseModel):
     name: Optional[str] = None
     phone: Optional[str] = None
     parent_phone: Optional[str] = None
+    board: Optional[str] = None
     batch_id: Optional[str] = None
     monthly_fee: Optional[float] = None
     parent_name: Optional[str] = None
@@ -870,6 +873,13 @@ async def sync_payment_for_student(
 
         return False
 
+# ---------- EduNotes student synchronization hook ----------
+# render_entry.py replaces this with the full Supabase implementation.
+# Keeping a safe no-op here allows backend.server to remain importable on its own.
+async def ensure_edunotes_student(student):
+    return False
+
+
 # ---------- Batch routes ----------
 @api_router.get("/batches")
 async def list_batches():
@@ -1014,6 +1024,16 @@ async def create_student(
         f"Added student: {student.name}"
     )
 
+    # Automatically register/synchronize the student in EduNotes Pro.
+    # The render_entry.py wrapper provides the actual EduNotes sync function.
+    try:
+        await ensure_edunotes_student(student.model_dump())
+    except Exception:
+        logger.exception(
+            "Automatic EduNotes sync failed after adding student: %s",
+            student.name,
+        )
+
     return student.model_dump()
 
 
@@ -1046,10 +1066,21 @@ async def update_student(
             "Student not found"
         )
 
-    return await db.students.find_one(
+    updated_student = await db.students.find_one(
         {"id": student_id},
         {"_id": 0}
     )
+
+    # Keep the corresponding EduNotes profile synchronized after edits.
+    try:
+        await ensure_edunotes_student(updated_student)
+    except Exception:
+        logger.exception(
+            "Automatic EduNotes sync failed after editing student: %s",
+            student_id,
+        )
+
+    return updated_student
 
 
 @api_router.post("/students/{student_id}/move")
@@ -1080,6 +1111,15 @@ async def move_student(
     await log_activity(
         f"Moved student: {doc['name']}"
     )
+
+    # Keep EduNotes class assignment synchronized after a batch move.
+    try:
+        await ensure_edunotes_student(doc)
+    except Exception:
+        logger.exception(
+            "Automatic EduNotes sync failed after moving student: %s",
+            student_id,
+        )
 
     return doc
 
