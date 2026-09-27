@@ -11,6 +11,7 @@ import {
   CalendarDays,
   ClipboardCheck,
   LogOut,
+  RefreshCw,
 } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
 import { useData } from "@/lib/store";
@@ -19,7 +20,15 @@ import { cn } from "@/lib/utils";
 const TOKEN_KEY = "tapash_auth_token";
 
 export const Layout = ({ children }) => {
-  const { canUndo, canRedo, doUndo, doRedo } = useData();
+  const {
+    canUndo,
+    canRedo,
+    doUndo,
+    doRedo,
+    refresh,
+    refreshing,
+  } = useData();
+
   const loc = useLocation();
 
   const handleLogout = () => {
@@ -130,6 +139,21 @@ export const Layout = ({ children }) => {
               aria-label="Redo"
             >
               <Redo2 size={18} />
+            </button>
+
+            {/* Refresh */}
+            <button
+              data-testid="refresh-btn"
+              onClick={refresh}
+              disabled={refreshing}
+              className="btn-press h-10 w-10 rounded-xl bg-white border border-slate-200 flex items-center justify-center disabled:opacity-40 hover:bg-slate-50"
+              aria-label={refreshing ? "Refreshing" : "Refresh data"}
+              title={refreshing ? "Refreshing..." : "Refresh data"}
+            >
+              <RefreshCw
+                size={18}
+                className={refreshing ? "animate-spin" : ""}
+              />
             </button>
 
             {/* Logout */}
