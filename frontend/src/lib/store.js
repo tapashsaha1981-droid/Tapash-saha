@@ -1,4 +1,12 @@
-import React, { createContext, useContext, useEffect, useState, useCallback, useMemo } from "react";
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  useCallback,
+  useMemo,
+  useRef,
+} from "react";
 import { api } from "./api";
 import { useOperations } from "./operations";
 import { useStacks } from "./useStacks";
@@ -15,23 +23,53 @@ export const DataProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
 
-  const refresh = useCallback(async () => {
-    const [b, s, p, e, st, ac] = await Promise.all([
-      api.listBatches(),
-      api.listStudents(),
-      api.listPayments(),
-      api.listEvents(),
-      api.getSettings(),
-      api.listActivities(),
-    ]);
+  // Refresh-only state
+  const [refreshing, setRefreshing] = useState(false);
+  const refreshPromiseRef = useRef(null);
 
-    setBatches(b);
-    setStudents(s);
-    setPayments(p);
-    setEvents(e);
-    setSettings(st);
-    setActivities(ac);
-  }, [api, setBatches, setStudents, setPayments, setEvents, setSettings, setActivities]);
+  const refresh = useCallback(async () => {
+    // Prevent duplicate simultaneous refresh requests
+    if (refreshPromiseRef.current) {
+      return refreshPromiseRef.current;
+    }
+
+    setRefreshing(true);
+
+    const request = (async () => {
+      const [b, s, p, e, st, ac] = await Promise.all([
+        api.listBatches(),
+        api.listStudents(),
+        api.listPayments(),
+        api.listEvents(),
+        api.getSettings(),
+        api.listActivities(),
+      ]);
+
+      setBatches(b);
+      setStudents(s);
+      setPayments(p);
+      setEvents(e);
+      setSettings(st);
+      setActivities(ac);
+    })();
+
+    refreshPromiseRef.current = request;
+
+    try {
+      return await request;
+    } finally {
+      refreshPromiseRef.current = null;
+      setRefreshing(false);
+    }
+  }, [
+    api,
+    setBatches,
+    setStudents,
+    setPayments,
+    setEvents,
+    setSettings,
+    setActivities,
+  ]);
 
   const retryLoad = useCallback(async () => {
     setLoading(true);
@@ -88,6 +126,7 @@ export const DataProvider = ({ children }) => {
     activities,
     loading,
     loadError,
+    refreshing,
     retryLoad,
     refresh,
     saveSettings,
@@ -105,6 +144,7 @@ export const DataProvider = ({ children }) => {
     activities,
     loading,
     loadError,
+    refreshing,
     retryLoad,
     refresh,
     saveSettings,
