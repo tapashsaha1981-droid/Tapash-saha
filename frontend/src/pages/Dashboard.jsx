@@ -507,7 +507,98 @@ export const Dashboard = () => {
           </div>
         </div>
 
-        {/* EXISTING DASHBOARD CONTENT REMAINS UNCHANGED */}
+        {/* MONTHLY / OVERALL */}
+        <div className="inline-flex bg-white rounded-2xl border border-slate-200 p-1">
+          <button
+            data-testid="mode-monthly"
+            onClick={() => setMode("monthly")}
+            className={`px-4 py-1.5 rounded-xl text-sm font-semibold ${
+              mode === "monthly"
+                ? "bg-indigo-600 text-white"
+                : "text-slate-600"
+            }`}
+          >
+            Monthly
+          </button>
+
+          <button
+            data-testid="mode-overall"
+            onClick={() => setMode("overall")}
+            className={`px-4 py-1.5 rounded-xl text-sm font-semibold ${
+              mode === "overall"
+                ? "bg-indigo-600 text-white"
+                : "text-slate-600"
+            }`}
+          >
+            Overall
+          </button>
+        </div>
+
+        {/* MAIN DASHBOARD CARDS */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <StatCard testid="stat-students" emoji="🎓" value={stats.students}
+            label="Students This Month" tint="bg-indigo-100" valueCls="text-indigo-700" />
+          <StatCard testid="stat-batches" emoji="📚" value={stats.batches}
+            label="Total Batches" tint="bg-violet-100" valueCls="text-violet-700" />
+          <StatCard testid="stat-collected" emoji="✅" value={inr(stats.collected)}
+            label="Collected This Month" tint="bg-emerald-100" valueCls="text-emerald-600" />
+          <StatCard testid="stat-pending" emoji="⌛" value={inr(stats.pending)}
+            label="Pending This Month" tint="bg-amber-100" valueCls="text-amber-600" />
+        </div>
+
+        {/* TODAY'S COLLECTION */}
+        <div data-testid="stat-today-collection"
+          className="rounded-3xl bg-white border border-slate-100 shadow-sm p-5 sm:p-6">
+          <div className="flex items-center gap-4">
+            <div className="h-16 w-16 rounded-2xl bg-emerald-100 flex items-center justify-center text-3xl shrink-0">
+              💰
+            </div>
+            <div className="min-w-0">
+              <div className="text-sm font-semibold uppercase tracking-wide text-slate-500">
+                Today's Collection
+              </div>
+              <div className="mt-1 text-3xl sm:text-4xl font-extrabold text-emerald-600">
+                {inr(todaysCollection)}
+              </div>
+              <div className="mt-1 text-sm sm:text-base text-slate-500">
+                {todaysPaymentCount} {todaysPaymentCount === 1 ? "payment" : "payments"} received today
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* PAYMENT OVERVIEW */}
+        <PaymentOverview paid={stats.paid} partial={stats.partial} unpaid={stats.unpaid} />
+
+        {/* MONTHLY REVIEW BUTTON */}
+        <button data-testid="check-monthly-overview" onClick={openMonthlyReport}
+          className="btn-press w-full rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-4 text-base sm:text-lg flex items-center justify-center gap-2 shadow-md">
+          📊 Check Monthly Overview
+        </button>
+
+        {/* ORGANISATION */}
+        <OrganisationCard value={settings?.org_name} onSave={saveSettings} />
+
+        {/* AUTO MONTH ADVANCE */}
+        <AutoAdvanceCard
+          value={settings?.auto_advance_day}
+          onSave={saveSettings}
+          onPreview={() => navigate("/students")}
+        />
+
+        {/* RECENT ACTIVITY */}
+        <RecentActivity activities={activities} />
+
+        {/* IMPORT CONFIRM */}
+        <ConfirmDialog
+          open={importOpen}
+          onClose={() => setImportOpen(false)}
+          title="Import Backup?"
+          description="Importing this backup will replace the current data. Continue?"
+          confirmLabel="Replace Data"
+          onConfirm={doImport}
+          danger
+        />
       </div>
 
       {/* =====================================================
