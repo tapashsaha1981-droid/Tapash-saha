@@ -95,6 +95,116 @@ async def _find_auth_user_by_email(
     return None
 
 
+async def _initialize_missing_fee_records(
+    student,
+    profile_id=None,
+):
+    """
+    Initialize Tuition Manager -> EduNotes fee history only when
+    the target EduNotes student currently has no fee records.
+
+    This is intentionally idempotent:
+    - If any fee record already exists, do nothing.
+    - If no fee records exist, use the existing payment-sync logic.
+    """
+    tuition_student_id = student.get("id")
+
+    if not tuition_student_id:
+        srv.logger.warning(
+            "Fee initialization skipped: Tuition Manager "
+            "student id missing for %s (%s)",
+            student.get("name"),
+            srv._normalise_phone(student.get("phone")),
+        )
+        return False
+
+    try:
+        supabase_url = (
+            srv.os.environ.get(
+                "SUPABASE_URL",
+                ""
+            )
+            .rstrip("/")
+        )
+        supabase_key = (
+            srv.os.environ.get(
+                "SUPABASE_SERVICE_ROLE_KEY",
+                ""
+            )
+            .strip()
+        )
+
+        if not supabase_url or not supabase_key:
+            srv.logger.warning(
+                "Fee initialization skipped: Supabase "
+                "credentials missing"
+            )
+            return False
+
+        if not profile_id:
+            srv.logger.warning(
+                "Fee initialization skipped: EduNotes "
+                "profile id missing for %s",
+                student.get("name"),
+            )
+            return False
+
+        base = f"{supabase_url}/rest/v1"
+        headers = srv._supabase_headers()
+
+        existing_response = srv._supabase_request(
+            "GET",
+            f"{base}/tuition_fee_records",
+            headers=headers,
+            params={
+                "select": "id",
+                "profile_id": f"eq.{profile_id}",
+                "limit": "1",
+            },
+        )
+
+        existing_records = existing_response.json()
+
+        if existing_records:
+            srv.logger.info(
+                "Fee initialization skipped: existing fee "
+                "records already present for %s (%s)",
+                student.get("name"),
+                srv._normalise_phone(student.get("phone")),
+            )
+            return True
+
+        fee_sync_result = (
+            await srv.sync_payment_for_student(
+                tuition_student_id
+            )
+        )
+
+        if fee_sync_result is False:
+            srv.logger.warning(
+                "Fee initialization returned False for %s (%s)",
+                student.get("name"),
+                srv._normalise_phone(student.get("phone")),
+            )
+            return False
+
+        srv.logger.info(
+            "Fee records initialized for new/missing-fee "
+            "student: %s (%s)",
+            student.get("name"),
+            srv._normalise_phone(student.get("phone")),
+        )
+        return True
+
+    except Exception:
+        srv.logger.exception(
+            "Fee initialization failed for %s (%s)",
+            student.get("name"),
+            srv._normalise_phone(student.get("phone")),
+        )
+        return False
+
+
 async def ensure_edunotes_student_fixed(
     student
 ):
@@ -353,6 +463,64 @@ async def ensure_edunotes_student_fixed(
             None,
         )
 
+        # A previous partial synchronization can leave the correct
+        # EduNotes profile in place while the normal name+phone lookup
+        # misses it. In that case, recover the profile by its unique
+        # username (mobile number), but only when the name also matches.
+        if not existing_profile:
+            username_response = (
+                srv._supabase_request(
+                    "GET",
+                    f"{base}/profiles",
+                    headers=headers,
+                    params={
+                        "select":
+                            "id,full_name,username,phone,"
+                            "class_id,board,role",
+                        "username":
+                            f"eq.{phone}",
+                        "limit":
+                            "1",
+                    },
+                )
+            )
+
+            username_profiles = (
+                username_response.json()
+            )
+
+            username_profile = next(
+                (
+                    profile
+                    for profile in username_profiles
+                    if (
+                        str(
+                            profile.get("role")
+                            or "student"
+                        ).strip().lower()
+                        == "student"
+                        and
+                        _clean_name(
+                            profile.get("full_name")
+                        )
+                        == normalized_name
+                    )
+                ),
+                None,
+            )
+
+            if username_profile:
+                existing_profile = (
+                    username_profile
+                )
+
+                srv.logger.info(
+                    "Recovered existing EduNotes profile "
+                    "by username for %s (%s)",
+                    student_name,
+                    phone,
+                )
+
         # ============================================================
         # 6. PROFILE UPDATE PAYLOAD
         # ============================================================
@@ -402,6 +570,11 @@ async def ensure_edunotes_student_fixed(
                         f"eq.{profile_id}"
                 },
                 json=profile_payload,
+            )
+
+            await _initialize_missing_fee_records(
+                student,
+                profile_id,
             )
 
             srv.logger.info(
@@ -501,6 +674,11 @@ async def ensure_edunotes_student_fixed(
                     json=
                         profile_payload_with_id,
                 )
+
+            await _initialize_missing_fee_records(
+                student,
+                auth_user_id,
+            )
 
             srv.logger.info(
                 "Existing EduNotes account "
@@ -677,53 +855,14 @@ async def ensure_edunotes_student_fixed(
         # ============================================================
         # 12. INITIALIZE EDU NOTES FEE RECORDS
         #
-        # Use the existing Tuition Manager -> EduNotes payment-sync
-        # function. Do not create fee records manually here.
-        #
-        # This is intentionally executed ONLY for a genuinely new
-        # student. Existing students are left untouched.
+        # Only create/sync fee history when this EduNotes profile
+        # currently has no fee records. Existing payment history is
+        # never overwritten by this initialization guard.
         # ============================================================
-        try:
-            tuition_student_id = student.get("id")
-
-            if tuition_student_id:
-                fee_sync_result = (
-                    await srv.sync_payment_for_student(
-                        tuition_student_id
-                    )
-                )
-
-                if fee_sync_result is False:
-                    srv.logger.warning(
-                        "Fee initialization returned False "
-                        "for new student: %s (%s)",
-                        student_name,
-                        phone,
-                    )
-                else:
-                    srv.logger.info(
-                        "Fee records initialized for new "
-                        "student: %s (%s)",
-                        student_name,
-                        phone,
-                    )
-            else:
-                srv.logger.warning(
-                    "Fee initialization skipped: Tuition "
-                    "Manager student id missing for %s (%s)",
-                    student_name,
-                    phone,
-                )
-
-        except Exception:
-            # Fee initialization must not prevent creation of the
-            # EduNotes student account. Log the failure for diagnosis.
-            srv.logger.exception(
-                "Fee initialization failed for new student: "
-                "%s (%s)",
-                student_name,
-                phone,
-            )
+        await _initialize_missing_fee_records(
+            student,
+            auth_user_id,
+        )
 
         return True
 
