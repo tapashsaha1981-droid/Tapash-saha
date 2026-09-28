@@ -11,12 +11,34 @@ attendance_router = APIRouter(
 )
 
 
-SUPABASE_URL = os.environ.get("SUPABASE_URL", "").rstrip("/")
-SUPABASE_SECRET_KEY = os.environ.get("SUPABASE_SECRET_KEY", "")
+# ============================================================
+# SUPABASE CONFIGURATION
+# ============================================================
 
+SUPABASE_URL = os.environ.get("SUPABASE_URL", "").rstrip("/")
+
+# Use the same service-role key used by the rest of the backend.
+# Keep the old variable as a fallback so existing deployments
+# do not break if the old environment variable is still present.
+SUPABASE_SERVICE_ROLE_KEY = os.environ.get(
+    "SUPABASE_SERVICE_ROLE_KEY",
+    ""
+)
+
+if not SUPABASE_SERVICE_ROLE_KEY:
+    SUPABASE_SERVICE_ROLE_KEY = os.environ.get(
+        "SUPABASE_SECRET_KEY",
+        ""
+    )
+
+
+# ============================================================
+# SUPABASE REQUEST HELPER
+# ============================================================
 
 def supabase_request(method, path, **kwargs):
-    if not SUPABASE_URL or not SUPABASE_SECRET_KEY:
+
+    if not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY:
         raise HTTPException(
             status_code=500,
             detail="Supabase configuration is missing"
@@ -25,17 +47,25 @@ def supabase_request(method, path, **kwargs):
     headers = kwargs.pop("headers", {})
 
     headers.update({
-        "apikey": SUPABASE_SECRET_KEY,
+        "apikey": SUPABASE_SERVICE_ROLE_KEY,
+        "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
         "Content-Type": "application/json",
     })
 
-    response = requests.request(
-        method,
-        f"{SUPABASE_URL}/rest/v1/{path.lstrip('/')}",
-        headers=headers,
-        timeout=20,
-        **kwargs
-    )
+    try:
+        response = requests.request(
+            method,
+            f"{SUPABASE_URL}/rest/v1/{path.lstrip('/')}",
+            headers=headers,
+            timeout=20,
+            **kwargs
+        )
+
+    except requests.RequestException as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Supabase connection error: {str(exc)}"
+        )
 
     if not response.ok:
         raise HTTPException(
@@ -44,10 +74,17 @@ def supabase_request(method, path, **kwargs):
         )
 
     if response.text:
-        return response.json()
+        try:
+            return response.json()
+        except ValueError:
+            return None
 
     return None
 
+
+# ============================================================
+# DATA MODELS
+# ============================================================
 
 class AttendanceRecord(BaseModel):
     app_student_id: str
@@ -60,11 +97,16 @@ class AttendanceBulkIn(BaseModel):
     records: List[AttendanceRecord]
 
 
+# ============================================================
+# GET ATTENDANCE
+# ============================================================
+
 @attendance_router.get("")
 def list_attendance(
     date: str,
     app_class_id: Optional[str] = None
 ):
+
     params = {
         "select": "*",
         "date": f"eq.{date}",
@@ -81,6 +123,10 @@ def list_attendance(
     )
 
 
+# ============================================================
+# SAVE / UPDATE ATTENDANCE
+# ============================================================
+
 @attendance_router.post("/bulk")
 def save_attendance(payload: AttendanceBulkIn):
 
@@ -94,7 +140,10 @@ def save_attendance(payload: AttendanceBulkIn):
 
     for record in payload.records:
 
+        # ----------------------------------------------------
         # Check whether attendance already exists
+        # ----------------------------------------------------
+
         check_params = {
             "select": "id",
             "app_student_id": f"eq.{record.app_student_id}",
@@ -116,11 +165,15 @@ def save_attendance(payload: AttendanceBulkIn):
             "status": record.status,
         }
 
+        # ----------------------------------------------------
+        # UPDATE EXISTING ATTENDANCE
+        # ----------------------------------------------------
+
         if existing:
 
             attendance_id = existing[0]["id"]
 
-            updated = supabase_request(
+            supabase_request(
                 "PATCH",
                 "attendance",
                 params={
@@ -133,6 +186,10 @@ def save_attendance(payload: AttendanceBulkIn):
                 "id": attendance_id,
                 **data
             })
+
+        # ----------------------------------------------------
+        # CREATE NEW ATTENDANCE
+        # ----------------------------------------------------
 
         else:
 
@@ -154,6 +211,10 @@ def save_attendance(payload: AttendanceBulkIn):
         "records": saved_records
     }
 
+
+# ============================================================
+# DELETE ATTENDANCE
+# ============================================================
 
 @attendance_router.delete("/{attendance_id}")
 def delete_attendance(attendance_id: int):
