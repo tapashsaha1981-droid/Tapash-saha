@@ -674,6 +674,57 @@ async def ensure_edunotes_student_fixed(
             class_name or "not set",
         )
 
+        # ============================================================
+        # 12. INITIALIZE EDU NOTES FEE RECORDS
+        #
+        # Use the existing Tuition Manager -> EduNotes payment-sync
+        # function. Do not create fee records manually here.
+        #
+        # This is intentionally executed ONLY for a genuinely new
+        # student. Existing students are left untouched.
+        # ============================================================
+        try:
+            tuition_student_id = student.get("id")
+
+            if tuition_student_id:
+                fee_sync_result = (
+                    await srv.sync_payment_for_student(
+                        tuition_student_id
+                    )
+                )
+
+                if fee_sync_result is False:
+                    srv.logger.warning(
+                        "Fee initialization returned False "
+                        "for new student: %s (%s)",
+                        student_name,
+                        phone,
+                    )
+                else:
+                    srv.logger.info(
+                        "Fee records initialized for new "
+                        "student: %s (%s)",
+                        student_name,
+                        phone,
+                    )
+            else:
+                srv.logger.warning(
+                    "Fee initialization skipped: Tuition "
+                    "Manager student id missing for %s (%s)",
+                    student_name,
+                    phone,
+                )
+
+        except Exception:
+            # Fee initialization must not prevent creation of the
+            # EduNotes student account. Log the failure for diagnosis.
+            srv.logger.exception(
+                "Fee initialization failed for new student: "
+                "%s (%s)",
+                student_name,
+                phone,
+            )
+
         return True
 
     except Exception:
