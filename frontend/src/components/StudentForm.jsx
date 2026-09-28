@@ -1,72 +1,162 @@
-import React, { useEffect, useState } from "react";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
+import React, { useState, useEffect } from "react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Button } from "@/components/ui/button";
 import {
   Select,
-  SelectContent,
-  SelectItem,
   SelectTrigger,
   SelectValue,
+  SelectContent,
+  SelectItem,
 } from "@/components/ui/select";
+import { toast } from "sonner";
+import dayjs from "dayjs";
 
-const initialForm = {
+const EMPTY_FORM = {
   name: "",
   phone: "",
   parent_phone: "",
-  parent_name: "",
   batch_id: "",
   board: "",
+  admission_date: "",
   monthly_fee: "",
   join_month: "",
-  admission_date: "",
+  parent_name: "",
   notes: "",
 };
 
-export default function StudentForm({
+const formFromStudent = (s) => ({
+  name: s.name || "",
+  phone: s.phone || "",
+  parent_phone: s.parent_phone || "",
+  batch_id: s.batch_id || "",
+  board: s.board || "",
+  admission_date: s.admission_date || "",
+  monthly_fee: s.monthly_fee
+    ? String(s.monthly_fee)
+    : "",
+  join_month: s.join_month || "",
+  parent_name: s.parent_name || "",
+  notes: s.notes || "",
+});
+
+export const StudentForm = ({
   open,
   onClose,
-  onSave,
   initial,
-  batches = [],
-}) {
-  const [form, setForm] = useState(initialForm);
+  batches,
+  defaultBatchId,
+  onSave,
+}) => {
+  const [form, setForm] = useState(EMPTY_FORM);
 
   useEffect(() => {
+    if (!open) return;
+
     if (initial) {
-      setForm({
-        ...initialForm,
-        ...initial,
-        monthly_fee:
-          initial.monthly_fee !== undefined && initial.monthly_fee !== null
-            ? String(initial.monthly_fee)
-            : "",
-        join_month: initial.join_month || "",
-        admission_date: initial.admission_date || "",
-      });
+      setForm(formFromStudent(initial));
     } else {
-      setForm(initialForm);
+      const today = dayjs();
+
+      setForm({
+        ...EMPTY_FORM,
+        batch_id:
+          defaultBatchId ||
+          batches[0]?.id ||
+          "",
+        board: "",
+        join_month:
+          today.format("YYYY-MM"),
+        admission_date:
+          today.format("YYYY-MM-DD"),
+      });
     }
-  }, [initial, open]);
+  }, [
+    open,
+    initial,
+    defaultBatchId,
+    batches,
+  ]);
 
-  const set = (field) => (e) => {
+  const set = (key) => (e) =>
     setForm((f) => ({
       ...f,
-      [field]: e.target.value,
+      [key]: e.target.value,
+    }));
+
+  const onBatchChange = (batchId) => {
+    const batch = batches.find(
+      (x) => x.id === batchId
+    );
+
+    setForm((f) => ({
+      ...f,
+      batch_id: batchId,
+      monthly_fee:
+        f.monthly_fee ||
+        (batch?.monthly_fee
+          ? String(batch.monthly_fee)
+          : ""),
     }));
   };
 
-  const onBatchChange = (batch_id) => {
-    setForm((f) => ({
-      ...f,
-      batch_id,
-    }));
-  };
+  const submit = async () => {
+    if (!form.name.trim()) {
+      return toast.error(
+        "Student name is required"
+      );
+    }
 
-  const submit = () => {
-    onSave(form);
+    if (!form.phone.trim()) {
+      return toast.error(
+        "Student phone number is required"
+      );
+    }
+
+    if (!form.batch_id) {
+      return toast.error(
+        "Please select a batch"
+      );
+    }
+
+    if (!form.board) {
+      return toast.error(
+        "Please select CBSE or TBSE"
+      );
+    }
+
+    if (!form.join_month) {
+      return toast.error(
+        "Join month is required"
+      );
+    }
+
+    await onSave({
+      name: form.name.trim(),
+      phone: form.phone.trim(),
+      parent_phone:
+        form.parent_phone.trim(),
+      batch_id: form.batch_id,
+      board: form.board,
+      admission_date:
+        form.admission_date.trim(),
+      monthly_fee:
+        Number(form.monthly_fee) || 0,
+      join_month: form.join_month,
+      parent_name:
+        form.parent_name.trim(),
+      notes: form.notes.trim(),
+    });
+
+    onClose();
   };
 
   return (
@@ -95,7 +185,6 @@ export default function StudentForm({
         <div className="max-h-[calc(92vh-145px)] overflow-y-auto px-5 py-4 sm:px-6">
           <div className="space-y-5">
 
-            {/* STUDENT & CONTACT */}
             <section className="rounded-xl border bg-background p-4 shadow-sm">
               <div className="mb-3">
                 <h3 className="text-sm font-semibold">
@@ -176,7 +265,6 @@ export default function StudentForm({
               </div>
             </section>
 
-            {/* ACADEMIC DETAILS */}
             <section className="rounded-xl border bg-background p-4 shadow-sm">
               <div className="mb-3">
                 <h3 className="text-sm font-semibold">
@@ -255,7 +343,6 @@ export default function StudentForm({
               </div>
             </section>
 
-            {/* FEE & ADMISSION */}
             <section className="rounded-xl border bg-background p-4 shadow-sm">
               <div className="mb-3">
                 <h3 className="text-sm font-semibold">
@@ -328,7 +415,6 @@ export default function StudentForm({
               </div>
             </section>
 
-            {/* ADDITIONAL INFORMATION */}
             <section className="rounded-xl border bg-background p-4 shadow-sm">
               <div className="mb-3">
                 <h3 className="text-sm font-semibold">
@@ -393,7 +479,6 @@ export default function StudentForm({
           </div>
         </div>
 
-        {/* STICKY ACTIONS */}
         <DialogFooter className="border-t bg-background px-5 py-3 sm:px-6">
 
           <Button
@@ -418,4 +503,4 @@ export default function StudentForm({
       </DialogContent>
     </Dialog>
   );
-}
+};
