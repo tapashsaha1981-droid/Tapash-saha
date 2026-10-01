@@ -416,8 +416,10 @@ async def sync_payment_for_student(
 
     Matching priority:
     1. Use the permanent edunotes_profile_id mapping when valid.
-    2. Otherwise match by normalized phone + normalized full name.
-    3. Never guess when multiple profiles match.
+    2. Otherwise match by normalized phone.
+    3. If multiple phone matches exist, use an exact normalized
+       full-name match only when it uniquely identifies one profile.
+    4. Never guess when multiple profiles remain ambiguous.
 
     Existing EduNotes fee records are updated and missing months
     are created, so an incomplete history can be repaired.
@@ -558,7 +560,18 @@ async def sync_payment_for_student(
 
         # ----------------------------------------------------
         # No valid mapping:
-        # match using BOTH normalized phone and full name.
+        # match by normalized phone first.
+        #
+        # Tuition Manager and EduNotes may store the same
+        # student's name differently (for example, "Debia"
+        # vs "Debia debnath"). The phone number is the stable
+        # registration identifier used by both systems.
+        #
+        # If exactly one EduNotes student has the same
+        # normalized phone, use that existing profile.
+        # If multiple profiles share the phone, use the exact
+        # normalized full-name match to disambiguate.
+        # Never guess when the result is still ambiguous.
         # ----------------------------------------------------
 
         if not profile_id:
@@ -575,7 +588,7 @@ async def sync_payment_for_student(
 
             profiles = profile_response.json()
 
-            matching_profiles = []
+            phone_matching_profiles = []
 
             for profile in profiles:
 
@@ -583,61 +596,64 @@ async def sync_payment_for_student(
                     profile.get("phone")
                 )
 
-                profile_name = str(
-                    profile.get("full_name") or ""
-                ).strip()
+                if profile_phone == phone:
 
-                profile_name_normalized = (
-                    " ".join(
-                        profile_name.lower().split()
-                    )
-                )
-
-                if (
-                    profile_phone == phone
-                    and
-                    profile_name_normalized
-                    == student_name_normalized
-                ):
-
-                    matching_profiles.append(
+                    phone_matching_profiles.append(
                         profile
                     )
 
 
-            if len(matching_profiles) == 1:
+            if len(phone_matching_profiles) == 1:
 
                 profile_id = (
-                    matching_profiles[0].get("id")
+                    phone_matching_profiles[0].get("id")
                 )
 
-                if profile_id:
+            elif len(phone_matching_profiles) > 1:
 
-                    # Save permanent TM -> EduNotes mapping.
-                    await db.students.update_one(
-                        {
-                            "id": student_id
-                        },
-                        {
-                            "$set": {
-                                "edunotes_profile_id":
-                                    profile_id
-                            }
-                        }
+                exact_name_matches = []
+
+                for profile in phone_matching_profiles:
+
+                    profile_name = str(
+                        profile.get("full_name") or ""
+                    ).strip()
+
+                    profile_name_normalized = (
+                        " ".join(
+                            profile_name.lower().split()
+                        )
                     )
 
-            elif len(matching_profiles) > 1:
+                    if (
+                        profile_name_normalized
+                        == student_name_normalized
+                    ):
 
-                logger.warning(
-                    "Supabase payment sync skipped: "
-                    "multiple EduNotes profiles matched "
-                    "student=%s phone=%s name=%s",
-                    student_id,
-                    phone,
-                    student_name,
-                )
+                        exact_name_matches.append(
+                            profile
+                        )
 
-                return False
+
+                if len(exact_name_matches) == 1:
+
+                    profile_id = (
+                        exact_name_matches[0].get("id")
+                    )
+
+                else:
+
+                    logger.warning(
+                        "Supabase payment sync skipped: "
+                        "multiple EduNotes profiles matched "
+                        "phone=%s and no unique exact name match "
+                        "for student=%s name=%s",
+                        phone,
+                        student_id,
+                        student_name,
+                    )
+
+                    return False
 
             else:
 
@@ -651,6 +667,22 @@ async def sync_payment_for_student(
                 )
 
                 return False
+
+
+            if profile_id:
+
+                # Save permanent TM -> EduNotes mapping.
+                await db.students.update_one(
+                    {
+                        "id": student_id
+                    },
+                    {
+                        "$set": {
+                            "edunotes_profile_id":
+                                profile_id
+                        }
+                    }
+                )
 
 
         # ----------------------------------------------------
