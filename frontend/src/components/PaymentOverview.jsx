@@ -509,7 +509,7 @@ export const PaymentOverview = ({ paid, partial, unpaid }) => {
             {/* COMPACT NOTE */}
             <div className="shrink-0 border-b bg-white px-4 py-2 sm:px-5">
               <div className="text-[11px] sm:text-xs text-indigo-700">
-                <b>Note:</b> Only classes with previous pending dues are shown. Current month dues are included in the total.
+                <b>Note:</b> Classes with any pending dues are shown. Current month dues are included in the total.
               </div>
             </div>
 
@@ -587,7 +587,7 @@ export const PaymentOverview = ({ paid, partial, unpaid }) => {
 
                       <div className="mt-1 text-sm text-slate-500">
                         There are no students with
-                        previous-month pending dues.
+                        There are no students with pending dues.
                       </div>
                     </div>
                   ) : (
@@ -650,74 +650,6 @@ export const PaymentOverview = ({ paid, partial, unpaid }) => {
                         ))}
                       </div>
                     </div>
-                  )}
-                </div>
-              ) : (
-                    classGroups.map(
-                      (group) => (
-                        <button
-                          key={group.name}
-                          onClick={() =>
-                            setSelectedClass(
-                              group.name
-                            )
-                          }
-                          className="w-full rounded-2xl bg-white p-4 text-left shadow-sm"
-                        >
-                          <div className="flex items-center justify-between gap-3">
-                            <div>
-                              <div className="text-lg font-extrabold text-slate-900">
-                                📚 {group.name}
-                              </div>
-
-                              <div className="mt-1 text-xs text-slate-500">
-                                {group.students.length}{" "}
-                                student
-                                {group.students.length !==
-                                1
-                                  ? "s"
-                                  : ""}{" "}
-                                with previous pending
-                              </div>
-                            </div>
-
-                            <div className="text-right">
-                              <div className="text-xs font-bold text-orange-500">
-                                PREVIOUS
-                              </div>
-
-                              <div className="text-lg font-extrabold text-orange-600">
-                                {inr(
-                                  group.previous
-                                )}
-                              </div>
-
-                              <div className="mt-1 text-xs text-slate-500">
-                                Total:{" "}
-                                <b>
-                                  {inr(
-                                    group.total
-                                  )}
-                                </b>
-                              </div>
-                            </div>
-                          </div>
-
-                          <div className="mt-3 flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2 text-xs">
-                            <span className="font-bold text-blue-600">
-                              Current:{" "}
-                              {inr(
-                                group.current
-                              )}
-                            </span>
-
-                            <span className="font-extrabold text-indigo-600">
-                              Tap to open →
-                            </span>
-                          </div>
-                        </button>
-                      )
-                    )
                   )}
                 </div>
               ) : (
