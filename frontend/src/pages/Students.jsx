@@ -31,6 +31,7 @@ export const Students = () => {
     moveStudent,
     addPayment,
     removePaymentsForMonth,
+    syncEdunotesFees,
   } = useData();
 
   const [month, setMonth] = useState(currentMonth());
@@ -446,6 +447,26 @@ Thank you.
     );
   };
 
+  // SYNC THIS STUDENT'S COMPLETE FEE HISTORY TO EDUNOTES
+  const syncStudentToEdunotes = async (student) => {
+    try {
+      await syncEdunotesFees(student.id);
+
+      toast.success(
+        `${student.name} synced to EduNotes successfully`
+      );
+    } catch (error) {
+      console.error(
+        "EduNotes sync failed:",
+        error
+      );
+
+      toast.error(
+        `Could not sync ${student.name} to EduNotes`
+      );
+    }
+  };
+
   const markUnpaid = async (
     student,
     targetMonth = month
@@ -653,6 +674,10 @@ Thank you.
                 s,
                 st
               )
+            }
+
+            onSyncEdunotes={() =>
+              syncStudentToEdunotes(s)
             }
 
             onMove={() =>
