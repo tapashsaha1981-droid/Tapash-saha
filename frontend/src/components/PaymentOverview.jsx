@@ -446,8 +446,11 @@ export const PaymentOverview = ({ paid, partial, unpaid }) => {
 
             {/* COMPACT HEADER */}
             <div className="shrink-0 border-b bg-white px-4 py-3 sm:px-5">
+
               <div className="flex items-center justify-between gap-3">
+
                 <div className="min-w-0">
+
                   <h2 className="text-base sm:text-lg font-extrabold text-slate-900">
                     📚 Previous + Current Dues
                   </h2>
@@ -457,6 +460,7 @@ export const PaymentOverview = ({ paid, partial, unpaid }) => {
                       ? `Batch: ${selectedClass}`
                       : "Batch-wise pending dues"}
                   </p>
+
                 </div>
 
                 <div className="flex shrink-0 items-center gap-2">
@@ -508,17 +512,20 @@ export const PaymentOverview = ({ paid, partial, unpaid }) => {
                   </button>
 
                 </div>
+
               </div>
 
               <div className="mt-2 rounded-xl bg-indigo-50 px-3 py-2 text-[11px] sm:text-xs text-indigo-800">
                 <b>Note:</b> Only batches with previous pending dues are shown. Current month dues are included in the total.
               </div>
+
             </div>
 
             {/* SUMMARY */}
             <div className="shrink-0 grid grid-cols-1 gap-3 px-5 py-4 sm:grid-cols-3">
 
               <div className="rounded-2xl bg-white p-4 shadow-sm">
+
                 <div className="text-xs font-bold text-slate-500">
                   PREVIOUS PENDING
                 </div>
@@ -526,9 +533,11 @@ export const PaymentOverview = ({ paid, partial, unpaid }) => {
                 <div className="mt-1 text-xl font-extrabold text-orange-600">
                   {inr(grandPrevious)}
                 </div>
+
               </div>
 
               <div className="rounded-2xl bg-white p-4 shadow-sm">
+
                 <div className="text-xs font-bold text-slate-500">
                   CURRENT MONTH
                 </div>
@@ -536,9 +545,11 @@ export const PaymentOverview = ({ paid, partial, unpaid }) => {
                 <div className="mt-1 text-xl font-extrabold text-blue-600">
                   {inr(grandCurrent)}
                 </div>
+
               </div>
 
               <div className="rounded-2xl bg-gradient-to-r from-indigo-600 to-purple-600 p-4 text-white shadow-sm">
+
                 <div className="text-xs font-bold opacity-80">
                   TOTAL TO COLLECT
                 </div>
@@ -546,6 +557,7 @@ export const PaymentOverview = ({ paid, partial, unpaid }) => {
                 <div className="mt-1 text-2xl font-extrabold">
                   {inr(grandTotal)}
                 </div>
+
               </div>
 
             </div>
@@ -627,7 +639,6 @@ export const PaymentOverview = ({ paid, partial, unpaid }) => {
 
                       </div>
 
-                      {/* BATCH ROWS */}
                       {classGroups.map(
                         (group) => (
 
@@ -698,6 +709,7 @@ export const PaymentOverview = ({ paid, partial, unpaid }) => {
                   </button>
 
                   {selectedGroup && (
+
                     <div className="mb-4 rounded-2xl bg-white p-4 shadow-sm">
 
                       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -709,7 +721,8 @@ export const PaymentOverview = ({ paid, partial, unpaid }) => {
                           </div>
 
                           <div className="text-xl font-extrabold text-slate-900">
-                            📚 {selectedGroup.name}
+                            📚{" "}
+                            {selectedGroup.name}
                           </div>
 
                         </div>
@@ -731,9 +744,11 @@ export const PaymentOverview = ({ paid, partial, unpaid }) => {
                       </div>
 
                     </div>
+
                   )}
 
-                  <div className="space-y-3">
+                  {/* COMPACT STUDENT LIST */}
+                  <div className="space-y-2">
 
                     {selectedGroup?.students.map(
                       (row) => {
@@ -747,114 +762,109 @@ export const PaymentOverview = ({ paid, partial, unpaid }) => {
 
                           <div
                             key={row.student.id}
-                            className="rounded-2xl bg-white p-4 shadow-sm"
+                            className="rounded-xl bg-white px-3 py-2.5 shadow-sm border border-slate-100"
                           >
 
-                            <div className="font-extrabold text-slate-900">
-                              {row.student.name}
+                            {/* STUDENT HEADER */}
+                            <div className="flex items-center justify-between gap-2">
+
+                              <div className="min-w-0">
+
+                                <div className="truncate text-sm font-extrabold text-slate-900">
+                                  {row.student.name}
+                                </div>
+
+                                <div className="mt-0.5 truncate text-[10px] text-slate-500">
+                                  {parentPhone
+                                    ? parentPhone
+                                    : "Parent WhatsApp number not added"}
+                                </div>
+
+                              </div>
+
+                              <div className="shrink-0 text-right text-[10px] font-bold text-slate-400">
+                                {selectedGroup.name}
+                              </div>
+
                             </div>
 
-                            <div className="mt-1 text-xs text-slate-500">
-                              {parentPhone
-                                ? parentPhone
-                                : "Parent WhatsApp number not added"}
-                            </div>
+                            {/* FEES - COMPACT */}
+                            <div className="mt-2 grid grid-cols-3 gap-1.5">
 
-                            <div className="mt-4 grid grid-cols-3 gap-2">
+                              <div className="rounded-lg bg-orange-50 px-2 py-1.5 text-center">
 
-                              <div className="rounded-xl bg-orange-50 p-3 text-center">
-
-                                <div className="text-[10px] font-bold uppercase text-orange-600">
+                                <div className="text-[9px] font-extrabold uppercase text-orange-600">
                                   Previous
                                 </div>
 
-                                <div className="mt-1 text-sm font-extrabold text-orange-700">
-                                  {inr(
-                                    row.previousDue
-                                  )}
+                                <div className="mt-0.5 text-xs font-extrabold text-orange-700">
+                                  {inr(row.previousDue)}
                                 </div>
 
                               </div>
 
-                              <div className="rounded-xl bg-blue-50 p-3 text-center">
+                              <div className="rounded-lg bg-blue-50 px-2 py-1.5 text-center">
 
-                                <div className="text-[10px] font-bold uppercase text-blue-600">
+                                <div className="text-[9px] font-extrabold uppercase text-blue-600">
                                   Current
                                 </div>
 
-                                <div className="mt-1 text-sm font-extrabold text-blue-700">
-                                  {inr(
-                                    row.currentDue
-                                  )}
+                                <div className="mt-0.5 text-xs font-extrabold text-blue-700">
+                                  {inr(row.currentDue)}
                                 </div>
 
                               </div>
 
-                              <div className="rounded-xl bg-indigo-50 p-3 text-center">
+                              <div className="rounded-lg bg-indigo-50 px-2 py-1.5 text-center">
 
-                                <div className="text-[10px] font-bold uppercase text-indigo-600">
-                                  TOTAL
+                                <div className="text-[9px] font-extrabold uppercase text-indigo-600">
+                                  Total
                                 </div>
 
-                                <div className="mt-1 text-sm font-extrabold text-indigo-700">
-                                  {inr(
-                                    row.totalDue
-                                  )}
+                                <div className="mt-0.5 text-xs font-extrabold text-indigo-700">
+                                  {inr(row.totalDue)}
                                 </div>
 
                               </div>
 
                             </div>
 
-                            <div className="mt-4 flex flex-wrap gap-2">
+                            {/* ACTION BUTTONS */}
+                            <div className="mt-2 flex gap-1.5">
 
                               <button
                                 onClick={() =>
-                                  sendWhatsApp(
-                                    row
-                                  )
+                                  sendWhatsApp(row)
                                 }
-                                className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-3 py-3 text-xs font-extrabold text-white"
+                                className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-emerald-500 px-2 py-2 text-[11px] font-extrabold text-white"
                               >
 
-                                <MessageCircle
-                                  size={16}
-                                />
+                                <MessageCircle size={14} />
 
                                 WhatsApp
 
                               </button>
 
-                              {row.selectedMonthDue >
-                                0 && (
+                              {row.selectedMonthDue > 0 && (
 
                                 <button
                                   onClick={() =>
-                                    markPreviousPaid(
-                                      row
-                                    )
+                                    markPreviousPaid(row)
                                   }
                                   disabled={
                                     processingId ===
-                                    row.student
-                                      .id
+                                    row.student.id
                                   }
-                                  className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-indigo-600 px-3 py-3 text-xs font-extrabold text-white disabled:opacity-50"
+                                  className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-indigo-600 px-2 py-2 text-[11px] font-extrabold text-white disabled:opacity-50"
                                 >
 
-                                  <CheckCircle2
-                                    size={16}
-                                  />
+                                  <CheckCircle2 size={14} />
 
-                                  {processingId ===
-                                  row.student
-                                    .id
+                                  {processingId === row.student.id
                                     ? "Saving..."
                                     : `Mark ${monthLabel(
                                         selectedMonth
-                                      ).split(
-                                        " "
-                                      )[0]} Paid`}
+                                      ).split(" ")[0]} Paid`}
 
                                 </button>
 
@@ -862,17 +872,18 @@ export const PaymentOverview = ({ paid, partial, unpaid }) => {
 
                             </div>
 
-                            <div className="mt-3 rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                            {/* WHATSAPP PREVIEW */}
+                            <div className="mt-1.5 rounded-lg bg-slate-50 px-2.5 py-1.5 text-[10px] text-slate-500">
 
-                              WhatsApp will show:{" "}
+                              WhatsApp will show:
 
-                              <b className="text-indigo-700">
-                                {inr(
-                                  row.totalDue
-                                )}
-                              </b>{" "}
+                              <b className="ml-1 text-indigo-700">
+                                {inr(row.totalDue)}
+                              </b>
 
-                              (Previous + Current)
+                              <span className="ml-1">
+                                (Previous + Current)
+                              </span>
 
                             </div>
 
