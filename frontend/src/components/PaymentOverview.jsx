@@ -182,15 +182,17 @@ export const PaymentOverview = ({ paid, partial, unpaid }) => {
   ]);
 
   /*
-   * ONLY classes with previous pending dues
-   * are displayed on the first screen.
+   * Display every class that has any outstanding fee.
+   * This includes previous-month dues AND current-month dues,
+   * so students who have only the current month's fee pending
+   * are not omitted from the reminder list.
    */
   const classGroups = useMemo(() => {
     const groups = new Map();
 
     studentRows
       .filter(
-        (row) => row.previousDue > 0
+        (row) => row.totalDue > 0
       )
       .forEach((row) => {
         if (!groups.has(row.batchName)) {
@@ -370,40 +372,34 @@ export const PaymentOverview = ({ paid, partial, unpaid }) => {
         <div className="mt-4 flex flex-wrap gap-4">
           <div className="flex items-center gap-2">
             <span className="h-3 w-3 rounded-full bg-emerald-500" />
-
             <span
               className="font-bold"
               data-testid="ov-paid"
             >
               {paid}
             </span>
-
             Paid
           </div>
 
           <div className="flex items-center gap-2">
             <span className="h-3 w-3 rounded-full bg-amber-400" />
-
             <span
               className="font-bold"
               data-testid="ov-partial"
             >
               {partial}
             </span>
-
             Partial
           </div>
 
           <div className="flex items-center gap-2">
             <span className="h-3 w-3 rounded-full bg-rose-500" />
-
             <span
               className="font-bold"
               data-testid="ov-unpaid"
             >
               {unpaid}
             </span>
-
             Unpaid
           </div>
         </div>
@@ -446,86 +442,80 @@ export const PaymentOverview = ({ paid, partial, unpaid }) => {
 
             {/* COMPACT HEADER */}
             <div className="shrink-0 border-b bg-white px-4 py-3 sm:px-5">
-
-              <div className="flex items-center justify-between gap-3">
-
-                <div className="min-w-0">
-
-                  <h2 className="text-base sm:text-lg font-extrabold text-slate-900">
+              <div className="flex items-center gap-3">
+                <div className="min-w-0 flex-1">
+                  <h2 className="text-base sm:text-lg font-extrabold text-slate-900 leading-tight">
                     📚 Previous + Current Dues
                   </h2>
 
-                  <p className="mt-0.5 truncate text-xs text-slate-500">
+                  <p className="mt-0.5 text-[11px] sm:text-xs text-slate-500 truncate">
                     {selectedClass
-                      ? `Batch: ${selectedClass}`
+                      ? `Students in ${selectedClass}`
                       : "Batch-wise pending dues"}
                   </p>
-
                 </div>
 
-                <div className="flex shrink-0 items-center gap-2">
-
-                  <div className="flex items-center gap-1 rounded-xl bg-indigo-50 px-2 py-1.5">
-
-                    <button
-                      onClick={() =>
-                        setSelectedMonth(
-                          shiftMonth(
-                            selectedMonth,
-                            -1
-                          )
+                <div className="flex shrink-0 items-center gap-1.5 rounded-xl bg-slate-50 px-2 py-1.5">
+                  <button
+                    onClick={() =>
+                      setSelectedMonth(
+                        shiftMonth(
+                          selectedMonth,
+                          -1
                         )
-                      }
-                      className="rounded-lg p-1 text-indigo-700"
-                      aria-label="Previous month"
-                    >
-                      <ChevronLeft size={17} />
-                    </button>
+                      )
+                    }
+                    className="rounded-lg bg-white p-1.5 text-slate-700 shadow-sm"
+                    aria-label="Previous month"
+                  >
+                    <ChevronLeft size={17} />
+                  </button>
 
-                    <span className="min-w-[82px] text-center text-xs font-extrabold text-indigo-700">
+                  <div className="min-w-[108px] text-center">
+                    <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                      Previous Month
+                    </div>
+                    <div className="text-sm font-extrabold text-indigo-700 leading-tight">
                       {monthLabel(selectedMonth)}
-                    </span>
-
-                    <button
-                      onClick={() =>
-                        setSelectedMonth(
-                          shiftMonth(
-                            selectedMonth,
-                            1
-                          )
-                        )
-                      }
-                      className="rounded-lg p-1 text-indigo-700"
-                      aria-label="Next month"
-                    >
-                      <ChevronRight size={17} />
-                    </button>
-
+                    </div>
                   </div>
 
                   <button
-                    onClick={closePopup}
-                    className="rounded-full bg-slate-100 p-2 text-slate-600"
-                    aria-label="Close"
+                    onClick={() =>
+                      setSelectedMonth(
+                        shiftMonth(
+                          selectedMonth,
+                          1
+                        )
+                      )
+                    }
+                    className="rounded-lg bg-white p-1.5 text-slate-700 shadow-sm"
+                    aria-label="Next month"
                   >
-                    <X size={19} />
+                    <ChevronRight size={17} />
                   </button>
-
                 </div>
 
+                <button
+                  onClick={closePopup}
+                  className="shrink-0 rounded-full bg-slate-100 p-2 text-slate-600"
+                  aria-label="Close"
+                >
+                  <X size={19} />
+                </button>
               </div>
+            </div>
 
-              <div className="mt-2 rounded-xl bg-indigo-50 px-3 py-2 text-[11px] sm:text-xs text-indigo-800">
-                <b>Note:</b> Only batches with previous pending dues are shown. Current month dues are included in the total.
+            {/* COMPACT NOTE */}
+            <div className="shrink-0 border-b bg-white px-4 py-2 sm:px-5">
+              <div className="text-[11px] sm:text-xs text-indigo-700">
+                <b>Note:</b> Only classes with previous pending dues are shown. Current month dues are included in the total.
               </div>
-
             </div>
 
             {/* SUMMARY */}
             <div className="shrink-0 grid grid-cols-1 gap-3 px-5 py-4 sm:grid-cols-3">
-
               <div className="rounded-2xl bg-white p-4 shadow-sm">
-
                 <div className="text-xs font-bold text-slate-500">
                   PREVIOUS PENDING
                 </div>
@@ -533,11 +523,9 @@ export const PaymentOverview = ({ paid, partial, unpaid }) => {
                 <div className="mt-1 text-xl font-extrabold text-orange-600">
                   {inr(grandPrevious)}
                 </div>
-
               </div>
 
               <div className="rounded-2xl bg-white p-4 shadow-sm">
-
                 <div className="text-xs font-bold text-slate-500">
                   CURRENT MONTH
                 </div>
@@ -545,11 +533,9 @@ export const PaymentOverview = ({ paid, partial, unpaid }) => {
                 <div className="mt-1 text-xl font-extrabold text-blue-600">
                   {inr(grandCurrent)}
                 </div>
-
               </div>
 
               <div className="rounded-2xl bg-gradient-to-r from-indigo-600 to-purple-600 p-4 text-white shadow-sm">
-
                 <div className="text-xs font-bold opacity-80">
                   TOTAL TO COLLECT
                 </div>
@@ -557,9 +543,7 @@ export const PaymentOverview = ({ paid, partial, unpaid }) => {
                 <div className="mt-1 text-2xl font-extrabold">
                   {inr(grandTotal)}
                 </div>
-
               </div>
-
             </div>
 
             {/* SCROLL AREA */}
@@ -573,27 +557,26 @@ export const PaymentOverview = ({ paid, partial, unpaid }) => {
                   "scroll-position",
               }}
             >
-
               {!selectedClass ? (
-
                 <div>
-
-                  <div className="mb-3 flex items-center justify-between">
-
-                    <div className="text-sm font-bold text-slate-600">
-                      Batch / Class-wise Pending Dues
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-extrabold text-slate-800">
+                        Classes with pending dues
+                      </div>
+                      <div className="mt-0.5 text-[11px] text-slate-500">
+                        Tap any batch to see student-wise details
+                      </div>
                     </div>
 
-                    <div className="text-[11px] text-slate-400">
-                      Tap a row to open students
+                    <div className="shrink-0 rounded-full bg-indigo-50 px-3 py-1 text-xs font-extrabold text-indigo-700">
+                      {classGroups.length}{" "}
+                      {classGroups.length === 1 ? "batch" : "batches"}
                     </div>
-
                   </div>
 
                   {classGroups.length === 0 ? (
-
                     <div className="rounded-2xl bg-white p-8 text-center shadow-sm">
-
                       <div className="text-4xl">
                         🎉
                       </div>
@@ -603,45 +586,23 @@ export const PaymentOverview = ({ paid, partial, unpaid }) => {
                       </div>
 
                       <div className="mt-1 text-sm text-slate-500">
-                        There are no students with previous-month pending dues.
+                        There are no students with
+                        previous-month pending dues.
                       </div>
-
                     </div>
-
                   ) : (
-
-                    <div className="overflow-hidden rounded-2xl bg-white shadow-sm">
-
-                      {/* TABLE HEADER */}
-                      <div className="grid grid-cols-[minmax(120px,1.5fr)_65px_90px_90px_100px_28px] items-center gap-2 border-b bg-slate-50 px-3 py-3 text-[10px] font-extrabold uppercase tracking-wide text-slate-500 sm:px-4">
-
-                        <div>
-                          Batch / Class
+                    <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+                      <div className="min-w-[760px]">
+                        <div className="grid grid-cols-[minmax(230px,1.7fr)_80px_115px_115px_120px_52px] items-center gap-0 border-b bg-slate-50 px-3 py-2.5 text-[11px] font-extrabold uppercase tracking-wide text-slate-500">
+                          <div>Batch / Class</div>
+                          <div className="text-center">Students</div>
+                          <div className="text-right">Previous</div>
+                          <div className="text-right">Current</div>
+                          <div className="text-right">Total</div>
+                          <div />
                         </div>
 
-                        <div className="text-center">
-                          Students
-                        </div>
-
-                        <div className="text-right">
-                          Previous
-                        </div>
-
-                        <div className="text-right">
-                          Current
-                        </div>
-
-                        <div className="text-right">
-                          Total
-                        </div>
-
-                        <div />
-
-                      </div>
-
-                      {classGroups.map(
-                        (group) => (
-
+                        {classGroups.map((group) => (
                           <button
                             key={group.name}
                             onClick={() =>
@@ -649,56 +610,118 @@ export const PaymentOverview = ({ paid, partial, unpaid }) => {
                                 group.name
                               )
                             }
-                            className="grid w-full grid-cols-[minmax(120px,1.5fr)_65px_90px_90px_100px_28px] items-center gap-2 border-b px-3 py-3 text-left transition hover:bg-slate-50 active:bg-slate-100 sm:px-4"
+                            className="grid w-full grid-cols-[minmax(230px,1.7fr)_80px_115px_115px_120px_52px] items-center gap-0 border-b border-slate-100 px-3 py-3 text-left transition hover:bg-indigo-50/50 last:border-b-0"
                           >
-
-                            <div className="min-w-0">
-
-                              <div className="truncate text-sm font-extrabold text-slate-900 sm:text-base">
+                            <div className="min-w-0 pr-3">
+                              <div className="truncate text-sm sm:text-base font-extrabold text-slate-900">
                                 📚 {group.name}
                               </div>
-
-                              <div className="mt-0.5 truncate text-[10px] text-slate-400">
-                                Previous pending batch
+                              <div className="mt-0.5 text-[11px] text-slate-500">
+                                {group.students.length}{" "}
+                                {group.students.length === 1
+                                  ? "student"
+                                  : "students"}{" "}
+                                with previous pending
                               </div>
-
                             </div>
 
-                            <div className="text-center text-xs font-extrabold text-slate-700">
+                            <div className="text-center text-sm font-extrabold text-slate-800">
                               {group.students.length}
                             </div>
 
-                            <div className="text-right text-xs font-extrabold text-orange-600 sm:text-sm">
+                            <div className="text-right text-sm sm:text-base font-extrabold text-orange-600">
                               {inr(group.previous)}
                             </div>
 
-                            <div className="text-right text-xs font-extrabold text-blue-600 sm:text-sm">
+                            <div className="text-right text-sm sm:text-base font-extrabold text-blue-600">
                               {inr(group.current)}
                             </div>
 
-                            <div className="text-right text-xs font-extrabold text-indigo-700 sm:text-sm">
+                            <div className="text-right text-sm sm:text-base font-extrabold text-slate-900">
                               {inr(group.total)}
                             </div>
 
-                            <div className="text-right text-indigo-500">
-                              <ChevronRight size={18} />
+                            <div className="flex justify-end">
+                              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-50 text-indigo-700">
+                                <ChevronRight size={19} />
+                              </span>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                    classGroups.map(
+                      (group) => (
+                        <button
+                          key={group.name}
+                          onClick={() =>
+                            setSelectedClass(
+                              group.name
+                            )
+                          }
+                          className="w-full rounded-2xl bg-white p-4 text-left shadow-sm"
+                        >
+                          <div className="flex items-center justify-between gap-3">
+                            <div>
+                              <div className="text-lg font-extrabold text-slate-900">
+                                📚 {group.name}
+                              </div>
+
+                              <div className="mt-1 text-xs text-slate-500">
+                                {group.students.length}{" "}
+                                student
+                                {group.students.length !==
+                                1
+                                  ? "s"
+                                  : ""}{" "}
+                                with previous pending
+                              </div>
                             </div>
 
-                          </button>
+                            <div className="text-right">
+                              <div className="text-xs font-bold text-orange-500">
+                                PREVIOUS
+                              </div>
 
-                        )
-                      )}
+                              <div className="text-lg font-extrabold text-orange-600">
+                                {inr(
+                                  group.previous
+                                )}
+                              </div>
 
-                    </div>
+                              <div className="mt-1 text-xs text-slate-500">
+                                Total:{" "}
+                                <b>
+                                  {inr(
+                                    group.total
+                                  )}
+                                </b>
+                              </div>
+                            </div>
+                          </div>
 
+                          <div className="mt-3 flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2 text-xs">
+                            <span className="font-bold text-blue-600">
+                              Current:{" "}
+                              {inr(
+                                group.current
+                              )}
+                            </span>
+
+                            <span className="font-extrabold text-indigo-600">
+                              Tap to open →
+                            </span>
+                          </div>
+                        </button>
+                      )
+                    )
                   )}
-
                 </div>
-
               ) : (
-
                 <div>
-
                   <button
                     onClick={() =>
                       setSelectedClass(null)
@@ -709,13 +732,9 @@ export const PaymentOverview = ({ paid, partial, unpaid }) => {
                   </button>
 
                   {selectedGroup && (
-
                     <div className="mb-4 rounded-2xl bg-white p-4 shadow-sm">
-
                       <div className="flex flex-wrap items-center justify-between gap-3">
-
                         <div>
-
                           <div className="text-xs font-bold text-slate-500">
                             CLASS
                           </div>
@@ -724,11 +743,9 @@ export const PaymentOverview = ({ paid, partial, unpaid }) => {
                             📚{" "}
                             {selectedGroup.name}
                           </div>
-
                         </div>
 
                         <div className="text-right">
-
                           <div className="text-xs font-bold text-slate-500">
                             CLASS TOTAL
                           </div>
@@ -738,177 +755,141 @@ export const PaymentOverview = ({ paid, partial, unpaid }) => {
                               selectedGroup.total
                             )}
                           </div>
-
                         </div>
-
                       </div>
-
                     </div>
-
                   )}
 
-                  {/* COMPACT STUDENT LIST */}
-                  <div className="space-y-2">
-
+                  <div className="space-y-3">
                     {selectedGroup?.students.map(
                       (row) => {
-
                         const parentPhone =
                           getParentWhatsApp(
                             row.student
                           );
 
                         return (
-
                           <div
                             key={row.student.id}
-                            className="rounded-xl bg-white px-3 py-2.5 shadow-sm border border-slate-100"
+                            className="rounded-2xl bg-white p-4 shadow-sm"
                           >
-
-                            {/* STUDENT HEADER */}
-                            <div className="flex items-center justify-between gap-2">
-
-                              <div className="min-w-0">
-
-                                <div className="truncate text-sm font-extrabold text-slate-900">
-                                  {row.student.name}
-                                </div>
-
-                                <div className="mt-0.5 truncate text-[10px] text-slate-500">
-                                  {parentPhone
-                                    ? parentPhone
-                                    : "Parent WhatsApp number not added"}
-                                </div>
-
-                              </div>
-
-                              <div className="shrink-0 text-right text-[10px] font-bold text-slate-400">
-                                {selectedGroup.name}
-                              </div>
-
+                            <div className="font-extrabold text-slate-900">
+                              {row.student.name}
                             </div>
 
-                            {/* FEES - COMPACT */}
-                            <div className="mt-2 grid grid-cols-3 gap-1.5">
+                            <div className="mt-1 text-xs text-slate-500">
+                              {parentPhone
+                                ? parentPhone
+                                : "Parent WhatsApp number not added"}
+                            </div>
 
-                              <div className="rounded-lg bg-orange-50 px-2 py-1.5 text-center">
-
-                                <div className="text-[9px] font-extrabold uppercase text-orange-600">
+                            <div className="mt-4 grid grid-cols-3 gap-2">
+                              <div className="rounded-xl bg-orange-50 p-3 text-center">
+                                <div className="text-[10px] font-bold uppercase text-orange-600">
                                   Previous
                                 </div>
 
-                                <div className="mt-0.5 text-xs font-extrabold text-orange-700">
-                                  {inr(row.previousDue)}
+                                <div className="mt-1 text-sm font-extrabold text-orange-700">
+                                  {inr(
+                                    row.previousDue
+                                  )}
                                 </div>
-
                               </div>
 
-                              <div className="rounded-lg bg-blue-50 px-2 py-1.5 text-center">
-
-                                <div className="text-[9px] font-extrabold uppercase text-blue-600">
+                              <div className="rounded-xl bg-blue-50 p-3 text-center">
+                                <div className="text-[10px] font-bold uppercase text-blue-600">
                                   Current
                                 </div>
 
-                                <div className="mt-0.5 text-xs font-extrabold text-blue-700">
-                                  {inr(row.currentDue)}
+                                <div className="mt-1 text-sm font-extrabold text-blue-700">
+                                  {inr(
+                                    row.currentDue
+                                  )}
                                 </div>
-
                               </div>
 
-                              <div className="rounded-lg bg-indigo-50 px-2 py-1.5 text-center">
-
-                                <div className="text-[9px] font-extrabold uppercase text-indigo-600">
-                                  Total
+                              <div className="rounded-xl bg-indigo-50 p-3 text-center">
+                                <div className="text-[10px] font-bold uppercase text-indigo-600">
+                                  TOTAL
                                 </div>
 
-                                <div className="mt-0.5 text-xs font-extrabold text-indigo-700">
-                                  {inr(row.totalDue)}
+                                <div className="mt-1 text-sm font-extrabold text-indigo-700">
+                                  {inr(
+                                    row.totalDue
+                                  )}
                                 </div>
-
                               </div>
-
                             </div>
 
-                            {/* ACTION BUTTONS */}
-                            <div className="mt-2 flex gap-1.5">
-
+                            <div className="mt-4 flex flex-wrap gap-2">
                               <button
                                 onClick={() =>
-                                  sendWhatsApp(row)
+                                  sendWhatsApp(
+                                    row
+                                  )
                                 }
-                                className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-emerald-500 px-2 py-2 text-[11px] font-extrabold text-white"
+                                className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-3 py-3 text-xs font-extrabold text-white"
                               >
-
-                                <MessageCircle size={14} />
-
+                                <MessageCircle
+                                  size={16}
+                                />
                                 WhatsApp
-
                               </button>
 
-                              {row.selectedMonthDue > 0 && (
-
+                              {row.selectedMonthDue >
+                                0 && (
                                 <button
                                   onClick={() =>
-                                    markPreviousPaid(row)
+                                    markPreviousPaid(
+                                      row
+                                    )
                                   }
                                   disabled={
                                     processingId ===
-                                    row.student.id
+                                    row.student
+                                      .id
                                   }
-                                  className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-indigo-600 px-2 py-2 text-[11px] font-extrabold text-white disabled:opacity-50"
+                                  className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-indigo-600 px-3 py-3 text-xs font-extrabold text-white disabled:opacity-50"
                                 >
+                                  <CheckCircle2
+                                    size={16}
+                                  />
 
-                                  <CheckCircle2 size={14} />
-
-                                  {processingId === row.student.id
+                                  {processingId ===
+                                  row.student
+                                    .id
                                     ? "Saving..."
                                     : `Mark ${monthLabel(
                                         selectedMonth
-                                      ).split(" ")[0]} Paid`}
-
+                                      ).split(
+                                        " "
+                                      )[0]} Paid`}
                                 </button>
-
                               )}
-
                             </div>
 
-                            {/* WHATSAPP PREVIEW */}
-                            <div className="mt-1.5 rounded-lg bg-slate-50 px-2.5 py-1.5 text-[10px] text-slate-500">
-
-                              WhatsApp will show:
-
-                              <b className="ml-1 text-indigo-700">
-                                {inr(row.totalDue)}
-                              </b>
-
-                              <span className="ml-1">
-                                (Previous + Current)
-                              </span>
-
+                            <div className="mt-3 rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                              WhatsApp will show:{" "}
+                              <b className="text-indigo-700">
+                                {inr(
+                                  row.totalDue
+                                )}
+                              </b>{" "}
+                              (Previous + Current)
                             </div>
-
                           </div>
-
                         );
-
                       }
                     )}
-
                   </div>
-
                 </div>
-
               )}
-
             </div>
 
             {/* FOOTER */}
             <div className="shrink-0 border-t bg-white px-5 py-4">
-
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-
                 <div>
-
                   <div className="text-xs font-bold uppercase text-slate-500">
                     Grand Total
                   </div>
@@ -916,7 +897,6 @@ export const PaymentOverview = ({ paid, partial, unpaid }) => {
                   <div className="text-2xl font-extrabold text-indigo-700">
                     {inr(grandTotal)}
                   </div>
-
                 </div>
 
                 <button
@@ -925,11 +905,8 @@ export const PaymentOverview = ({ paid, partial, unpaid }) => {
                 >
                   Close
                 </button>
-
               </div>
-
             </div>
-
           </div>
         </div>
       )}
@@ -938,15 +915,11 @@ export const PaymentOverview = ({ paid, partial, unpaid }) => {
           INSTANT PAYMENT CONFIRMATION POPUP
           ===================================================== */}
       {confirmRow && (
-
         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-950/60 p-4">
-
           <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl">
 
             <div className="flex items-start justify-between gap-4">
-
               <div>
-
                 <div className="text-xs font-bold uppercase tracking-wide text-indigo-600">
                   Confirm Payment
                 </div>
@@ -954,7 +927,6 @@ export const PaymentOverview = ({ paid, partial, unpaid }) => {
                 <h3 className="mt-1 text-xl font-extrabold text-slate-900">
                   Mark Fee as Paid?
                 </h3>
-
               </div>
 
               <button
@@ -965,11 +937,9 @@ export const PaymentOverview = ({ paid, partial, unpaid }) => {
               >
                 <X size={18} />
               </button>
-
             </div>
 
             <div className="mt-5 rounded-2xl bg-slate-50 p-4">
-
               <div className="text-sm text-slate-500">
                 Student
               </div>
@@ -979,9 +949,7 @@ export const PaymentOverview = ({ paid, partial, unpaid }) => {
               </div>
 
               <div className="mt-4 grid grid-cols-2 gap-3">
-
                 <div className="rounded-xl bg-white p-3">
-
                   <div className="text-[10px] font-bold uppercase text-slate-500">
                     Month
                   </div>
@@ -991,11 +959,9 @@ export const PaymentOverview = ({ paid, partial, unpaid }) => {
                       selectedMonth
                     )}
                   </div>
-
                 </div>
 
                 <div className="rounded-xl bg-white p-3">
-
                   <div className="text-[10px] font-bold uppercase text-slate-500">
                     Amount
                   </div>
@@ -1005,15 +971,11 @@ export const PaymentOverview = ({ paid, partial, unpaid }) => {
                       confirmRow.selectedMonthDue
                     )}
                   </div>
-
                 </div>
-
               </div>
-
             </div>
 
             <div className="mt-5 flex gap-3">
-
               <button
                 onClick={() =>
                   setConfirmRow(null)
@@ -1031,15 +993,11 @@ export const PaymentOverview = ({ paid, partial, unpaid }) => {
               >
                 ✓ Confirm & Mark Paid
               </button>
-
             </div>
 
           </div>
-
         </div>
-
       )}
-
     </>
   );
 };
