@@ -41,6 +41,7 @@ export const StudentCard = ({
   onMarkUnpaid,
   onRemind,
   onPaymentConfirmation,
+  onSyncEdunotes,
   onMove,
   onHistory,
   onDelete,
@@ -310,6 +311,14 @@ TAPASH SIR`
           icon="💰"
           label="Payment Confirmation"
           tint="bg-indigo-50 text-indigo-700 hover:bg-indigo-100"
+        />
+
+        <ActionBtn
+          testid={`sync-edunotes-${s.id}`}
+          onClick={onSyncEdunotes}
+          icon="🔄"
+          label="Sync EduNotes"
+          tint="bg-blue-50 text-blue-700 hover:bg-blue-100"
         />
 
         <ActionBtn
