@@ -1168,6 +1168,47 @@ async def update_student(
     return updated_student
 
 
+@api_router.post("/students/{student_id}/sync-edunotes-fees")
+async def sync_student_edunotes_fees(
+    student_id: str
+):
+    """
+    One-student, manual Tuition Manager -> EduNotes fee-history sync.
+
+    This is an isolated test/repair operation. It does not create,
+    delete, reset, or otherwise modify the student's EduNotes account.
+    It only runs the existing complete payment-history synchronizer.
+    """
+
+    student = await db.students.find_one(
+        {"id": student_id},
+        {"_id": 0, "id": 1, "name": 1, "phone": 1}
+    )
+
+    if not student:
+        raise HTTPException(
+            404,
+            "Student not found"
+        )
+
+    synced = await sync_payment_for_student(
+        student_id
+    )
+
+    if not synced:
+        raise HTTPException(
+            409,
+            "EduNotes fee synchronization could not be completed for this student"
+        )
+
+    return {
+        "ok": True,
+        "student_id": student_id,
+        "student_name": student.get("name"),
+        "message": "Complete EduNotes fee history synchronized successfully"
+    }
+
+
 @api_router.post("/students/{student_id}/move")
 async def move_student(
     student_id: str,
