@@ -315,6 +315,22 @@ export const useOperations = ({
   );
 
   // =========================================================
+  // NEW — SYNC EDUNOTES FEE HISTORY
+  // =========================================================
+
+  const syncEdunotesFees = useCallback(
+    async (id) => {
+      const result =
+        await api.syncEdunotesFees(id);
+
+      await refresh();
+
+      return result;
+    },
+    [refresh]
+  );
+
+  // =========================================================
   // MARK PAID — OPTIMIZED
   // =========================================================
 
@@ -527,6 +543,8 @@ export const useOperations = ({
       removeStudent,
       moveStudent,
 
+      syncEdunotesFees,
+
       addPayment,
       removePaymentsForMonth,
 
@@ -544,6 +562,8 @@ export const useOperations = ({
       editStudent,
       removeStudent,
       moveStudent,
+
+      syncEdunotesFees,
 
       addPayment,
       removePaymentsForMonth,
