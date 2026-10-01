@@ -411,12 +411,16 @@ async def sync_payment_for_student(
     month_key=None
 ):
     """
-    Synchronize the COMPLETE tuition-payment
-    history of one Tuition Manager student
-    with EduNotes Pro.
+    Synchronize the COMPLETE tuition-payment history of one
+    Tuition Manager student with EduNotes Pro.
 
-    This function never interrupts normal
-    Tuition Manager payment operations.
+    Matching priority:
+    1. Use the permanent edunotes_profile_id mapping when valid.
+    2. Otherwise match by normalized phone + normalized full name.
+    3. Never guess when multiple profiles match.
+
+    Existing EduNotes fee records are updated and missing months
+    are created, so an incomplete history can be repaired.
     """
 
     try:
@@ -455,9 +459,12 @@ async def sync_payment_for_student(
             },
             {
                 "_id": 0,
+                "id": 1,
+                "name": 1,
                 "phone": 1,
                 "monthly_fee": 1,
                 "join_month": 1,
+                "edunotes_profile_id": 1,
             }
         )
 
@@ -473,11 +480,21 @@ async def sync_payment_for_student(
 
 
         # ----------------------------------------------------
-        # Normalize Tuition Manager phone
+        # Normalize Tuition Manager student information
         # ----------------------------------------------------
 
         phone = _normalise_phone(
             student.get("phone")
+        )
+
+        student_name = str(
+            student.get("name") or ""
+        ).strip()
+
+        student_name_normalized = (
+            " ".join(
+                student_name.lower().split()
+            )
         )
 
         if not phone:
@@ -497,54 +514,143 @@ async def sync_payment_for_student(
 
 
         # ----------------------------------------------------
-        # Find EduNotes student
+        # Find the correct EduNotes student.
         #
-        # We fetch student profiles and compare the
-        # normalized 10-digit Indian mobile number.
-        #
-        # This handles:
-        # 9876543210
-        # 919876543210
-        # 09876543210
+        # First use the permanent mapping saved on the
+        # Tuition Manager student.
         # ----------------------------------------------------
 
-        profile_response = _supabase_request(
-            "GET",
-            f"{base}/profiles",
-            headers=headers,
-            params={
-                "select": "id,phone",
-                "role": "eq.student",
-            }
+        profile_id = student.get(
+            "edunotes_profile_id"
         )
 
-        profiles = profile_response.json()
+        if profile_id:
 
-        profile_id = None
-
-        for profile in profiles:
-
-            profile_phone = _normalise_phone(
-                profile.get("phone")
+            mapped_response = _supabase_request(
+                "GET",
+                f"{base}/profiles",
+                headers=headers,
+                params={
+                    "select": "id,phone,full_name,role",
+                    "id": (
+                        f"eq.{quote(str(profile_id))}"
+                    ),
+                    "role": "eq.student",
+                    "limit": "1",
+                }
             )
 
-            if profile_phone == phone:
+            mapped_profiles = (
+                mapped_response.json()
+            )
 
-                profile_id = profile.get("id")
+            if not mapped_profiles:
 
-                break
+                logger.warning(
+                    "Stored EduNotes profile mapping is invalid: "
+                    "student=%s profile=%s",
+                    student_id,
+                    profile_id,
+                )
 
+                profile_id = None
+
+
+        # ----------------------------------------------------
+        # No valid mapping:
+        # match using BOTH normalized phone and full name.
+        # ----------------------------------------------------
 
         if not profile_id:
 
-            logger.warning(
-                "Supabase payment sync skipped: "
-                "no EduNotes profile found for "
-                "normalized phone %s",
-                phone
+            profile_response = _supabase_request(
+                "GET",
+                f"{base}/profiles",
+                headers=headers,
+                params={
+                    "select": "id,phone,full_name,role",
+                    "role": "eq.student",
+                }
             )
 
-            return False
+            profiles = profile_response.json()
+
+            matching_profiles = []
+
+            for profile in profiles:
+
+                profile_phone = _normalise_phone(
+                    profile.get("phone")
+                )
+
+                profile_name = str(
+                    profile.get("full_name") or ""
+                ).strip()
+
+                profile_name_normalized = (
+                    " ".join(
+                        profile_name.lower().split()
+                    )
+                )
+
+                if (
+                    profile_phone == phone
+                    and
+                    profile_name_normalized
+                    == student_name_normalized
+                ):
+
+                    matching_profiles.append(
+                        profile
+                    )
+
+
+            if len(matching_profiles) == 1:
+
+                profile_id = (
+                    matching_profiles[0].get("id")
+                )
+
+                if profile_id:
+
+                    # Save permanent TM -> EduNotes mapping.
+                    await db.students.update_one(
+                        {
+                            "id": student_id
+                        },
+                        {
+                            "$set": {
+                                "edunotes_profile_id":
+                                    profile_id
+                            }
+                        }
+                    )
+
+            elif len(matching_profiles) > 1:
+
+                logger.warning(
+                    "Supabase payment sync skipped: "
+                    "multiple EduNotes profiles matched "
+                    "student=%s phone=%s name=%s",
+                    student_id,
+                    phone,
+                    student_name,
+                )
+
+                return False
+
+            else:
+
+                logger.warning(
+                    "Supabase payment sync skipped: "
+                    "no EduNotes profile found for "
+                    "student=%s phone=%s name=%s",
+                    student_id,
+                    phone,
+                    student_name,
+                )
+
+                return False
 
 
         # ----------------------------------------------------
@@ -572,7 +678,6 @@ async def sync_payment_for_student(
 
         fee_by_month = {}
 
-
         for payment in payment_docs:
 
             month = payment.get("month")
@@ -580,11 +685,9 @@ async def sync_payment_for_student(
             if not month:
                 continue
 
-
             amount = float(
                 payment.get("amount") or 0
             )
-
 
             payments_by_month[month] = (
                 payments_by_month.get(
@@ -594,11 +697,9 @@ async def sync_payment_for_student(
                 + amount
             )
 
-
             fee_snapshot = float(
                 payment.get("fee_snapshot") or 0
             )
-
 
             if fee_snapshot > 0:
 
@@ -624,7 +725,6 @@ async def sync_payment_for_student(
             "join_month"
         )
 
-
         valid_payment_months = [
 
             m
@@ -638,7 +738,6 @@ async def sync_payment_for_student(
             )
 
         ]
-
 
         if (
             isinstance(join_month, str)
@@ -660,8 +759,7 @@ async def sync_payment_for_student(
 
 
         # ----------------------------------------------------
-        # If old payments exist before join_month,
-        # include those months too.
+        # Include earlier payment months if they exist.
         # ----------------------------------------------------
 
         if valid_payment_months:
@@ -676,7 +774,7 @@ async def sync_payment_for_student(
 
 
         # ----------------------------------------------------
-        # Create month list
+        # Create complete month list
         # ----------------------------------------------------
 
         months = _month_range(
@@ -695,7 +793,13 @@ async def sync_payment_for_student(
 
 
         # ----------------------------------------------------
-        # Synchronize EVERY month
+        # Synchronize EVERY month.
+        #
+        # Existing records are updated.
+        # Missing records are created.
+        #
+        # IMPORTANT:
+        # Do NOT stop just because one fee record already exists.
         # ----------------------------------------------------
 
         for month in months:
@@ -707,12 +811,6 @@ async def sync_payment_for_student(
                 )
             )
 
-
-            # Use the historical fee snapshot
-            # when available.
-            #
-            # Otherwise use current monthly fee.
-
             amount_due = float(
                 fee_by_month.get(
                     month,
@@ -722,13 +820,7 @@ async def sync_payment_for_student(
 
 
             # ------------------------------------------------
-            # Supabase allowed statuses:
-            #
-            # paid
-            # partial
-            # pending
-            #
-            # DO NOT use "unpaid".
+            # Determine status
             # ------------------------------------------------
 
             if (
@@ -770,7 +862,7 @@ async def sync_payment_for_student(
 
 
             # ------------------------------------------------
-            # Check whether month already exists
+            # Check whether this month already exists
             # ------------------------------------------------
 
             existing_response = _supabase_request(
@@ -782,7 +874,7 @@ async def sync_payment_for_student(
                     "select": "id",
 
                     "profile_id": (
-                        f"eq.{quote(profile_id)}"
+                        f"eq.{quote(str(profile_id))}"
                     ),
 
                     "month_key": (
@@ -792,7 +884,6 @@ async def sync_payment_for_student(
                     "limit": "1",
                 }
             )
-
 
             existing = (
                 existing_response.json()
@@ -809,7 +900,6 @@ async def sync_payment_for_student(
                     existing[0]["id"]
                 )
 
-
                 _supabase_request(
                     "PATCH",
                     f"{base}/tuition_fee_records",
@@ -818,7 +908,7 @@ async def sync_payment_for_student(
 
                     params={
                         "id": (
-                            f"eq.{quote(record_id)}"
+                            f"eq.{quote(str(record_id))}"
                         )
                     },
 
@@ -842,15 +932,13 @@ async def sync_payment_for_student(
                 )
 
 
-        # ----------------------------------------------------
-        # Finished
-        # ----------------------------------------------------
-
         logger.info(
             "Supabase tuition history sync successful: "
-            "profile=%s months=%s through=%s",
+            "student=%s profile=%s months=%s start=%s current=%s",
+            student_id,
             profile_id,
             len(months),
+            start_month,
             current_month,
         )
 
@@ -865,11 +953,8 @@ async def sync_payment_for_student(
             student_id,
         )
 
-        # ----------------------------------------------------
-        # IMPORTANT:
         # Never break Tuition Manager because
         # EduNotes/Supabase synchronization failed.
-        # ----------------------------------------------------
 
         return False
 
