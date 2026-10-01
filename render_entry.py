@@ -10,6 +10,8 @@ This file:
 - Detects Class 5-12 from the existing Tuition Manager batch name.
 - Updates EduNotes profiles with board + class_id.
 - Matches existing EduNotes students by name + phone.
+- Stores a permanent Tuition Manager -> EduNotes profile mapping.
+- Repairs incomplete fee histories instead of skipping existing records.
 - Supports students sharing the same phone number.
 """
 
@@ -100,12 +102,11 @@ async def _initialize_missing_fee_records(
     profile_id=None,
 ):
     """
-    Initialize Tuition Manager -> EduNotes fee history only when
-    the target EduNotes student currently has no fee records.
+    Synchronize the COMPLETE Tuition Manager -> EduNotes fee history.
 
-    This is intentionally idempotent:
-    - If any fee record already exists, do nothing.
-    - If no fee records exist, use the existing payment-sync logic.
+    Existing EduNotes fee records are NOT treated as a reason to stop.
+    The existing sync function updates existing months and creates
+    missing months, so incomplete histories can be repaired safely.
     """
     tuition_student_id = student.get("id")
 
@@ -118,62 +119,15 @@ async def _initialize_missing_fee_records(
         )
         return False
 
+    if not profile_id:
+        srv.logger.warning(
+            "Fee initialization skipped: EduNotes "
+            "profile id missing for %s",
+            student.get("name"),
+        )
+        return False
+
     try:
-        supabase_url = (
-            srv.os.environ.get(
-                "SUPABASE_URL",
-                ""
-            )
-            .rstrip("/")
-        )
-        supabase_key = (
-            srv.os.environ.get(
-                "SUPABASE_SERVICE_ROLE_KEY",
-                ""
-            )
-            .strip()
-        )
-
-        if not supabase_url or not supabase_key:
-            srv.logger.warning(
-                "Fee initialization skipped: Supabase "
-                "credentials missing"
-            )
-            return False
-
-        if not profile_id:
-            srv.logger.warning(
-                "Fee initialization skipped: EduNotes "
-                "profile id missing for %s",
-                student.get("name"),
-            )
-            return False
-
-        base = f"{supabase_url}/rest/v1"
-        headers = srv._supabase_headers()
-
-        existing_response = srv._supabase_request(
-            "GET",
-            f"{base}/tuition_fee_records",
-            headers=headers,
-            params={
-                "select": "id",
-                "profile_id": f"eq.{profile_id}",
-                "limit": "1",
-            },
-        )
-
-        existing_records = existing_response.json()
-
-        if existing_records:
-            srv.logger.info(
-                "Fee initialization skipped: existing fee "
-                "records already present for %s (%s)",
-                student.get("name"),
-                srv._normalise_phone(student.get("phone")),
-            )
-            return True
-
         fee_sync_result = (
             await srv.sync_payment_for_student(
                 tuition_student_id
@@ -182,15 +136,14 @@ async def _initialize_missing_fee_records(
 
         if fee_sync_result is False:
             srv.logger.warning(
-                "Fee initialization returned False for %s (%s)",
+                "Fee history synchronization returned False for %s (%s)",
                 student.get("name"),
                 srv._normalise_phone(student.get("phone")),
             )
             return False
 
         srv.logger.info(
-            "Fee records initialized for new/missing-fee "
-            "student: %s (%s)",
+            "Complete fee history synchronized for %s (%s)",
             student.get("name"),
             srv._normalise_phone(student.get("phone")),
         )
@@ -198,11 +151,12 @@ async def _initialize_missing_fee_records(
 
     except Exception:
         srv.logger.exception(
-            "Fee initialization failed for %s (%s)",
+            "Fee history synchronization failed for %s (%s)",
             student.get("name"),
             srv._normalise_phone(student.get("phone")),
         )
         return False
+
 
 
 async def ensure_edunotes_student_fixed(
@@ -572,6 +526,18 @@ async def ensure_edunotes_student_fixed(
                 json=profile_payload,
             )
 
+            # Store a permanent Tuition Manager -> EduNotes
+            # profile mapping so payment synchronization never
+            # has to guess by phone number again.
+            await srv.db.students.update_one(
+                {"id": student.get("id")},
+                {
+                    "$set": {
+                        "edunotes_profile_id": profile_id
+                    }
+                }
+            )
+
             await _initialize_missing_fee_records(
                 student,
                 profile_id,
@@ -674,6 +640,17 @@ async def ensure_edunotes_student_fixed(
                     json=
                         profile_payload_with_id,
                 )
+
+            # Store a permanent Tuition Manager -> EduNotes
+            # profile mapping.
+            await srv.db.students.update_one(
+                {"id": student.get("id")},
+                {
+                    "$set": {
+                        "edunotes_profile_id": auth_user_id
+                    }
+                }
+            )
 
             await _initialize_missing_fee_records(
                 student,
@@ -843,6 +820,17 @@ async def ensure_edunotes_student_fixed(
                 json=profile_payload,
             )
 
+        # Store a permanent Tuition Manager -> EduNotes
+        # profile mapping.
+        await srv.db.students.update_one(
+            {"id": student.get("id")},
+            {
+                "$set": {
+                    "edunotes_profile_id": auth_user_id
+                }
+            }
+        )
+
         srv.logger.info(
             "New EduNotes student registered: "
             "%s (%s), board=%s, class=%s",
@@ -853,7 +841,7 @@ async def ensure_edunotes_student_fixed(
         )
 
         # ============================================================
-        # 12. INITIALIZE EDU NOTES FEE RECORDS
+        # 12. INITIALIZE / REPAIR EDU NOTES FEE RECORDS
         #
         # Only create/sync fee history when this EduNotes profile
         # currently has no fee records. Existing payment history is
