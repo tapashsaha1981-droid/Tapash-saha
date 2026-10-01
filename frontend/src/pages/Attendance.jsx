@@ -22,17 +22,11 @@ export default function Attendance() {
   }, []);
 
   useEffect(() => {
-    if (selectedBatch) {
-      loadStudents();
+    if (selectedBatch && date) {
+      loadAttendanceData();
     } else {
       setStudents([]);
       setAttendance({});
-    }
-  }, [selectedBatch]);
-
-  useEffect(() => {
-    if (selectedBatch && date) {
-      loadExistingAttendance();
     }
   }, [selectedBatch, date]);
 
@@ -46,7 +40,7 @@ export default function Attendance() {
     }
   };
 
-  const loadStudents = async () => {
+  const loadAttendanceData = async () => {
     setLoading(true);
     setMessage("");
 
@@ -60,32 +54,25 @@ export default function Attendance() {
 
       setStudents(filtered);
 
-      const initial = {};
+      const updated = {};
 
       filtered.forEach((student) => {
-        initial[student.id] = "present";
+        updated[student.id] = "present";
       });
 
-      setAttendance(initial);
-    } catch (error) {
-      console.error("Error loading students:", error);
-      setMessage("Unable to load students.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const loadExistingAttendance = async () => {
-    try {
       const existing = await api.listAttendance({
         date,
         app_class_id: String(selectedBatch),
       });
 
-      const updated = { ...attendance };
-
       (existing || []).forEach((record) => {
-        if (record.app_student_id) {
+        if (
+          record.app_student_id &&
+          Object.prototype.hasOwnProperty.call(
+            updated,
+            record.app_student_id
+          )
+        ) {
           updated[record.app_student_id] = record.status;
         }
       });
@@ -93,6 +80,9 @@ export default function Attendance() {
       setAttendance(updated);
     } catch (error) {
       console.error("Error loading attendance:", error);
+      setMessage("Unable to load attendance.");
+    } finally {
+      setLoading(false);
     }
   };
 
