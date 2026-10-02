@@ -496,7 +496,10 @@ Thank you.
 
       if (result.failed > 0) {
         toast.warning(
-          `Batch sync completed: ${result.synced} synced, ${result.failed} failed`
+          `Batch sync completed: ${result.synced} synced, ${result.failed} failed`,
+          {
+            duration: Infinity,
+          }
         );
       } else {
         toast.success(
@@ -515,7 +518,10 @@ Thank you.
           .filter(Boolean);
 
         toast.error(
-          `Failed students: ${failedNames.join(", ")}`
+          `Failed students: ${failedNames.join(", ")}`,
+          {
+            duration: Infinity,
+          }
         );
       }
     } catch (error) {
@@ -525,7 +531,10 @@ Thank you.
       );
 
       toast.error(
-        "Could not complete batch EduNotes synchronization"
+        "Could not complete batch EduNotes synchronization",
+        {
+          duration: Infinity,
+        }
       );
     } finally {
       setSyncingBatch(false);
