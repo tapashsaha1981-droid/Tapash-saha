@@ -226,6 +226,18 @@ class StudentUpdate(BaseModel):
     notes: Optional[str] = None
 
 
+class BoardImportRow(BaseModel):
+    name: str
+    phone: str
+    class_name: Optional[str] = ""
+    batch: Optional[str] = ""
+    board: str
+
+
+class BoardImportPayload(BaseModel):
+    rows: List[BoardImportRow]
+
+
 class Payment(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
@@ -1596,6 +1608,203 @@ async def sync_batch_edunotes_fees(
             "Batch EduNotes account reconciliation and "
             "complete fee synchronization completed"
         ),
+    }
+
+
+@api_router.post("/students/import-board")
+async def import_student_boards(payload: BoardImportPayload):
+    """
+    Safe bulk Board import.
+
+    IMPORTANT:
+    - Updates ONLY the board field.
+    - Never creates students.
+    - Never deletes students.
+    - Never changes fees, payments, batches, or other student fields.
+    - A phone number must match exactly one Tuition Manager student.
+    - Duplicate phone numbers are reported as mismatches.
+    - Name and batch are checked before any Board update.
+    """
+
+    students = await db.students.find(
+        {},
+        {"_id": 0}
+    ).to_list(10000)
+
+    def normalise(value):
+        return str(value or "").strip().lower()
+
+    phone_index = {}
+
+    for student in students:
+        phone = _normalise_phone(student.get("phone"))
+
+        if not phone:
+            continue
+
+        phone_index.setdefault(phone, []).append(student)
+
+    # Build the batch-name map once so the import does not repeatedly
+    # query the batches collection for every CSV row.
+    batch_docs = await db.batches.find(
+        {},
+        {"_id": 0, "id": 1, "name": 1}
+    ).to_list(10000)
+
+    batch_name_by_id = {
+        batch.get("id"): batch.get("name", "")
+        for batch in batch_docs
+        if batch.get("id")
+    }
+
+    results = []
+    mismatches = []
+    updated = 0
+    unchanged = 0
+
+    # Pre-scan phone numbers so EVERY row belonging to a duplicate
+    # phone group is reported as a mismatch. No duplicate row is
+    # partially imported.
+    csv_phone_rows = {}
+
+    for row in payload.rows:
+        phone = _normalise_phone(row.phone)
+
+        if phone:
+            csv_phone_rows.setdefault(phone, []).append(row)
+
+    duplicate_csv_phones = {
+        phone
+        for phone, rows in csv_phone_rows.items()
+        if len(rows) > 1
+    }
+
+    for row in payload.rows:
+        phone = _normalise_phone(row.phone)
+        board = normalise(row.board)
+
+        base_mismatch = {
+            "name": row.name,
+            "phone": row.phone,
+            "class": row.class_name,
+            "batch": row.batch,
+            "board": row.board
+        }
+
+        if board not in {"cbse", "tbse"}:
+            mismatches.append({
+                **base_mismatch,
+                "reason": "Invalid Board. Must be CBSE or TBSE."
+            })
+            continue
+
+        if not phone:
+            mismatches.append({
+                **base_mismatch,
+                "reason": "Phone number is missing or invalid."
+            })
+            continue
+
+        if phone in duplicate_csv_phones:
+            mismatches.append({
+                **base_mismatch,
+                "reason": "Duplicate phone number in uploaded CSV."
+            })
+            continue
+
+        matches = phone_index.get(phone, [])
+
+        if len(matches) == 0:
+            mismatches.append({
+                **base_mismatch,
+                "reason": "No matching student found in Tuition Manager."
+            })
+            continue
+
+        if len(matches) > 1:
+            mismatches.append({
+                **base_mismatch,
+                "reason": (
+                    "Multiple Tuition Manager students have "
+                    "the same phone number."
+                ),
+                "matched_accounts": [
+                    {
+                        "id": student.get("id"),
+                        "name": student.get("name"),
+                        "phone": student.get("phone"),
+                        "batch_id": student.get("batch_id"),
+                        "board": student.get("board", "")
+                    }
+                    for student in matches
+                ]
+            })
+            continue
+
+        student = matches[0]
+
+        current_batch = batch_name_by_id.get(
+            student.get("batch_id"),
+            ""
+        )
+
+        # Batch is checked whenever it is present in the CSV.
+        if (
+            row.batch
+            and normalise(row.batch) != normalise(current_batch)
+        ):
+            mismatches.append({
+                **base_mismatch,
+                "reason": "Batch does not match Tuition Manager.",
+                "matched_student": student.get("name"),
+                "current_batch": current_batch
+            })
+            continue
+
+        # Name is checked whenever it is present in the CSV.
+        if (
+            row.name
+            and normalise(row.name) != normalise(student.get("name"))
+        ):
+            mismatches.append({
+                **base_mismatch,
+                "reason": "Student name does not match.",
+                "matched_student": student.get("name"),
+                "current_batch": current_batch
+            })
+            continue
+
+        new_board = board.upper()
+        old_board = str(student.get("board") or "").upper()
+
+        # Only the Board field is ever changed.
+        result = await db.students.update_one(
+            {"id": student["id"]},
+            {"$set": {"board": new_board}}
+        )
+
+        if result.modified_count > 0:
+            updated += 1
+        else:
+            unchanged += 1
+
+        results.append({
+            "student_id": student["id"],
+            "name": student.get("name"),
+            "phone": student.get("phone"),
+            "old_board": old_board,
+            "new_board": new_board,
+            "changed": result.modified_count > 0
+        })
+
+    return {
+        "ok": True,
+        "checked": len(payload.rows),
+        "updated": updated,
+        "unchanged": unchanged,
+        "mismatches": len(mismatches),
+        "results": results,
+        "mismatch_accounts": mismatches
     }
 
 
