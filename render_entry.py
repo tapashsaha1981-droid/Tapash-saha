@@ -366,96 +366,117 @@ async def ensure_edunotes_student_fixed(
         # 5. FIND EXISTING PROFILE
         #
         # IMPORTANT:
-        # Do NOT match by phone alone.
-        # Brothers/sisters can share a phone.
+        # Always use the permanent Tuition Manager ->
+        # EduNotes profile mapping first.
+        #
+        # This prevents a student from getting a duplicate
+        # EduNotes account when their name, class, board, or
+        # other editable details are changed and the student
+        # is saved again in Tuition Manager.
+        #
+        # If no valid mapping exists, fall back to the existing
+        # safe phone + name / username matching logic.
         # ============================================================
 
-        profile_response = (
-            srv._supabase_request(
-                "GET",
-                f"{base}/profiles",
-                headers=headers,
-                params={
-                    "select":
-                        "id,full_name,"
-                        "username,phone,"
-                        "class_id,board,role",
-                    "role":
-                        "eq.student",
-                    "limit":
-                        "1000",
-                },
-            )
+        existing_profile = None
+
+        stored_profile_id = (
+            student.get("edunotes_profile_id")
         )
 
-        profiles = (
-            profile_response.json()
-        )
+        if stored_profile_id:
 
-        normalized_name = (
-            _clean_name(student_name)
-        )
-
-        existing_profile = next(
-            (
-                profile
-                for profile in profiles
-                if (
-                    srv._normalise_phone(
-                        profile.get("phone")
-                    )
-                    == phone
-                    and
-                    _clean_name(
-                        profile.get(
-                            "full_name"
-                        )
-                    )
-                    == normalized_name
-                )
-            ),
-            None,
-        )
-
-        # A previous partial synchronization can leave the correct
-        # EduNotes profile in place while the normal name+phone lookup
-        # misses it. In that case, recover the profile by its unique
-        # username (mobile number), but only when the name also matches.
-        if not existing_profile:
-            username_response = (
+            mapped_profile_response = (
                 srv._supabase_request(
                     "GET",
                     f"{base}/profiles",
                     headers=headers,
                     params={
                         "select":
-                            "id,full_name,username,phone,"
+                            "id,full_name,"
+                            "username,phone,"
                             "class_id,board,role",
-                        "username":
-                            f"eq.{phone}",
+                        "id":
+                            f"eq.{stored_profile_id}",
+                        "role":
+                            "eq.student",
                         "limit":
                             "1",
                     },
                 )
             )
 
-            username_profiles = (
-                username_response.json()
+            mapped_profiles = (
+                mapped_profile_response.json()
             )
 
-            username_profile = next(
+            if mapped_profiles:
+
+                existing_profile = (
+                    mapped_profiles[0]
+                )
+
+                srv.logger.info(
+                    "Using permanent EduNotes profile mapping "
+                    "for %s (%s): %s",
+                    student_name,
+                    phone,
+                    stored_profile_id,
+                )
+
+            else:
+
+                srv.logger.warning(
+                    "Stored EduNotes profile mapping is invalid "
+                    "for %s (%s): %s. Falling back to safe "
+                    "phone/name matching.",
+                    student_name,
+                    phone,
+                    stored_profile_id,
+                )
+
+        if not existing_profile:
+
+            profile_response = (
+                srv._supabase_request(
+                    "GET",
+                    f"{base}/profiles",
+                    headers=headers,
+                    params={
+                        "select":
+                            "id,full_name,"
+                            "username,phone,"
+                            "class_id,board,role",
+                        "role":
+                            "eq.student",
+                        "limit":
+                            "1000",
+                    },
+                )
+            )
+
+            profiles = (
+                profile_response.json()
+            )
+
+            normalized_name = (
+                _clean_name(student_name)
+            )
+
+            existing_profile = next(
                 (
                     profile
-                    for profile in username_profiles
+                    for profile in profiles
                     if (
-                        str(
-                            profile.get("role")
-                            or "student"
-                        ).strip().lower()
-                        == "student"
+                        srv._normalise_phone(
+                            profile.get("phone")
+                        )
+                        == phone
                         and
                         _clean_name(
-                            profile.get("full_name")
+                            profile.get(
+                                "full_name"
+                            )
                         )
                         == normalized_name
                     )
@@ -463,17 +484,63 @@ async def ensure_edunotes_student_fixed(
                 None,
             )
 
-            if username_profile:
-                existing_profile = (
-                    username_profile
+            # A previous partial synchronization can leave the correct
+            # EduNotes profile in place while the normal name+phone lookup
+            # misses it. In that case, recover the profile by its unique
+            # username (mobile number), but only when the name also matches.
+            if not existing_profile:
+                username_response = (
+                    srv._supabase_request(
+                        "GET",
+                        f"{base}/profiles",
+                        headers=headers,
+                        params={
+                            "select":
+                                "id,full_name,username,phone,"
+                                "class_id,board,role",
+                            "username":
+                                f"eq.{phone}",
+                            "limit":
+                                "1",
+                        },
+                    )
                 )
 
-                srv.logger.info(
-                    "Recovered existing EduNotes profile "
-                    "by username for %s (%s)",
-                    student_name,
-                    phone,
+                username_profiles = (
+                    username_response.json()
                 )
+
+                username_profile = next(
+                    (
+                        profile
+                        for profile in username_profiles
+                        if (
+                            str(
+                                profile.get("role")
+                                or "student"
+                            ).strip().lower()
+                            == "student"
+                            and
+                            _clean_name(
+                                profile.get("full_name")
+                            )
+                            == normalized_name
+                        )
+                    ),
+                    None,
+                )
+
+                if username_profile:
+                    existing_profile = (
+                        username_profile
+                    )
+
+                    srv.logger.info(
+                        "Recovered existing EduNotes profile "
+                        "by username for %s (%s)",
+                        student_name,
+                        phone,
+                    )
 
         # ============================================================
         # 6. PROFILE UPDATE PAYLOAD
