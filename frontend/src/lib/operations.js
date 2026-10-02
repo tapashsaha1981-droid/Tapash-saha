@@ -330,6 +330,18 @@ export const useOperations = ({
     [refresh]
   );
 
+  const syncEdunotesBatch = useCallback(
+    async (batchId) => {
+      const result =
+        await api.syncEdunotesBatch(batchId);
+
+      await refresh();
+
+      return result;
+    },
+    [refresh]
+  );
+
   // =========================================================
   // MARK PAID — OPTIMIZED
   // =========================================================
@@ -544,6 +556,7 @@ export const useOperations = ({
       moveStudent,
 
       syncEdunotesFees,
+      syncEdunotesBatch,
 
       addPayment,
       removePaymentsForMonth,
@@ -564,6 +577,7 @@ export const useOperations = ({
       moveStudent,
 
       syncEdunotesFees,
+      syncEdunotesBatch,
 
       addPayment,
       removePaymentsForMonth,
