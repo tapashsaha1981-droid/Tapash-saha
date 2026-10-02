@@ -76,10 +76,12 @@ export const api = {
       .then((r) => r.data),
 
   // Batch-wise EduNotes synchronization
+  // Increased from 5 minutes to 20 minutes
+  // because large batches need more time.
   syncEdunotesBatch: (batchId) =>
     client
       .post(`/students/batch/${batchId}/sync-edunotes-fees`, null, {
-        timeout: 300000,
+        timeout: 1200000,
       })
       .then((r) => r.data),
 
