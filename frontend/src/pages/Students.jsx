@@ -41,6 +41,7 @@ export const Students = () => {
   const [statusFilter, setStatusFilter] = useState("all");
   const [limit, setLimit] = useState(60);
   const [syncingBatch, setSyncingBatch] = useState(false);
+  const [syncJobId, setSyncJobId] = useState(null);
 
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState(null);
@@ -470,6 +471,8 @@ Thank you.
   };
 
   // SYNC ALL STUDENTS IN THE SELECTED BATCH TO EDUNOTES
+  // Starts the server-side background job. The browser no longer
+  // has to keep a long-running request alive.
   const syncSelectedBatchToEdunotes = async () => {
     if (!activeBatch) {
       return toast.error("Please select a batch first");
@@ -494,52 +497,141 @@ Thank you.
         activeBatch.id
       );
 
-      if (result.failed > 0) {
-        toast.warning(
-          `Batch sync completed: ${result.synced} synced, ${result.failed} failed`,
-          {
-            duration: Infinity,
-          }
-        );
-      } else {
-        toast.success(
-          `Batch sync completed: ${result.synced} students synced successfully`
-        );
+      const jobId = result?.job_id || result?.id;
+
+      if (!jobId) {
+        throw new Error("Background sync job ID was not returned");
       }
 
-      if (result.failed > 0 && result.failures?.length) {
-        console.warn(
-          "EduNotes batch sync failures:",
-          result.failures
-        );
+      setSyncJobId(jobId);
 
-        const failedNames = result.failures
-          .map((item) => item.student_name)
-          .filter(Boolean);
-
-        toast.error(
-          `Failed students: ${failedNames.join(", ")}`,
-          {
-            duration: Infinity,
-          }
-        );
-      }
-    } catch (error) {
-      console.error(
-        "EduNotes batch sync failed:",
-        error
-      );
-
-      toast.error(
-        "Could not complete batch EduNotes synchronization",
+      toast.success(
+        `EduNotes batch synchronization started for "${activeBatch.name}". You can leave this screen.`,
         {
           duration: Infinity,
         }
       );
-    } finally {
+    } catch (error) {
+      console.error(
+        "EduNotes background batch sync failed to start:",
+        error
+      );
+
       setSyncingBatch(false);
+      setSyncJobId(null);
+
+      toast.error(
+        "Could not start batch EduNotes synchronization",
+        {
+          duration: Infinity,
+        }
+      );
     }
   };
+
+  // Monitor the server-side background synchronization job.
+  // This short request is safe to repeat and does not hold the
+  // original long-running sync request open.
+  useEffect(() => {
+    if (!syncJobId) {
+      return;
+    }
+
+    let stopped = false;
+    let timer = null;
+
+    const checkStatus = async () => {
+      try {
+        const { api } = await import("@/lib/api");
+        const result =
+          await api.getEdunotesBatchSyncStatus(syncJobId);
+
+        if (stopped) {
+          return;
+        }
+
+        const status = String(
+          result?.status || ""
+        ).toLowerCase();
+
+        if (
+          status === "completed" ||
+          status === "complete" ||
+          status === "failed"
+        ) {
+          setSyncingBatch(false);
+          setSyncJobId(null);
+
+          if (status === "completed" || status === "complete") {
+            const failed = Number(result?.failed || 0);
+            const synced = Number(result?.synced || 0);
+
+            if (failed > 0) {
+              toast.warning(
+                `Batch sync completed: ${synced} synced, ${failed} failed`,
+                {
+                  duration: Infinity,
+                }
+              );
+
+              const failedNames = (
+                result?.failures || []
+              )
+                .map((item) => item.student_name)
+                .filter(Boolean);
+
+              if (failedNames.length) {
+                toast.error(
+                  `Failed students: ${failedNames.join(", ")}`,
+                  {
+                    duration: Infinity,
+                  }
+                );
+              }
+            } else {
+              toast.success(
+                `Batch sync completed: ${synced} students synced successfully`,
+                {
+                  duration: Infinity,
+                }
+              );
+            }
+          } else {
+            toast.error(
+              "Batch EduNotes synchronization failed",
+              {
+                duration: Infinity,
+              }
+            );
+          }
+
+          return;
+        }
+
+        timer = window.setTimeout(checkStatus, 3000);
+      } catch (error) {
+        if (!stopped) {
+          console.warn(
+            "EduNotes background sync status check failed:",
+            error
+          );
+
+          // Keep checking. A temporary browser/network failure
+          // must not cancel the server-side synchronization job.
+          timer = window.setTimeout(checkStatus, 5000);
+        }
+      }
+    };
+
+    checkStatus();
+
+    return () => {
+      stopped = true;
+      if (timer) {
+        window.clearTimeout(timer);
+      }
+    };
+  }, [syncJobId]);
 
   const markUnpaid = async (
     student,
