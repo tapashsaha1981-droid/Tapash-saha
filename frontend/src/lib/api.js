@@ -76,13 +76,16 @@ export const api = {
       .then((r) => r.data),
 
   // Batch-wise EduNotes synchronization
-  // Increased from 5 minutes to 20 minutes
-  // because large batches need more time.
+  // Starts the server-side background sync and returns immediately.
   syncEdunotesBatch: (batchId) =>
     client
-      .post(`/students/batch/${batchId}/sync-edunotes-fees`, null, {
-        timeout: 1200000,
-      })
+      .post(`/students/batch/${batchId}/sync-edunotes-fees`)
+      .then((r) => r.data),
+
+  // Check the status of a background EduNotes batch sync.
+  getEdunotesBatchSyncStatus: (jobId) =>
+    client
+      .get(`/students/batch/sync-edunotes-fees/status/${jobId}`)
       .then((r) => r.data),
 
   // payments
