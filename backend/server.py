@@ -1246,12 +1246,20 @@ async def sync_batch_edunotes_fees(
     batch_id: str
 ):
     """
-    One-batch, manual Tuition Manager -> EduNotes fee-history sync.
+    One-batch Tuition Manager -> EduNotes reconciliation.
 
-    This runs the existing complete payment-history synchronizer
-    for every student in the selected batch. It does not create,
-    delete, reset, or otherwise modify student accounts beyond the
-    existing synchronization behavior.
+    For every student in the selected batch:
+
+    1. Use the existing EduNotes registration/synchronization logic.
+    2. Create the EduNotes student when the account/profile is genuinely
+       missing.
+    3. Reuse an existing EduNotes account/profile when available.
+    4. Preserve existing login/password/device-binding information.
+    5. Synchronize the complete Tuition Manager fee history.
+    6. Never intentionally create a duplicate for a student that is
+       already mapped to an EduNotes profile.
+
+    Tuition Manager remains the master.
     """
 
     batch = await db.batches.find_one(
@@ -1269,14 +1277,18 @@ async def sync_batch_edunotes_fees(
             "Batch not found"
         )
 
+    # Get the complete student documents because the existing
+    # EduNotes registration logic needs phone, name, batch,
+    # monthly fee, join month, mapping, etc.
     students = await db.students.find(
         {"batch_id": batch_id},
         {
             "_id": 0,
-            "id": 1,
-            "name": 1,
         }
-    ).sort("name", 1).to_list(50000)
+    ).sort(
+        "name",
+        1
+    ).to_list(50000)
 
     if not students:
         return {
@@ -1294,32 +1306,123 @@ async def sync_batch_edunotes_fees(
     failures = []
 
     for student in students:
+
+        student_id = student.get("id")
+        student_name = student.get("name")
+
         try:
-            success = await sync_payment_for_student(
-                student["id"]
+            # ----------------------------------------------------
+            # STEP 1:
+            # Run the existing EduNotes registration/synchronization
+            # logic.
+            #
+            # In the Render deployment, render_entry.py replaces
+            # this safe hook with the full EduNotes implementation.
+            # ----------------------------------------------------
+
+            registration_result = (
+                await ensure_edunotes_student(
+                    student
+                )
             )
 
-            if success:
-                synced += 1
-            else:
+            if not registration_result:
+
                 failures.append({
-                    "student_id": student["id"],
-                    "student_name": student.get("name"),
+                    "student_id": student_id,
+                    "student_name": student_name,
                     "reason": (
-                        "EduNotes synchronization could not "
-                        "be completed"
+                        "EduNotes account/profile could not be "
+                        "created or synchronized"
                     ),
                 })
 
+                continue
+
+            # ----------------------------------------------------
+            # STEP 2:
+            # Refresh the Tuition Manager student so we use the
+            # permanent EduNotes profile mapping that the
+            # registration logic may have just created.
+            # ----------------------------------------------------
+
+            refreshed_student = await db.students.find_one(
+                {"id": student_id},
+                {
+                    "_id": 0,
+                    "id": 1,
+                    "name": 1,
+                    "edunotes_profile_id": 1,
+                }
+            )
+
+            if not refreshed_student:
+                failures.append({
+                    "student_id": student_id,
+                    "student_name": student_name,
+                    "reason": (
+                        "Student could not be reloaded after "
+                        "EduNotes synchronization"
+                    ),
+                })
+
+                continue
+
+            if not refreshed_student.get(
+                "edunotes_profile_id"
+            ):
+                failures.append({
+                    "student_id": student_id,
+                    "student_name": student_name,
+                    "reason": (
+                        "EduNotes profile was not mapped back "
+                        "to Tuition Manager"
+                    ),
+                })
+
+                continue
+
+            # ----------------------------------------------------
+            # STEP 3:
+            # Synchronize the COMPLETE fee history.
+            #
+            # This is intentionally called after registration so
+            # newly created EduNotes students also receive all
+            # previous months from Tuition Manager.
+            # ----------------------------------------------------
+
+            fee_sync_result = (
+                await sync_payment_for_student(
+                    student_id
+                )
+            )
+
+            if not fee_sync_result:
+
+                failures.append({
+                    "student_id": student_id,
+                    "student_name": student_name,
+                    "reason": (
+                        "EduNotes account was synchronized, "
+                        "but fee history synchronization failed"
+                    ),
+                })
+
+                continue
+
+            synced += 1
+
         except Exception as error:
+
             logger.exception(
-                "Batch EduNotes sync failed for student: %s",
-                student.get("id"),
+                "Batch EduNotes reconciliation failed "
+                "for student: %s",
+                student_id,
             )
 
             failures.append({
-                "student_id": student["id"],
-                "student_name": student.get("name"),
+                "student_id": student_id,
+                "student_name": student_name,
                 "reason": str(error)[:300],
             })
 
@@ -1331,7 +1434,10 @@ async def sync_batch_edunotes_fees(
         "synced": synced,
         "failed": len(failures),
         "failures": failures,
-        "message": "Batch EduNotes fee synchronization completed",
+        "message": (
+            "Batch EduNotes account reconciliation and "
+            "complete fee synchronization completed"
+        ),
     }
 
 
