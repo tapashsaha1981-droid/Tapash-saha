@@ -1,6 +1,6 @@
 import React, { useMemo, useState, useEffect, useRef } from "react";
 import { useData } from "@/lib/store";
-import { Plus, Download } from "lucide-react";
+import { Plus, Download, RefreshCw } from "lucide-react";
 import dayjs from "dayjs";
 import { StudentCard } from "@/components/StudentCard";
 import { StudentsToolbar } from "@/components/StudentsToolbar";
@@ -32,6 +32,7 @@ export const Students = () => {
     addPayment,
     removePaymentsForMonth,
     syncEdunotesFees,
+    syncEdunotesBatch,
   } = useData();
 
   const [month, setMonth] = useState(currentMonth());
@@ -39,6 +40,7 @@ export const Students = () => {
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [limit, setLimit] = useState(60);
+  const [syncingBatch, setSyncingBatch] = useState(false);
 
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState(null);
@@ -467,6 +469,61 @@ Thank you.
     }
   };
 
+  // SYNC ALL STUDENTS IN THE SELECTED BATCH TO EDUNOTES
+  const syncSelectedBatchToEdunotes = async () => {
+    if (!activeBatch) {
+      return toast.error("Please select a batch first");
+    }
+
+    if (syncingBatch) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Sync all students in "${activeBatch.name}" to EduNotes?`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setSyncingBatch(true);
+
+      const result = await syncEdunotesBatch(
+        activeBatch.id
+      );
+
+      if (result.failed > 0) {
+        toast.warning(
+          `Batch sync completed: ${result.synced} synced, ${result.failed} failed`
+        );
+      } else {
+        toast.success(
+          `Batch sync completed: ${result.synced} students synced successfully`
+        );
+      }
+
+      if (result.failed > 0 && result.failures?.length) {
+        console.warn(
+          "EduNotes batch sync failures:",
+          result.failures
+        );
+      }
+    } catch (error) {
+      console.error(
+        "EduNotes batch sync failed:",
+        error
+      );
+
+      toast.error(
+        "Could not complete batch EduNotes synchronization"
+      );
+    } finally {
+      setSyncingBatch(false);
+    }
+  };
+
   const markUnpaid = async (
     student,
     targetMonth = month
@@ -600,6 +657,21 @@ Thank you.
             <Download size={16} />
             CSV
           </button>
+
+          {activeBatch && (
+            <button
+              data-testid="sync-edunotes-batch"
+              onClick={syncSelectedBatchToEdunotes}
+              disabled={syncingBatch}
+              className="btn-press h-11 px-3 rounded-2xl bg-blue-50 border border-blue-200 text-blue-700 flex items-center gap-2 text-sm font-semibold hover:bg-blue-100 disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              <RefreshCw
+                size={16}
+                className={syncingBatch ? "animate-spin" : ""}
+              />
+              {syncingBatch ? "Syncing…" : "Sync Batch"}
+            </button>
+          )}
 
           <button
             onClick={() => {
