@@ -781,7 +781,12 @@ Thank you.
   const importBoardCSV = () => {
     const input = document.createElement("input");
     input.type = "file";
-    input.accept = ".csv,text/csv";
+    input.accept = ".csv,text/csv,application/vnd.ms-excel";
+    input.style.display = "none";
+
+    // Keep the input attached to the document. This is more reliable on
+    // iPad/iOS when the file picker is opened programmatically.
+    document.body.appendChild(input);
 
     input.onchange = async (event) => {
       const file = event.target.files?.[0];
@@ -797,7 +802,7 @@ Thank you.
         }
 
         const headers = parsed[0].map((h) =>
-          h.trim().toLowerCase()
+          h.replace(/^\uFEFF/, "").trim().toLowerCase()
         );
 
         const indexOf = (...names) => {
