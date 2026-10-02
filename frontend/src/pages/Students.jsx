@@ -1,6 +1,11 @@
 import React, { useMemo, useState, useEffect, useRef } from "react";
 import { useData } from "@/lib/store";
-import { Plus, Download, RefreshCw } from "lucide-react";
+import {
+  Plus,
+  Download,
+  RefreshCw,
+  Upload
+} from "lucide-react";
 import dayjs from "dayjs";
 import { StudentCard } from "@/components/StudentCard";
 import { StudentsToolbar } from "@/components/StudentsToolbar";
@@ -18,6 +23,7 @@ import {
   inr,
 } from "@/lib/calc";
 import { toast } from "sonner";
+import { api } from "@/lib/api";
 
 export const Students = () => {
   const {
@@ -668,6 +674,236 @@ Thank you.
     );
   };
 
+  const parseCSV = (text) => {
+    const rows = [];
+    let row = [];
+    let value = "";
+    let quoted = false;
+
+    for (let i = 0; i < text.length; i++) {
+      const char = text[i];
+      const next = text[i + 1];
+
+      if (char === '"' && quoted && next === '"') {
+        value += '"';
+        i++;
+        continue;
+      }
+
+      if (char === '"') {
+        quoted = !quoted;
+        continue;
+      }
+
+      if (char === "," && !quoted) {
+        row.push(value);
+        value = "";
+        continue;
+      }
+
+      if ((char === "\n" || char === "\r") && !quoted) {
+        if (char === "\r" && next === "\n") {
+          i++;
+        }
+
+        row.push(value);
+        value = "";
+
+        if (row.some((cell) => cell.trim() !== "")) {
+          rows.push(row);
+        }
+
+        row = [];
+        continue;
+      }
+
+      value += char;
+    }
+
+    if (value || row.length) {
+      row.push(value);
+
+      if (row.some((cell) => cell.trim() !== "")) {
+        rows.push(row);
+      }
+    }
+
+    return rows;
+  };
+
+  const downloadMismatchReport = (mismatches) => {
+    if (!mismatches?.length) return;
+
+    const rows = [[
+      "Student Name",
+      "Phone",
+      "Class",
+      "Batch",
+      "Board",
+      "Reason",
+      "Matched Student",
+      "Current Batch"
+    ]];
+
+    mismatches.forEach((item) => {
+      rows.push([
+        item.name || "",
+        item.phone || "",
+        item.class || "",
+        item.batch || "",
+        item.board || "",
+        item.reason || "",
+        item.matched_student || "",
+        item.current_batch || ""
+      ]);
+    });
+
+    const csv = rows
+      .map((row) =>
+        row
+          .map((value) => `"${String(value).replace(/"/g, '""')}"`)
+          .join(",")
+      )
+      .join("\n");
+
+    const blob = new Blob([csv], {
+      type: "text/csv;charset=utf-8;"
+    });
+
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "BOARD_IMPORT_MISMATCH_REPORT.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const importBoardCSV = () => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".csv,text/csv";
+
+    input.onchange = async (event) => {
+      const file = event.target.files?.[0];
+      if (!file) return;
+
+      try {
+        const text = await file.text();
+        const parsed = parseCSV(text);
+
+        if (parsed.length < 2) {
+          toast.error("CSV file is empty");
+          return;
+        }
+
+        const headers = parsed[0].map((h) =>
+          h.trim().toLowerCase()
+        );
+
+        const indexOf = (...names) => {
+          for (const name of names) {
+            const index = headers.indexOf(name);
+            if (index >= 0) return index;
+          }
+          return -1;
+        };
+
+        const nameIndex = indexOf("student name", "name");
+        const phoneIndex = indexOf(
+          "phone",
+          "mobile",
+          "mobile number"
+        );
+        const classIndex = indexOf("class", "class name");
+        const batchIndex = indexOf("batch");
+        const boardIndex = indexOf("board");
+
+        if (
+          nameIndex < 0 ||
+          phoneIndex < 0 ||
+          boardIndex < 0
+        ) {
+          toast.error(
+            "CSV must contain Student Name, Phone and Board columns."
+          );
+          return;
+        }
+
+        const rows = parsed
+          .slice(1)
+          .map((row) => ({
+            name: row[nameIndex] || "",
+            phone: row[phoneIndex] || "",
+            class_name:
+              classIndex >= 0
+                ? row[classIndex] || ""
+                : "",
+            batch:
+              batchIndex >= 0
+                ? row[batchIndex] || ""
+                : "",
+            board: row[boardIndex] || ""
+          }))
+          .filter(
+            (row) =>
+              row.name ||
+              row.phone ||
+              row.board
+          );
+
+        if (!rows.length) {
+          toast.error("No student records found");
+          return;
+        }
+
+        const confirmed = window.confirm(
+          `Found ${rows.length} student records.\n\n` +
+            `Only the Board field will be changed.\n` +
+            `No students will be created or deleted.\n` +
+            `Fees and payments will not be changed.\n\n` +
+            `Continue?`
+        );
+
+        if (!confirmed) return;
+
+        toast.info(
+          `Importing Board for ${rows.length} students…`
+        );
+
+        const result =
+          await api.importStudentBoards(rows);
+
+        if (result.mismatches > 0) {
+          downloadMismatchReport(
+            result.mismatch_accounts
+          );
+
+          toast.warning(
+            `Import completed: ${result.updated} updated, ${result.mismatches} mismatches.`
+          );
+        } else {
+          toast.success(
+            `Board import completed: ${result.updated} students updated.`
+          );
+        }
+
+        window.location.reload();
+      } catch (error) {
+        console.error(
+          "Board CSV import failed:",
+          error
+        );
+
+        toast.error(
+          error?.response?.data?.detail ||
+            "Could not import Board CSV."
+        );
+      }
+    };
+
+    input.click();
+  };
+
   const exportCSV = () => {
     const rows = [
       [
@@ -758,6 +994,15 @@ Thank you.
         </div>
 
         <div className="ml-auto flex gap-2">
+          <button
+            data-testid="import-board-csv"
+            onClick={importBoardCSV}
+            className="btn-press h-11 px-3 rounded-2xl bg-indigo-50 border border-indigo-200 text-indigo-700 flex items-center gap-2 text-sm font-semibold hover:bg-indigo-100"
+          >
+            <Upload size={16} />
+            Import Board
+          </button>
+
           <button
             data-testid="export-csv"
             onClick={exportCSV}
