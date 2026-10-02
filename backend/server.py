@@ -63,6 +63,13 @@ async def require_auth(authorization: Optional[str] = Header(None)):
 app = FastAPI()
 
 
+# ---------- Public health check ----------
+# Render can probe this endpoint without authentication.
+@app.get("/")
+async def health_check():
+    return {"status": "ok"}
+
+
 # Public routes - login only
 public_router = APIRouter(prefix="/api")
 
