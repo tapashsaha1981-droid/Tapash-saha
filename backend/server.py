@@ -1241,6 +1241,100 @@ async def sync_student_edunotes_fees(
     }
 
 
+@api_router.post("/students/batch/{batch_id}/sync-edunotes-fees")
+async def sync_batch_edunotes_fees(
+    batch_id: str
+):
+    """
+    One-batch, manual Tuition Manager -> EduNotes fee-history sync.
+
+    This runs the existing complete payment-history synchronizer
+    for every student in the selected batch. It does not create,
+    delete, reset, or otherwise modify student accounts beyond the
+    existing synchronization behavior.
+    """
+
+    batch = await db.batches.find_one(
+        {"id": batch_id},
+        {
+            "_id": 0,
+            "id": 1,
+            "name": 1,
+        }
+    )
+
+    if not batch:
+        raise HTTPException(
+            404,
+            "Batch not found"
+        )
+
+    students = await db.students.find(
+        {"batch_id": batch_id},
+        {
+            "_id": 0,
+            "id": 1,
+            "name": 1,
+        }
+    ).sort("name", 1).to_list(50000)
+
+    if not students:
+        return {
+            "ok": True,
+            "batch_id": batch_id,
+            "batch_name": batch.get("name"),
+            "total": 0,
+            "synced": 0,
+            "failed": 0,
+            "failures": [],
+            "message": "No students found in this batch",
+        }
+
+    synced = 0
+    failures = []
+
+    for student in students:
+        try:
+            success = await sync_payment_for_student(
+                student["id"]
+            )
+
+            if success:
+                synced += 1
+            else:
+                failures.append({
+                    "student_id": student["id"],
+                    "student_name": student.get("name"),
+                    "reason": (
+                        "EduNotes synchronization could not "
+                        "be completed"
+                    ),
+                })
+
+        except Exception as error:
+            logger.exception(
+                "Batch EduNotes sync failed for student: %s",
+                student.get("id"),
+            )
+
+            failures.append({
+                "student_id": student["id"],
+                "student_name": student.get("name"),
+                "reason": str(error)[:300],
+            })
+
+    return {
+        "ok": True,
+        "batch_id": batch_id,
+        "batch_name": batch.get("name"),
+        "total": len(students),
+        "synced": synced,
+        "failed": len(failures),
+        "failures": failures,
+        "message": "Batch EduNotes fee synchronization completed",
+    }
+
+
 @api_router.post("/students/{student_id}/move")
 async def move_student(
     student_id: str,
