@@ -332,14 +332,12 @@ export const useOperations = ({
 
   const syncEdunotesBatch = useCallback(
     async (batchId) => {
-      const result =
-        await api.syncEdunotesBatch(batchId);
-
-      await refresh();
-
-      return result;
+      // Start the server-side background job directly.
+      // Do not refresh the full dataset here because a refresh
+      // failure must not make a successful sync start look failed.
+      return await api.syncEdunotesBatch(batchId);
     },
-    [refresh]
+    []
   );
 
   // =========================================================
