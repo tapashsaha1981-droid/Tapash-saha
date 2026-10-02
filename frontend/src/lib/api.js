@@ -60,10 +60,13 @@ export const api = {
     client.post(`/students/${id}/move`, { batch_id }).then((r) => r.data),
   deleteStudent: (id) =>
     client.delete(`/students/${id}`).then((r) => r.data),
-
-  // EduNotes synchronization
-  syncEdunotesFees: (id) =>
-    client.post(`/students/${id}/sync-edunotes-fees`).then((r) => r.data),
+  // Batch-wise EduNotes synchronization
+  syncEdunotesBatch: (batchId) =>
+    client
+      .post(`/students/batch/${batchId}/sync-edunotes-fees`, null, {
+        timeout: 300000,
+      })
+      .then((r) => r.data),
 
   // payments
   listPayments: (params = {}) =>
@@ -101,6 +104,6 @@ export const api = {
   exportAll: () => client.get("/export").then((r) => r.data),
   importAll: (data) =>
     client.post("/import", data).then((r) => r.data),
-  seed: () => client.post("/seed", data).then((r) => r.data),
+  seed: () => client.post("/seed").then((r) => r.data),
   reset: () => client.post("/reset").then((r) => r.data),
 };
