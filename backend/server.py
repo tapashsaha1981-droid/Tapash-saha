@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, Header
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, Header, BackgroundTasks
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -1246,6 +1246,151 @@ async def sync_student_edunotes_fees(
         "student_name": student.get("name"),
         "message": "Complete EduNotes fee history synchronized successfully"
     }
+
+
+# ---------- Background batch synchronization ----------
+# The browser starts this job and receives an immediate response.
+# The actual synchronization then continues on the server, so the
+# browser/iPad screen can be locked without cancelling the request.
+async def _run_batch_sync_job(
+    job_id: str,
+    batch_id: str,
+):
+    await db.sync_jobs.update_one(
+        {"id": job_id},
+        {
+            "$set": {
+                "status": "running",
+                "started_at": datetime.now(timezone.utc).isoformat(),
+            }
+        },
+    )
+
+    try:
+        result = await sync_batch_edunotes_fees(batch_id)
+
+        await db.sync_jobs.update_one(
+            {"id": job_id},
+            {
+                "$set": {
+                    "status": "completed",
+                    "completed_at": datetime.now(timezone.utc).isoformat(),
+                    "result": result,
+                }
+            },
+        )
+
+    except Exception as exc:
+        logging.exception(
+            "Background EduNotes batch sync failed: job=%s batch=%s",
+            job_id,
+            batch_id,
+        )
+
+        await db.sync_jobs.update_one(
+            {"id": job_id},
+            {
+                "$set": {
+                    "status": "failed",
+                    "completed_at": datetime.now(timezone.utc).isoformat(),
+                    "error": str(exc),
+                }
+            },
+        )
+
+
+@api_router.post("/students/batch/{batch_id}/sync-edunotes-fees/background")
+async def start_background_batch_sync(
+    batch_id: str,
+    background_tasks: BackgroundTasks,
+):
+    batch = await db.batches.find_one(
+        {"id": batch_id},
+        {
+            "_id": 0,
+            "id": 1,
+            "name": 1,
+        },
+    )
+
+    if not batch:
+        raise HTTPException(
+            404,
+            "Batch not found",
+        )
+
+    # Do not start the same batch twice while a previous job is active.
+    active = await db.sync_jobs.find_one(
+        {
+            "batch_id": batch_id,
+            "status": {
+                "$in": ["queued", "running"],
+            },
+        },
+        {
+            "_id": 0,
+            "id": 1,
+            "batch_id": 1,
+            "batch_name": 1,
+            "status": 1,
+        },
+    )
+
+    if active:
+        return {
+            "ok": True,
+            "already_running": True,
+            "job_id": active.get("id"),
+            "batch_id": batch_id,
+            "batch_name": batch.get("name"),
+            "status": active.get("status"),
+            "message": "A synchronization job is already running for this batch",
+        }
+
+    job_id = str(uuid.uuid4())
+
+    await db.sync_jobs.insert_one(
+        {
+            "id": job_id,
+            "batch_id": batch_id,
+            "batch_name": batch.get("name"),
+            "status": "queued",
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
+    )
+
+    background_tasks.add_task(
+        _run_batch_sync_job,
+        job_id,
+        batch_id,
+    )
+
+    return {
+        "ok": True,
+        "job_id": job_id,
+        "batch_id": batch_id,
+        "batch_name": batch.get("name"),
+        "status": "queued",
+        "message": "Batch synchronization started in the background",
+    }
+
+
+@api_router.get("/students/batch-sync/jobs/{job_id}")
+async def get_background_batch_sync_status(
+    job_id: str,
+):
+    job = await db.sync_jobs.find_one(
+        {"id": job_id},
+        {"_id": 0},
+    )
+
+    if not job:
+        raise HTTPException(
+            404,
+            "Synchronization job not found",
+        )
+
+    return job
 
 
 @api_router.post("/students/batch/{batch_id}/sync-edunotes-fees")
