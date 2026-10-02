@@ -79,13 +79,15 @@ export const api = {
   // Starts the server-side background sync and returns immediately.
   syncEdunotesBatch: (batchId) =>
     client
-      .post(`/students/batch/${batchId}/sync-edunotes-fees`)
+      .post(
+        `/students/batch/${batchId}/sync-edunotes-fees/background`
+      )
       .then((r) => r.data),
 
   // Check the status of a background EduNotes batch sync.
   getEdunotesBatchSyncStatus: (jobId) =>
     client
-      .get(`/students/batch/sync-edunotes-fees/status/${jobId}`)
+      .get(`/students/batch-sync/jobs/${jobId}`)
       .then((r) => r.data),
 
   // payments
