@@ -793,7 +793,16 @@ Thank you.
       if (!file) return;
 
       try {
-        const text = await file.text();
+        const text = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+
+          reader.onload = () => resolve(String(reader.result || ""));
+          reader.onerror = () =>
+            reject(new Error("Could not read the selected CSV file."));
+
+          reader.readAsText(file, "UTF-8");
+        });
+
         const parsed = parseCSV(text);
 
         if (parsed.length < 2) {
@@ -899,8 +908,23 @@ Thank you.
           error
         );
 
+        const serverDetail = error?.response?.data?.detail;
+        const serverMessage =
+          typeof serverDetail === "string"
+            ? serverDetail
+            : Array.isArray(serverDetail)
+              ? serverDetail.map((item) => item?.msg || "").filter(Boolean).join("; ")
+              : "";
+
+        console.error("Board CSV import error details:", {
+          status: error?.response?.status,
+          data: error?.response?.data,
+          message: error?.message
+        });
+
         toast.error(
-          error?.response?.data?.detail ||
+          serverMessage ||
+            error?.message ||
             "Could not import Board CSV."
         );
       }
