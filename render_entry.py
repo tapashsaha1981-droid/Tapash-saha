@@ -9,7 +9,7 @@ This file:
 - Uses Tuition Manager board: CBSE / TBSE.
 - Detects Class 5-12 from the existing Tuition Manager batch name.
 - Updates EduNotes profiles with board + class_id.
-- Matches existing EduNotes students by name + phone.
+- Matches existing EduNotes students by phone number only.
 - Stores a permanent Tuition Manager -> EduNotes profile mapping.
 - Repairs incomplete fee histories instead of skipping existing records.
 - Supports students sharing the same phone number.
@@ -366,16 +366,22 @@ async def ensure_edunotes_student_fixed(
         # 5. FIND EXISTING PROFILE
         #
         # IMPORTANT:
-        # Always use the permanent Tuition Manager ->
-        # EduNotes profile mapping first.
+        # Phone number is the ONLY identity used for matching.
         #
-        # This prevents a student from getting a duplicate
-        # EduNotes account when their name, class, board, or
-        # other editable details are changed and the student
-        # is saved again in Tuition Manager.
+        # Rules:
+        # 1. If the permanent mapping exists, use it only when the
+        #    mapped EduNotes profile has the same phone number.
+        # 2. Otherwise search EduNotes student profiles by phone only.
+        # 3. Do NOT compare names.
+        # 4. Do NOT match by username.
+        # 5. If exactly one profile has the phone, reuse that account.
+        # 6. If more than one profile has the same phone, stop safely
+        #    instead of choosing the wrong account.
+        # 7. If no profile has the phone, continue to new-account
+        #    creation.
         #
-        # If no valid mapping exists, fall back to the existing
-        # safe phone + name / username matching logic.
+        # Existing password, login/username and device binding are
+        # never changed when an existing profile is reused.
         # ============================================================
 
         existing_profile = None
@@ -412,24 +418,45 @@ async def ensure_edunotes_student_fixed(
 
             if mapped_profiles:
 
-                existing_profile = (
-                    mapped_profiles[0]
+                mapped_profile = mapped_profiles[0]
+
+                # The permanent mapping is trusted only when the
+                # EduNotes phone still matches the Tuition Manager phone.
+                # This prevents an old/stale mapping from linking the
+                # wrong student.
+                mapped_phone = srv._normalise_phone(
+                    mapped_profile.get("phone")
                 )
 
-                srv.logger.info(
-                    "Using permanent EduNotes profile mapping "
-                    "for %s (%s): %s",
-                    student_name,
-                    phone,
-                    stored_profile_id,
-                )
+                if mapped_phone == phone:
+
+                    existing_profile = mapped_profile
+
+                    srv.logger.info(
+                        "Using permanent EduNotes profile mapping "
+                        "for %s (%s): %s",
+                        student_name,
+                        phone,
+                        stored_profile_id,
+                    )
+
+                else:
+
+                    srv.logger.warning(
+                        "Stored EduNotes profile mapping has a "
+                        "different phone for %s (%s): %s. "
+                        "Ignoring the mapping and searching by "
+                        "phone only.",
+                        student_name,
+                        phone,
+                        stored_profile_id,
+                    )
 
             else:
 
                 srv.logger.warning(
                     "Stored EduNotes profile mapping is invalid "
-                    "for %s (%s): %s. Falling back to safe "
-                    "phone/name matching.",
+                    "for %s (%s): %s. Searching by phone only.",
                     student_name,
                     phone,
                     stored_profile_id,
@@ -459,98 +486,52 @@ async def ensure_edunotes_student_fixed(
                 profile_response.json()
             )
 
-            normalized_name = (
-                _clean_name(student_name)
-            )
-
-            existing_profile = next(
-                (
-                    profile
-                    for profile in profiles
-                    if (
-                        srv._normalise_phone(
-                            profile.get("phone")
-                        )
-                        == phone
-                        and
-                        _clean_name(
-                            profile.get(
-                                "full_name"
-                            )
-                        )
-                        == normalized_name
+            phone_matches = [
+                profile
+                for profile in profiles
+                if (
+                    srv._normalise_phone(
+                        profile.get("phone")
                     )
-                ),
-                None,
-            )
+                    == phone
+                )
+            ]
 
-            # A previous partial synchronization can leave the correct
-            # EduNotes profile in place while the normal name+phone lookup
-            # misses it. In that case, recover the profile by its unique
-            # username (mobile number), but only when the name also matches.
-            if not existing_profile:
-                username_response = (
-                    srv._supabase_request(
-                        "GET",
-                        f"{base}/profiles",
-                        headers=headers,
-                        params={
-                            "select":
-                                "id,full_name,username,phone,"
-                                "class_id,board,role",
-                            "username":
-                                f"eq.{phone}",
-                            "limit":
-                                "1",
-                        },
-                    )
+            if len(phone_matches) == 1:
+
+                existing_profile = phone_matches[0]
+
+                srv.logger.info(
+                    "Found existing EduNotes profile by "
+                    "phone only for %s (%s): %s",
+                    student_name,
+                    phone,
+                    existing_profile.get("id"),
                 )
 
-                username_profiles = (
-                    username_response.json()
+            elif len(phone_matches) > 1:
+
+                # Never guess if the supposedly unique phone number
+                # appears on more than one EduNotes student profile.
+                srv.logger.error(
+                    "EduNotes phone match is ambiguous for %s (%s): "
+                    "%s profiles found. No account will be selected "
+                    "or created.",
+                    student_name,
+                    phone,
+                    len(phone_matches),
                 )
-
-                username_profile = next(
-                    (
-                        profile
-                        for profile in username_profiles
-                        if (
-                            str(
-                                profile.get("role")
-                                or "student"
-                            ).strip().lower()
-                            == "student"
-                            and
-                            _clean_name(
-                                profile.get("full_name")
-                            )
-                            == normalized_name
-                        )
-                    ),
-                    None,
-                )
-
-                if username_profile:
-                    existing_profile = (
-                        username_profile
-                    )
-
-                    srv.logger.info(
-                        "Recovered existing EduNotes profile "
-                        "by username for %s (%s)",
-                        student_name,
-                        phone,
-                    )
+                return False
 
         # ============================================================
         # 6. PROFILE UPDATE PAYLOAD
         # ============================================================
 
+        # For an EXISTING EduNotes account, do not change username,
+        # password, login credentials, or device binding.
         profile_payload = {
             "full_name":
                 student_name,
-            "username":
-                phone,
             "phone":
                 phone,
             "active":
@@ -910,9 +891,8 @@ async def ensure_edunotes_student_fixed(
         # ============================================================
         # 12. INITIALIZE / REPAIR EDU NOTES FEE RECORDS
         #
-        # Only create/sync fee history when this EduNotes profile
-        # currently has no fee records. Existing payment history is
-        # never overwritten by this initialization guard.
+        # The sync function repairs/updates the complete fee history
+        # and creates any missing months.
         # ============================================================
         await _initialize_missing_fee_records(
             student,
