@@ -509,6 +509,14 @@ Thank you.
           "EduNotes batch sync failures:",
           result.failures
         );
+
+        const failedNames = result.failures
+          .map((item) => item.student_name)
+          .filter(Boolean);
+
+        toast.error(
+          `Failed students: ${failedNames.join(", ")}`
+        );
       }
     } catch (error) {
       console.error(
