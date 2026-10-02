@@ -61,6 +61,14 @@ export const api = {
   updateStudent: (id, data) =>
     client.put(`/students/${id}`, data).then((r) => r.data),
 
+  // Safe bulk Board CSV import
+  // Updates ONLY the Board field.
+  // Does not create/delete students or modify fees/payments/batches.
+  importStudentBoards: (rows) =>
+    client
+      .post("/students/import-board", { rows })
+      .then((r) => r.data),
+
   moveStudent: (id, batch_id) =>
     client
       .post(`/students/${id}/move`, { batch_id })
@@ -142,8 +150,8 @@ export const api = {
     client.post("/import", data).then((r) => r.data),
 
   seed: () =>
-    client.post("/seed").then((r) => r.data),
+    client.post("/seed", data).then((r) => r.data),
 
   reset: () =>
-    client.post("/reset").then((r) => r.data),
+    client.post("/reset", data).then((r) => r.data),
 };
