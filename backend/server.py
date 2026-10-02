@@ -13,6 +13,7 @@ import uuid
 from datetime import datetime, timezone, timedelta
 from urllib.parse import quote
 import requests
+from pymongo import UpdateOne
 
 
 ROOT_DIR = Path(__file__).parent
@@ -1659,8 +1660,8 @@ async def import_student_boards(payload: BoardImportPayload):
 
     results = []
     mismatches = []
-    updated = 0
     unchanged = 0
+    update_operations = []
 
     # Pre-scan phone numbers so EVERY row belonging to a duplicate
     # phone group is reported as a mismatch. No duplicate row is
@@ -1778,15 +1779,15 @@ async def import_student_boards(payload: BoardImportPayload):
         old_board = str(student.get("board") or "").upper()
 
         # Only the Board field is ever changed.
-        result = await db.students.update_one(
-            {"id": student["id"]},
-            {"$set": {"board": new_board}}
+        # Queue the update and execute all Board changes in ONE MongoDB
+        # bulk operation after validation. This prevents a large CSV from
+        # timing out because of hundreds of individual database requests.
+        update_operations.append(
+            UpdateOne(
+                {"id": student["id"]},
+                {"$set": {"board": new_board}}
+            )
         )
-
-        if result.modified_count > 0:
-            updated += 1
-        else:
-            unchanged += 1
 
         results.append({
             "student_id": student["id"],
@@ -1794,8 +1795,23 @@ async def import_student_boards(payload: BoardImportPayload):
             "phone": student.get("phone"),
             "old_board": old_board,
             "new_board": new_board,
-            "changed": result.modified_count > 0
+            "changed": old_board != new_board
         })
+
+    # Execute all validated Board updates in one database call.
+    updated = 0
+    if update_operations:
+        bulk_result = await db.students.bulk_write(
+            update_operations,
+            ordered=False
+        )
+        updated = bulk_result.modified_count
+
+    unchanged = sum(
+        1
+        for item in results
+        if not item["changed"]
+    )
 
     return {
         "ok": True,
