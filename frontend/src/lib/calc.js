@@ -156,10 +156,11 @@ export const dashboardStats = (
 
     collected += st.paidThisMonth;
 
-    pending += Math.max(
-      0,
-      st.fee - st.paidThisMonth
-    );
+    // TOTAL OUTSTANDING BALANCE
+    // Includes all fees due from the student's
+    // join month through the selected month,
+    // minus all payments already made.
+    pending += st.outstanding;
   }
 
   return {
