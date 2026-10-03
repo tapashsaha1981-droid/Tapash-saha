@@ -49,7 +49,6 @@ export const StudentCard = ({
   const { payments = [] } = useData();
   const initial = s.name.charAt(0).toUpperCase();
 
-  const remaining = Math.max(0, st.fee - st.paidThisMonth);
   const unpaid = st.status !== "paid";
 
   // Normally show current + previous month.
@@ -106,6 +105,9 @@ export const StudentCard = ({
     0
   );
 
+  // TOTAL OUTSTANDING BALANCE
+  // This is the student's complete outstanding amount,
+  // not just the current month's balance.
   const totalBalance = Math.max(
     0,
     Number(st.totalDue || 0) - Number(st.totalPaid || 0)
@@ -201,7 +203,7 @@ TAPASH SIR`
             To Be Paid
           </div>
           <div className="font-bold text-rose-700">
-            {inr(remaining)}
+            {inr(totalBalance)}
           </div>
         </div>
       </div>
