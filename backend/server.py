@@ -2196,10 +2196,14 @@ async def verify_student_razorpay_payment(
                 "payment_method": "razorpay_test",
             }
             await db.payments.insert_one(record)
-        await sync_payment_for_student(student["id"])
+        sync_ok = await sync_payment_for_student(student["id"])
+        if sync_ok is not True:
+            raise RuntimeError(
+                "EduNotes Pro fee-history synchronization did not confirm success."
+            )
         await db.razorpay_student_orders.update_one(
             {"order_id": payload.order_id},
-            {"$set": {"status": "recorded", "recorded_at": datetime.now(timezone.utc).isoformat()}},
+            {"$set": {"status": "recorded", "synced_at": datetime.now(timezone.utc).isoformat(), "recorded_at": datetime.now(timezone.utc).isoformat()}},
         )
     except Exception:
         logging.exception("Verified Razorpay payment needs reconciliation")
