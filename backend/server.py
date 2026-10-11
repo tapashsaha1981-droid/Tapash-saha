@@ -1977,6 +1977,78 @@ async def delete_student(
     return {"ok": True}
 
 
+# ---------- Razorpay Test Mode preparation ----------
+# These teacher-authenticated endpoints are intentionally limited to order
+# preparation. They do not expose student checkout, record payments, or
+# modify the existing manual fee collection process.
+class RazorpayTestOrderIn(BaseModel):
+    student_id: str
+    month: str
+
+
+@api_router.post("/razorpay/test-order")
+async def create_razorpay_test_order(payload: RazorpayTestOrderIn):
+    key_id = os.environ.get("RAZORPAY_KEY_ID", "")
+    key_secret = os.environ.get("RAZORPAY_KEY_SECRET", "")
+    if not key_id.startswith("rzp_test_") or not key_secret:
+        raise HTTPException(503, "Razorpay Test Mode is not configured")
+
+    student = await db.students.find_one(
+        {"id": payload.student_id},
+        {"_id": 0, "id": 1, "monthly_fee": 1},
+    )
+    if not student:
+        raise HTTPException(404, "Student not found")
+
+    # Never accept an amount from the browser. Derive it from the ledger.
+    from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+    try:
+        fee = Decimal(str(student.get("monthly_fee") or 0))
+        if not fee.is_finite() or fee <= 0:
+            raise ValueError("Invalid fee")
+    except (InvalidOperation, ValueError):
+        raise HTTPException(400, "Student monthly fee is invalid")
+
+    month = payload.month.strip()
+    import re
+    if not re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", month):
+        raise HTTPException(400, "Month must be YYYY-MM")
+
+    previous = await db.payments.find(
+        {"student_id": payload.student_id, "month": month},
+        {"_id": 0, "amount": 1},
+    ).to_list(10000)
+    try:
+        paid = sum((Decimal(str(p.get("amount") or 0)) for p in previous), Decimal("0"))
+    except InvalidOperation:
+        raise HTTPException(500, "Existing payment ledger contains invalid amounts")
+    due = fee - paid
+    paise = int((due * 100).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+    if paise < 100:
+        raise HTTPException(400, "No payable balance for this month")
+
+    import razorpay
+    from fastapi.concurrency import run_in_threadpool
+    try:
+        client = razorpay.Client(auth=(key_id, key_secret))
+        order = await run_in_threadpool(
+            client.order.create,
+            {"amount": paise, "currency": "INR", "payment_capture": 1,
+             "notes": {"student_id": payload.student_id, "month": month}},
+        )
+    except Exception:
+        logging.exception("Razorpay test order creation failed")
+        raise HTTPException(502, "Could not create Razorpay test order")
+
+    await db.razorpay_test_orders.insert_one({
+        "order_id": order["id"], "student_id": payload.student_id,
+        "month": month, "amount_paise": paise, "status": "created",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+    return {"order_id": order["id"], "key_id": key_id,
+            "amount_paise": paise, "currency": "INR", "test_mode": True}
+
+
 # ---------- Payment routes ----------
 @api_router.get("/payments")
 async def list_payments(
