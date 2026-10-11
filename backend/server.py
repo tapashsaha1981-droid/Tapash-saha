@@ -2154,21 +2154,44 @@ async def verify_student_razorpay_payment(
     except Exception:
         logging.exception("Could not ensure Razorpay idempotency index")
         raise HTTPException(500, "Payment safety check is unavailable; no fee record was changed")
-    # Claim order atomically; concurrent callbacks cannot record it twice.
+    # Return immediately for a fully recorded payment. This makes repeat callbacks idempotent.
     already = await db.razorpay_student_orders.find_one(
         {"order_id": payload.order_id, "profile_id": profile_id, "status": "recorded", "payment_id": payload.payment_id},
         {"_id": 0, "order_id": 1},
     )
     if already:
         return {"ok": True, "already_recorded": True, "message": "Payment is already recorded"}
+
+    # Never let a second payment replace the payment already associated with this order.
+    if order_doc.get("payment_id") and order_doc.get("payment_id") != payload.payment_id:
+        raise HTTPException(409, "A different payment is already attached to this order")
+
+    # Claim atomically. A verified payment that previously failed during ledger or
+    # Supabase synchronization may be retried from reconciliation_required.
+    # The unique payment/month index below prevents duplicate ledger rows.
     claim = await db.razorpay_student_orders.update_one(
-        {"order_id": payload.order_id, "profile_id": profile_id, "status": "created"},
+        {
+            "order_id": payload.order_id,
+            "profile_id": profile_id,
+            "student_id": student["id"],
+            "status": {"$in": ["created", "reconciliation_required"]},
+            "$or": [
+                {"payment_id": {"$exists": False}},
+                {"payment_id": None},
+                {"payment_id": payload.payment_id},
+            ],
+        },
         {"$set": {"status": "verifying", "payment_id": payload.payment_id, "verified_at": datetime.now(timezone.utc).isoformat()}},
     )
     if claim.matched_count == 0:
-        raise HTTPException(409, "This order is already being processed or needs administrator reconciliation. Do not pay again.")
-    if order_doc.get("payment_id") and order_doc.get("payment_id") != payload.payment_id:
-        raise HTTPException(409, "A different payment is already attached to this order")
+        # Another request may have completed while this request was checking.
+        already = await db.razorpay_student_orders.find_one(
+            {"order_id": payload.order_id, "profile_id": profile_id, "status": "recorded", "payment_id": payload.payment_id},
+            {"_id": 0, "order_id": 1},
+        )
+        if already:
+            return {"ok": True, "already_recorded": True, "message": "Payment is already recorded"}
+        raise HTTPException(409, "This order is already being processed or cannot be retried safely. Do not pay again.")
     try:
         breakdown = order_doc.get("breakdown", [])
         for item in breakdown:
