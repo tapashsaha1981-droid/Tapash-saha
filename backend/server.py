@@ -2167,18 +2167,31 @@ async def verify_student_razorpay_payment(
         raise HTTPException(409, "A different payment is already attached to this order")
 
     # Claim atomically. A verified payment that previously failed during ledger or
-    # Supabase synchronization may be retried from reconciliation_required.
+    # Supabase synchronization may be retried from reconciliation_required. Also
+    # recover a process that crashed while status was "verifying", but only after
+    # a 15-minute lease expires. This avoids leaving a captured payment stuck forever
+    # while not allowing an immediate second request to take over active work.
     # The unique payment/month index below prevents duplicate ledger rows.
+    stale_verification_before = (datetime.now(timezone.utc) - timedelta(minutes=15)).isoformat()
     claim = await db.razorpay_student_orders.update_one(
         {
             "order_id": payload.order_id,
             "profile_id": profile_id,
             "student_id": student["id"],
-            "status": {"$in": ["created", "reconciliation_required"]},
-            "$or": [
-                {"payment_id": {"$exists": False}},
-                {"payment_id": None},
-                {"payment_id": payload.payment_id},
+            "$and": [
+                {
+                    "$or": [
+                        {"status": {"$in": ["created", "reconciliation_required"]}},
+                        {"status": "verifying", "verified_at": {"$lt": stale_verification_before}},
+                    ]
+                },
+                {
+                    "$or": [
+                        {"payment_id": {"$exists": False}},
+                        {"payment_id": None},
+                        {"payment_id": payload.payment_id},
+                    ]
+                },
             ],
         },
         {"$set": {"status": "verifying", "payment_id": payload.payment_id, "verified_at": datetime.now(timezone.utc).isoformat()}},
