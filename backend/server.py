@@ -2070,6 +2070,7 @@ async def _reserve_razorpay_months(
     Expired reservations are reclaimed only when Razorpay confirms that the old
     order has no payments. If status cannot be confirmed, fail closed.
     """
+    import razorpay
     now = datetime.now(timezone.utc)
     now_iso = now.isoformat()
     expires_iso = (now + timedelta(minutes=20)).isoformat()
