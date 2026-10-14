@@ -2182,6 +2182,37 @@ async def create_student_razorpay_order(
     total_paise = sum(x["amount_paise"] for x in breakdown)
     from fastapi.concurrency import run_in_threadpool
     import razorpay
+
+    # Retry handling: after a student closes/cancels Razorpay Checkout, reuse the
+    # same still-open order instead of creating a second order or leaving the
+    # month permanently locked. Only reuse an order whose local record and live
+    # Razorpay status both confirm it is still open and whose amount/months match.
+    existing_claims = await db.razorpay_student_month_claims.find(
+        {"_id": {"$in": [f"{student['id']}:{m}" for m in months]}}, {"_id": 1, "month": 1, "order_id": 1, "status": 1, "mode": 1, "profile_id": 1}
+    ).to_list(len(months))
+    claimed_order_ids = {c.get("order_id") for c in existing_claims if c.get("order_id")}
+    if existing_claims and len(existing_claims) == len(months) and len(claimed_order_ids) == 1:
+        old_order_id = next(iter(claimed_order_ids))
+        old_doc = await db.razorpay_student_orders.find_one(
+            {"order_id": old_order_id, "profile_id": profile_id, "student_id": student["id"], "mode": mode}, {"_id": 0}
+        )
+        if old_doc and old_doc.get("status") == "created":
+            old_months = sorted(str(x.get("month")) for x in old_doc.get("breakdown", []))
+            if old_months == months and int(old_doc.get("amount_paise") or -1) == total_paise:
+                try:
+                    rz = razorpay.Client(auth=(key_id, key_secret))
+                    remote_order = await run_in_threadpool(rz.order.fetch, old_order_id)
+                    if (remote_order.get("id") == old_order_id
+                            and remote_order.get("status") == "created"
+                            and int(remote_order.get("amount") or -1) == total_paise
+                            and str(remote_order.get("currency") or "") == "INR"):
+                        return {"order_id": old_order_id, "key_id": key_id, "amount": total_paise,
+                                "currency": "INR", "name": str(student.get("name") or "EduNotes Pro Student"),
+                                "test_mode": mode == "test"}
+                except Exception:
+                    logging.exception("Could not confirm existing Razorpay order for safe retry")
+                    raise HTTPException(502, "Could not confirm the previous payment attempt. Do not pay again until status is checked.")
+
     reservation_token = str(uuid.uuid4())
     await _reserve_razorpay_months(
         student_id=student["id"], profile_id=profile_id, months=months,
