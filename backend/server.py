@@ -2198,6 +2198,78 @@ async def create_student_razorpay_order(
             existing_claims.append(claim)
 
     if existing_claims:
+        # Safe reconciliation for failed legacy orders. Razorpay support confirmed
+        # these failed order IDs cannot be reused for another payment. We still
+        # independently verify every attempt through Razorpay before releasing any
+        # month claim; any unknown/pending/captured state blocks checkout.
+        claim_order_ids = {c.get("order_id") for c in existing_claims if c.get("order_id")}
+        if claim_order_ids:
+            rz_reconcile = razorpay.Client(auth=(key_id, key_secret))
+            reconciled_orders = []
+            all_failed = True
+            for old_order_id in sorted(claim_order_ids):
+                old_doc = await db.razorpay_student_orders.find_one(
+                    {"order_id": old_order_id, "profile_id": profile_id,
+                     "student_id": student["id"], "mode": mode}, {"_id": 0}
+                )
+                if not old_doc or old_doc.get("status") == "recorded":
+                    all_failed = False
+                    break
+                # Existing fee ledger rows mean this order has already affected
+                # accounting, so never release its reservation automatically.
+                ledger_row = await db.payments.find_one(
+                    {"razorpay_order_id": old_order_id}, {"_id": 0, "id": 1}
+                )
+                if ledger_row:
+                    all_failed = False
+                    break
+                try:
+                    remote_order = await run_in_threadpool(rz_reconcile.order.fetch, old_order_id)
+                    remote_payments = await run_in_threadpool(
+                        rz_reconcile.payment.all, {"order_id": old_order_id}
+                    )
+                except Exception:
+                    logging.exception("Could not verify old Razorpay order before reconciliation")
+                    raise HTTPException(503, "Could not verify the previous payment attempts. Do not pay again; contact the administrator.")
+                remote_status = str(remote_order.get("status") or "").lower()
+                attempts = remote_payments.get("items", []) if isinstance(remote_payments, dict) else []
+                # Require at least one attempt and require every attempt to be
+                # explicitly failed. Empty, pending, authorized, captured, or
+                # otherwise unfamiliar states must never release a reservation.
+                if (remote_order.get("id") != old_order_id or remote_status == "paid"
+                        or not attempts or any(str(a.get("status") or "").lower() != "failed"
+                                               or a.get("captured") is True for a in attempts)):
+                    all_failed = False
+                    break
+                reconciled_orders.append(old_order_id)
+
+            if all_failed and reconciled_orders and len(reconciled_orders) == len(claim_order_ids):
+                # Mark first for an audit trail, then remove only claims attached
+                # to these verified-failed orders. Payment/order history is kept.
+                for old_order_id in reconciled_orders:
+                    await db.razorpay_student_orders.update_one(
+                        {"order_id": old_order_id, "profile_id": profile_id,
+                         "student_id": student["id"], "mode": mode,
+                         "status": {"$ne": "recorded"}},
+                        {"$set": {"status": "failed_reconciled",
+                                  "failed_reconciled_at": datetime.now(timezone.utc).isoformat(),
+                                  "failed_reconciled_reason": "Razorpay confirmed all payment attempts failed; old order cannot be reused"}},
+                    )
+                await db.razorpay_student_month_claims.delete_many({
+                    "order_id": {"$in": reconciled_orders},
+                    "student_id": student["id"], "profile_id": profile_id, "mode": mode,
+                })
+                existing_claims = []
+                for month in months:
+                    claim = await db.razorpay_student_month_claims.find_one(
+                        {"_id": f"{student['id']}:{month}"},
+                        {"_id": 0, "student_id": 1, "profile_id": 1, "month": 1,
+                         "mode": 1, "order_id": 1, "status": 1, "reservation_token": 1},
+                    )
+                    if claim:
+                        existing_claims.append(claim)
+
+    if existing_claims:
         # Reuse only when every selected month belongs to the same existing
         # order and the stored order exactly matches this student's selection.
         claim_order_ids = {c.get("order_id") for c in existing_claims}
