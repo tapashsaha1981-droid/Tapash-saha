@@ -2260,11 +2260,40 @@ async def create_student_razorpay_order(
                     remote_months = sorted(
                         m.strip() for m in str(notes.get("months") or "").split(",") if m.strip()
                     )
+                    # Validate a legacy order against the months reserved by THAT
+                    # order, not the months the student is selecting in this retry.
+                    # A retry may select September + October while the stale order
+                    # only reserved October; comparing with total_paise would block
+                    # safe reconciliation forever.
+                    claimed_total_paise = 0
+                    try:
+                        for claimed_month in claimed_months:
+                            claimed_balance = await _student_month_balance(
+                                student["id"], claimed_month, student.get("monthly_fee")
+                            )
+                            claimed_total_paise += int(
+                                (claimed_balance * 100).quantize(
+                                    Decimal("1"), rounding=ROUND_HALF_UP
+                                )
+                            )
+                    except Exception:
+                        logging.exception(
+                            "Could not calculate legacy Razorpay order amount for reconciliation"
+                        )
+                        all_failed = False
+                        break
+
                     if (notes.get("edunotes_profile_id") != profile_id
                             or str(notes.get("tuition_student_id")) != str(student["id"])
                             or remote_months != claimed_months
-                            or int(remote_order.get("amount") or 0) != total_paise
+                            or int(remote_order.get("amount") or 0) != claimed_total_paise
                             or str(remote_order.get("currency") or "").upper() != "INR"):
+                        logging.warning(
+                            "Razorpay legacy order reconciliation blocked: metadata/amount mismatch "
+                            "(order_id=%s, months_match=%s, expected_paise=%s, remote_paise=%s, currency=%s)",
+                            old_order_id, remote_months == claimed_months, claimed_total_paise,
+                            remote_order.get("amount"), remote_order.get("currency")
+                        )
                         all_failed = False
                         break
                 # Require at least one attempt and every attempt explicitly failed.
