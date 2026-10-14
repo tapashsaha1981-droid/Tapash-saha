@@ -2208,11 +2208,27 @@ async def create_student_razorpay_order(
             reconciled_orders = []
             all_failed = True
             for old_order_id in sorted(claim_order_ids):
+                # First verify the reservation's ownership. This is needed for
+                # legacy claims whose order metadata was saved but whose local
+                # order document was not persisted successfully.
+                related_claims = await db.razorpay_student_month_claims.find(
+                    {"order_id": old_order_id}, {"_id": 0, "student_id": 1,
+                     "profile_id": 1, "mode": 1, "month": 1}
+                ).to_list(length=100)
+                if (not related_claims or any(
+                    c.get("student_id") != student["id"]
+                    or c.get("profile_id") != profile_id
+                    or c.get("mode") != mode
+                    for c in related_claims
+                )):
+                    all_failed = False
+                    break
+
                 old_doc = await db.razorpay_student_orders.find_one(
                     {"order_id": old_order_id, "profile_id": profile_id,
                      "student_id": student["id"], "mode": mode}, {"_id": 0}
                 )
-                if not old_doc or old_doc.get("status") == "recorded":
+                if old_doc and old_doc.get("status") == "recorded":
                     all_failed = False
                     break
                 # Existing fee ledger rows mean this order has already affected
@@ -2233,12 +2249,33 @@ async def create_student_razorpay_order(
                     raise HTTPException(503, "Could not verify the previous payment attempts. Do not pay again; contact the administrator.")
                 remote_status = str(remote_order.get("status") or "").lower()
                 attempts = remote_payments.get("items", []) if isinstance(remote_payments, dict) else []
-                # Require at least one attempt and require every attempt to be
-                # explicitly failed. Empty, pending, authorized, captured, or
-                # otherwise unfamiliar states must never release a reservation.
+                notes = remote_order.get("notes") or {}
+                # If the local order document is missing (legacy interrupted
+                # write), require Razorpay's own notes, amount, currency, and
+                # month claims to prove this order belongs to this student.
+                if not old_doc:
+                    claimed_months = sorted(
+                        str(c.get("month")) for c in related_claims if c.get("month")
+                    )
+                    remote_months = sorted(
+                        m.strip() for m in str(notes.get("months") or "").split(",") if m.strip()
+                    )
+                    if (notes.get("edunotes_profile_id") != profile_id
+                            or str(notes.get("tuition_student_id")) != str(student["id"])
+                            or remote_months != claimed_months
+                            or int(remote_order.get("amount") or 0) != total_paise
+                            or str(remote_order.get("currency") or "").upper() != "INR"):
+                        all_failed = False
+                        break
+                # Require at least one attempt and every attempt explicitly failed.
+                # Empty, pending, authorized, captured, paid, or unknown states
+                # never release a reservation.
                 if (remote_order.get("id") != old_order_id or remote_status == "paid"
-                        or not attempts or any(str(a.get("status") or "").lower() != "failed"
-                                               or a.get("captured") is True for a in attempts)):
+                        or not attempts or any(
+                            str(a.get("status") or "").lower() != "failed"
+                            or a.get("captured") is True
+                            for a in attempts
+                        )):
                     all_failed = False
                     break
                 reconciled_orders.append(old_order_id)
