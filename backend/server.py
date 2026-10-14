@@ -2192,10 +2192,106 @@ async def create_student_razorpay_order(
         claim = await db.razorpay_student_month_claims.find_one(
             {"_id": f"{student['id']}:{month}"},
             {"_id": 0, "student_id": 1, "profile_id": 1, "month": 1,
-             "mode": 1, "order_id": 1, "status": 1, "reservation_token": 1},
+             "mode": 1, "order_id": 1, "status": 1, "reservation_token": 1,
+             "receipt": 1, "amount_paise": 1, "currency": 1, "breakdown": 1},
         )
         if claim:
             existing_claims.append(claim)
+
+    # Recover the narrow failure window where Razorpay accepted order.create but
+    # MongoDB failed before the returned order ID was attached to the reservation.
+    # The receipt and immutable checkout details are written to the claims BEFORE
+    # calling Razorpay, so a retry can find and validate the original order.
+    if existing_claims and all(not c.get("order_id") for c in existing_claims):
+        receipts = {c.get("receipt") for c in existing_claims if c.get("receipt")}
+        if receipts:
+            if (len(receipts) != 1 or len(existing_claims) != len(months)
+                    or any(c.get("student_id") != student["id"]
+                           or c.get("profile_id") != profile_id
+                           or c.get("mode") != mode for c in existing_claims)):
+                raise HTTPException(409, "A previous payment reservation needs administrator reconciliation. Do not pay again.")
+            recovery_receipt = next(iter(receipts))
+            related = await db.razorpay_student_month_claims.find(
+                {"receipt": recovery_receipt},
+                {"_id": 0, "student_id": 1, "profile_id": 1, "month": 1,
+                 "mode": 1, "reservation_token": 1, "receipt": 1,
+                 "amount_paise": 1, "currency": 1, "breakdown": 1, "order_id": 1},
+            ).to_list(length=100)
+            if (not related or any(
+                c.get("student_id") != student["id"]
+                or c.get("profile_id") != profile_id
+                or c.get("mode") != mode
+                or c.get("receipt") != recovery_receipt
+                for c in related
+            )):
+                raise HTTPException(409, "A previous payment reservation could not be safely verified. Do not pay again.")
+            saved_breakdowns = [c.get("breakdown") for c in related if c.get("breakdown")]
+            saved_amounts = {int(c.get("amount_paise") or 0) for c in related}
+            saved_currencies = {str(c.get("currency") or "") for c in related}
+            saved_months = sorted(str(c.get("month") or "") for c in related)
+            if (not saved_breakdowns or len(saved_amounts) != 1 or len(saved_currencies) != 1
+                    or saved_currencies != {"INR"} or len(saved_months) != len(set(saved_months))):
+                raise HTTPException(409, "A previous payment reservation has incomplete recovery details. Do not pay again.")
+            saved_breakdown = saved_breakdowns[0]
+            expected_months = sorted(str(x.get("month") or "") for x in saved_breakdown)
+            expected_amount = sum(int(x.get("amount_paise") or 0) for x in saved_breakdown)
+            if (saved_months != expected_months or expected_amount not in saved_amounts):
+                raise HTTPException(409, "A previous payment reservation does not match its saved checkout details. Do not pay again.")
+            try:
+                recovery_client = razorpay.Client(auth=(key_id, key_secret))
+                response = await run_in_threadpool(
+                    recovery_client.order.all, {"receipt": recovery_receipt, "count": 100}
+                )
+            except Exception:
+                logging.exception("Could not search Razorpay by saved checkout receipt")
+                raise HTTPException(503, "Could not verify the previous checkout. Do not pay again; contact the administrator.")
+            remote_items = response.get("items", []) if isinstance(response, dict) else []
+            matches = [o for o in remote_items if o.get("receipt") == recovery_receipt]
+            if len(matches) != 1:
+                # A missing result is NOT proof the remote order was never created.
+                raise HTTPException(409, "The previous checkout is still being reconciled. Do not pay again; contact the administrator.")
+            recovered = matches[0]
+            remote_notes = recovered.get("notes") or {}
+            remote_months = sorted(
+                m.strip() for m in str(remote_notes.get("months") or "").split(",") if m.strip()
+            )
+            if (not recovered.get("id")
+                    or remote_notes.get("edunotes_profile_id") != profile_id
+                    or str(remote_notes.get("tuition_student_id")) != str(student["id"])
+                    or remote_months != expected_months
+                    or int(recovered.get("amount") or 0) != expected_amount
+                    or str(recovered.get("currency") or "").upper() != "INR"):
+                raise HTTPException(409, "The previous checkout could not be matched safely. Do not pay again; contact the administrator.")
+            recovered_status = str(recovered.get("status") or "").lower()
+            local_status = "created" if recovered_status in {"created", "attempted"} else "reconciliation_required"
+            await db.razorpay_student_orders.update_one(
+                {"order_id": recovered["id"]},
+                {"$setOnInsert": {
+                    "order_id": recovered["id"], "profile_id": profile_id,
+                    "student_id": student["id"], "amount_paise": expected_amount,
+                    "currency": "INR", "breakdown": saved_breakdown,
+                    "status": local_status, "mode": mode,
+                    "reservation_token": related[0].get("reservation_token"),
+                    "receipt": recovery_receipt,
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                }},
+                upsert=True,
+            )
+            await db.razorpay_student_month_claims.update_many(
+                {"receipt": recovery_receipt, "student_id": student["id"],
+                 "profile_id": profile_id, "mode": mode},
+                {"$set": {"order_id": recovered["id"], "status": local_status,
+                          "expires_at": None if local_status == "reconciliation_required" else (datetime.now(timezone.utc) + timedelta(minutes=20)).isoformat()}},
+            )
+            existing_claims = []
+            for month in months:
+                claim = await db.razorpay_student_month_claims.find_one(
+                    {"_id": f"{student['id']}:{month}"},
+                    {"_id": 0, "student_id": 1, "profile_id": 1, "month": 1,
+                     "mode": 1, "order_id": 1, "status": 1, "reservation_token": 1},
+                )
+                if claim:
+                    existing_claims.append(claim)
 
     if existing_claims:
         # Safe reconciliation for failed legacy orders. Razorpay support confirmed
@@ -2383,16 +2479,26 @@ async def create_student_razorpay_order(
         raise HTTPException(409, "A previous Razorpay order still reserves the selected month. Do not pay again; administrator reconciliation is required.")
 
     reservation_token = str(uuid.uuid4())
+    receipt = "edu_" + uuid.uuid4().hex[:24]
     await _reserve_razorpay_months(
         student_id=student["id"], profile_id=profile_id, months=months,
         mode=mode, reservation_token=reservation_token,
         key_id=key_id, key_secret=key_secret,
     )
+    # Persist the remote idempotency/recovery key and exact checkout payload before
+    # the network call. If the process crashes or Mongo write fails after Razorpay
+    # creates the order, a retry can recover the same order rather than orphaning
+    # a permanent reservation or creating a second payable order.
+    await db.razorpay_student_month_claims.update_many(
+        {"reservation_token": reservation_token, "status": "reserving"},
+        {"$set": {"receipt": receipt, "amount_paise": total_paise,
+                  "currency": "INR", "breakdown": breakdown}},
+    )
     try:
         rz = razorpay.Client(auth=(key_id, key_secret))
         order = await run_in_threadpool(
             rz.order.create,
-            {"amount": total_paise, "currency": "INR", "receipt": "edu_" + uuid.uuid4().hex[:24],
+            {"amount": total_paise, "currency": "INR", "receipt": receipt,
              "payment_capture": 1,
              "notes": {"edunotes_profile_id": profile_id, "tuition_student_id": student["id"], "months": ",".join(months)}},
         )
@@ -2400,6 +2506,7 @@ async def create_student_razorpay_order(
             "order_id": order["id"], "profile_id": profile_id, "student_id": student["id"],
             "amount_paise": total_paise, "currency": "INR", "breakdown": breakdown,
             "status": "created", "mode": mode, "reservation_token": reservation_token,
+            "receipt": receipt,
             "created_at": datetime.now(timezone.utc).isoformat(),
         })
         await db.razorpay_student_month_claims.update_many(
@@ -2431,7 +2538,9 @@ async def create_student_razorpay_order(
                 # expire the reservation and risk a second charge.
                 await db.razorpay_student_month_claims.update_many(
                     {"reservation_token": reservation_token},
-                    {"$set": {"status": "reconciliation_required", "expires_at": None}},
+                    {"$set": {"status": "reconciliation_required", "expires_at": None,
+                              "receipt": receipt, "amount_paise": total_paise,
+                              "currency": "INR", "breakdown": breakdown}},
                 )
         raise HTTPException(502, "Could not safely finish payment setup. Do not retry payment until the administrator checks the order.")
     return {"order_id": order["id"], "key_id": key_id, "amount": total_paise,
