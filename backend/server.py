@@ -2463,19 +2463,31 @@ async def create_student_razorpay_order(
                             "test_mode": mode == "test",
                         }
                     raise HTTPException(409, "The previous Razorpay order is not safely reusable. Please contact the administrator before paying again.")
-        # A single checkout response can contain only one Razorpay order. If the
-        # selected months are already attached to different orders, do not merge
-        # or replace them: ask the student to retry one month at a time. This is
-        # actionable and preserves the old orders' ability to be paid safely.
-        claim_order_ids = {c.get("order_id") for c in existing_claims if c.get("order_id")}
+               claim_order_ids = {
+            c.get("order_id")
+            for c in existing_claims
+            if c.get("order_id")
+        }
+
         if len(claim_order_ids) > 1:
             raise HTTPException(
-                409,
-                "These fee months belong to different existing payment orders. "
-                "To avoid duplicate charges, go back and pay one month at a time, "
-                "starting with the month shown as already in progress. If it still "
-                "fails, contact the administrator with the month and order ID."
+                status_code=409,
+                detail=(
+                    "These months are reserved by different Razorpay orders. "
+                    "Do not pay again until the existing orders are reconciled. "
+                    "Please contact the administrator and provide these order IDs: "
+                    + ", ".join(sorted(claim_order_ids))
+                ),
             )
+
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "An existing Razorpay order still reserves this month. "
+                "Its payment status must be verified before another order "
+                "can be created. Do not pay again."
+            ),
+        )
         raise HTTPException(
             409,
             "A previous payment order still reserves this month and could still be payable. "
