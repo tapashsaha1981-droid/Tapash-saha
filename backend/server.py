@@ -2405,31 +2405,19 @@ async def create_student_razorpay_order(
                     break
                 reconciled_orders.append(old_order_id)
 
+            # IMPORTANT: failed payment attempts do NOT make a Razorpay order
+            # unpayable. An order in created/attempted state can still be paid,
+            # so never delete its month claim merely because all attempts failed.
+            # The safe path below reuses that order when it exactly matches the
+            # selected months. If different months belong to different orders,
+            # this endpoint cannot combine them into one checkout; keep claims and
+            # return an actionable response rather than risk duplicate charges.
             if all_failed and reconciled_orders and len(reconciled_orders) == len(claim_order_ids):
-                # Mark first for an audit trail, then remove only claims attached
-                # to these verified-failed orders. Payment/order history is kept.
-                for old_order_id in reconciled_orders:
-                    await db.razorpay_student_orders.update_one(
-                        {"order_id": old_order_id, "profile_id": profile_id,
-                         "student_id": student["id"], "mode": mode,
-                         "status": {"$ne": "recorded"}},
-                        {"$set": {"status": "failed_reconciled",
-                                  "failed_reconciled_at": datetime.now(timezone.utc).isoformat(),
-                                  "failed_reconciled_reason": "Razorpay confirmed all payment attempts failed; old order cannot be reused"}},
-                    )
-                await db.razorpay_student_month_claims.delete_many({
-                    "order_id": {"$in": reconciled_orders},
-                    "student_id": student["id"], "profile_id": profile_id, "mode": mode,
-                })
-                existing_claims = []
-                for month in months:
-                    claim = await db.razorpay_student_month_claims.find_one(
-                        {"_id": f"{student['id']}:{month}"},
-                        {"_id": 0, "student_id": 1, "profile_id": 1, "month": 1,
-                         "mode": 1, "order_id": 1, "status": 1, "reservation_token": 1},
-                    )
-                    if claim:
-                        existing_claims.append(claim)
+                logging.info(
+                    "Razorpay order has only failed attempts but reservation retained; "
+                    "order may still be payable (student_id=%s, order_ids=%s)",
+                    student["id"], sorted(reconciled_orders),
+                )
 
     if existing_claims:
         # Reuse only when every selected month belongs to the same existing
@@ -2475,8 +2463,25 @@ async def create_student_razorpay_order(
                             "test_mode": mode == "test",
                         }
                     raise HTTPException(409, "The previous Razorpay order is not safely reusable. Please contact the administrator before paying again.")
-        # Existing claim but not a proven reusable matching order: fail closed.
-        raise HTTPException(409, "A previous Razorpay order still reserves the selected month. Do not pay again; administrator reconciliation is required.")
+        # A single checkout response can contain only one Razorpay order. If the
+        # selected months are already attached to different orders, do not merge
+        # or replace them: ask the student to retry one month at a time. This is
+        # actionable and preserves the old orders' ability to be paid safely.
+        claim_order_ids = {c.get("order_id") for c in existing_claims if c.get("order_id")}
+        if len(claim_order_ids) > 1:
+            raise HTTPException(
+                409,
+                "These fee months belong to different existing payment orders. "
+                "To avoid duplicate charges, go back and pay one month at a time, "
+                "starting with the month shown as already in progress. If it still "
+                "fails, contact the administrator with the month and order ID."
+            )
+        raise HTTPException(
+            409,
+            "A previous payment order still reserves this month and could still be payable. "
+            "Refresh fee history and retry the same month to reuse its order; if the issue "
+            "continues, contact the administrator. Do not create another payment."
+        )
 
     reservation_token = str(uuid.uuid4())
     receipt = "edu_" + uuid.uuid4().hex[:24]
