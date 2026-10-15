@@ -1,4 +1,3 @@
-
 import React, { useMemo, useState } from "react";
 import {
   ChevronRight,
@@ -127,6 +126,7 @@ export const PaymentOverview = ({ paid, partial, unpaid }) => {
           fee - currentPaid
         );
 
+
         return {
           student,
           batchName:
@@ -159,7 +159,7 @@ export const PaymentOverview = ({ paid, partial, unpaid }) => {
 
     studentRows
       .filter(
-        (row) => row.totalDue > 0
+        (row) => row.previousDue > 0
       )
       .forEach((row) => {
         if (!groups.has(row.batchName)) {
@@ -200,6 +200,7 @@ export const PaymentOverview = ({ paid, partial, unpaid }) => {
     (group) =>
       group.name === selectedClass
   );
+
 
   const grandTotal = classGroups.reduce(
     (sum, group) =>
@@ -420,6 +421,7 @@ export const PaymentOverview = ({ paid, partial, unpaid }) => {
                       </div>
 
                       <div className="mt-1 text-sm text-slate-500">
+                        There are no students with
                         There are no students with pending dues.
                       </div>
                     </div>
