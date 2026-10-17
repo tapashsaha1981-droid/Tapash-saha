@@ -3462,6 +3462,12 @@ async def root():
 
 # ---------- WhatsApp Cloud API ----------
 # Separate routes; existing app APIs and payment logic are left unchanged.
+# Public status endpoint exposes only boolean configuration flags, never secrets.
+whatsapp_status_router = APIRouter(
+    prefix="/api/whatsapp",
+    tags=["WhatsApp"],
+)
+# Sending messages remains protected by the existing app authentication.
 whatsapp_router = APIRouter(
     prefix="/api/whatsapp",
     tags=["WhatsApp"],
@@ -3494,7 +3500,7 @@ def _normalize_whatsapp_phone(phone: str) -> str:
     return digits
 
 
-@whatsapp_router.get("/status")
+@whatsapp_status_router.get("/status")
 async def whatsapp_status():
     return {
         "configured": all([
@@ -3621,6 +3627,7 @@ async def whatsapp_receive_webhook(request: Request):
 # ---------- Register routers ----------
 app.include_router(public_router)
 app.include_router(api_router)
+app.include_router(whatsapp_status_router)
 app.include_router(whatsapp_router)
 app.include_router(whatsapp_webhook_router)
 
