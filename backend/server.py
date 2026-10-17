@@ -1,8 +1,11 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, Header, BackgroundTasks
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, Header, BackgroundTasks, Request, Query
+from fastapi.responses import PlainTextResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
+import re
+import hashlib
 import jwt
 import hmac
 import logging
@@ -3455,9 +3458,171 @@ async def root():
     }
 
 
+
+
+# ---------- WhatsApp Cloud API ----------
+# Separate routes; existing app APIs and payment logic are left unchanged.
+whatsapp_router = APIRouter(
+    prefix="/api/whatsapp",
+    tags=["WhatsApp"],
+    dependencies=[Depends(require_auth)],
+)
+whatsapp_webhook_router = APIRouter(
+    prefix="/webhooks/whatsapp",
+    tags=["WhatsApp webhook"],
+)
+
+
+class WhatsAppTemplateMessage(BaseModel):
+    to: str
+    template_name: Optional[str] = None
+    language_code: Optional[str] = None
+    body_parameters: List[str] = Field(default_factory=list)
+
+
+def _whatsapp_env(name: str) -> str:
+    return (os.getenv(name) or "").strip()
+
+
+def _normalize_whatsapp_phone(phone: str) -> str:
+    digits = re.sub(r"\D", "", phone or "")
+    # Indian student numbers may be stored as 10 digits.
+    if len(digits) == 10:
+        digits = "91" + digits
+    if not 8 <= len(digits) <= 15:
+        raise HTTPException(status_code=422, detail="Invalid recipient phone number")
+    return digits
+
+
+@whatsapp_router.get("/status")
+async def whatsapp_status():
+    return {
+        "configured": all([
+            _whatsapp_env("WHATSAPP_ACCESS_TOKEN"),
+            _whatsapp_env("WHATSAPP_PHONE_NUMBER_ID"),
+            _whatsapp_env("WHATSAPP_API_VERSION"),
+        ]),
+        "template_configured": bool(_whatsapp_env("WHATSAPP_FEE_TEMPLATE_NAME")),
+        "automatic_reminders_enabled": False,
+    }
+
+
+@whatsapp_router.post("/send-template")
+async def whatsapp_send_template(data: WhatsAppTemplateMessage):
+    token = _whatsapp_env("WHATSAPP_ACCESS_TOKEN")
+    phone_id = _whatsapp_env("WHATSAPP_PHONE_NUMBER_ID")
+    version = _whatsapp_env("WHATSAPP_API_VERSION")
+    template = data.template_name or _whatsapp_env("WHATSAPP_FEE_TEMPLATE_NAME")
+    language = data.language_code or _whatsapp_env("WHATSAPP_TEMPLATE_LANGUAGE") or "en"
+
+    if not all([token, phone_id, version, template]):
+        raise HTTPException(
+            status_code=503,
+            detail="WhatsApp credentials or approved template are missing",
+        )
+    if not re.fullmatch(r"v\d+\.\d+", version):
+        raise HTTPException(status_code=503, detail="Invalid WHATSAPP_API_VERSION")
+
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": _normalize_whatsapp_phone(data.to),
+        "type": "template",
+        "template": {
+            "name": template,
+            "language": {"code": language},
+        },
+    }
+    if data.body_parameters:
+        payload["template"]["components"] = [{
+            "type": "body",
+            "parameters": [
+                {"type": "text", "text": str(value)}
+                for value in data.body_parameters
+            ],
+        }]
+
+    try:
+        response = requests.post(
+            f"https://graph.facebook.com/{version}/{phone_id}/messages",
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/json",
+            },
+            json=payload,
+            timeout=20,
+        )
+    except requests.RequestException:
+        logging.getLogger(__name__).exception("WhatsApp API connection failed")
+        raise HTTPException(status_code=502, detail="WhatsApp API connection failed")
+
+    try:
+        result = response.json()
+    except ValueError:
+        result = {}
+
+    if not response.ok:
+        error = result.get("error", {})
+        raise HTTPException(
+            status_code=502,
+            detail={
+                "message": error.get("message", "WhatsApp message failed"),
+                "meta_code": error.get("code"),
+            },
+        )
+
+    messages = result.get("messages", [])
+    return {
+        "success": True,
+        "message_id": messages[0].get("id") if messages else None,
+        "status": "accepted_by_meta",
+    }
+
+
+@whatsapp_webhook_router.get("")
+async def whatsapp_verify_webhook(
+    mode: Optional[str] = Query(None, alias="hub.mode"),
+    verify_token: Optional[str] = Query(None, alias="hub.verify_token"),
+    challenge: Optional[str] = Query(None, alias="hub.challenge"),
+):
+    expected = _whatsapp_env("WHATSAPP_VERIFY_TOKEN")
+    if (
+        mode == "subscribe"
+        and expected
+        and verify_token
+        and hmac.compare_digest(verify_token, expected)
+        and challenge is not None
+    ):
+        return PlainTextResponse(challenge)
+    raise HTTPException(status_code=403, detail="Webhook verification failed")
+
+
+@whatsapp_webhook_router.post("")
+async def whatsapp_receive_webhook(request: Request):
+    app_secret = _whatsapp_env("WHATSAPP_APP_SECRET")
+    if not app_secret:
+        raise HTTPException(status_code=503, detail="WhatsApp app secret is not configured")
+
+    raw = await request.body()
+    signature = request.headers.get("x-hub-signature-256", "")
+    expected = "sha256=" + hmac.new(
+        app_secret.encode("utf-8"),
+        raw,
+        hashlib.sha256,
+    ).hexdigest()
+
+    if not signature or not hmac.compare_digest(signature, expected):
+        raise HTTPException(status_code=401, detail="Invalid WhatsApp webhook signature")
+
+    logging.getLogger(__name__).info("Verified WhatsApp webhook event received")
+    return {"status": "received"}
+
+
+
 # ---------- Register routers ----------
 app.include_router(public_router)
 app.include_router(api_router)
+app.include_router(whatsapp_router)
+app.include_router(whatsapp_webhook_router)
 
 
 # ---------- Attendance API ----------
