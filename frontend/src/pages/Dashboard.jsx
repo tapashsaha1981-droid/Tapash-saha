@@ -33,6 +33,7 @@ import {
 import { RecentActivity } from "@/components/RecentActivity";
 import { useBackup } from "@/lib/useBackup";
 import { toast } from "sonner";
+import { api } from "@/lib/api";
 
 export const Dashboard = () => {
   const {
@@ -52,6 +53,33 @@ export const Dashboard = () => {
 
   const [month, setMonth] = useState(currentMonth());
   const [mode, setMode] = useState("monthly");
+
+  // Send one manually confirmed WhatsApp template test message.
+  const sendWhatsAppTest = async () => {
+    const to = window.prompt(
+      "Enter the recipient WhatsApp number with country code (e.g. 919876543210):"
+    );
+    if (!to || !to.trim()) return;
+
+    if (!window.confirm(`Send ONE WhatsApp test message to ${to.trim()}?`)) {
+      return;
+    }
+
+    try {
+      const result = await api.sendWhatsAppTest(to.trim());
+      if (result?.success) {
+        toast.success("WhatsApp test accepted by Meta.");
+      } else {
+        toast.error("WhatsApp test was not confirmed. Please check the response.");
+      }
+    } catch (error) {
+      const detail = error?.response?.data?.detail;
+      const message = typeof detail === "string"
+        ? detail
+        : detail?.message || "WhatsApp test failed. Check backend configuration.";
+      toast.error(message);
+    }
+  };
 
   // Monthly Collection popup
   const [monthlyReportOpen, setMonthlyReportOpen] = useState(false);
@@ -467,6 +495,14 @@ export const Dashboard = () => {
               {refreshing
                 ? "Refreshing..."
                 : "Refresh"}
+            </Button>
+
+            <Button
+              variant="outline"
+              onClick={sendWhatsAppTest}
+              className="gap-2"
+            >
+              Test WhatsApp
             </Button>
 
             <Button
