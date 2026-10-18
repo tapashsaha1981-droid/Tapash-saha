@@ -3568,11 +3568,28 @@ async def whatsapp_send_template(data: WhatsAppTemplateMessage):
 
     if not response.ok:
         error = result.get("error", {})
+        error_data = error.get("error_data", {})
+        logging.getLogger(__name__).error(
+            "WhatsApp Graph API rejected message: http_status=%s "
+            "meta_type=%s meta_code=%s meta_subcode=%s details=%s "
+            "message=%s fbtrace_id=%s",
+            response.status_code,
+            error.get("type"),
+            error.get("code"),
+            error.get("error_subcode"),
+            error_data.get("details"),
+            error.get("message", "WhatsApp message failed"),
+            error.get("fbtrace_id"),
+        )
         raise HTTPException(
             status_code=502,
             detail={
                 "message": error.get("message", "WhatsApp message failed"),
+                "meta_type": error.get("type"),
                 "meta_code": error.get("code"),
+                "meta_subcode": error.get("error_subcode"),
+                "meta_details": error_data.get("details"),
+                "fbtrace_id": error.get("fbtrace_id"),
             },
         )
 
