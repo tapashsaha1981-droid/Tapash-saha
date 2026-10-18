@@ -42,6 +42,19 @@ export const api = {
   login: (password) =>
     client.post("/auth/login", { password }).then((r) => r.data),
 
+  // WhatsApp: send one approved template test
+  sendWhatsAppTest: (to) =>
+    client
+      .post("/whatsapp/send-template", {
+        to,
+        body_parameters: [
+          "Test Student",
+          "1",
+          "Test Month",
+        ],
+      })
+      .then((r) => r.data),
+
   // batches
   listBatches: () => client.get("/batches").then((r) => r.data),
   createBatch: (data) =>
