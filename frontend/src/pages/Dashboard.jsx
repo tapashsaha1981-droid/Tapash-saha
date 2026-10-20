@@ -8,8 +8,6 @@ import {
   currentMonth,
   inr,
   studentMonthStats,
-  reminderMessage,
-  openWhatsApp,
   indexPayments,
   paysFor,
 } from "@/lib/calc";
@@ -74,9 +72,10 @@ export const Dashboard = () => {
       }
     } catch (error) {
       const detail = error?.response?.data?.detail;
-      const message = typeof detail === "string"
-        ? detail
-        : detail?.message || "WhatsApp test failed. Check backend configuration.";
+      const message =
+        typeof detail === "string"
+          ? detail
+          : detail?.message || "WhatsApp test failed. Check backend configuration.";
       toast.error(message);
     }
   };
@@ -157,8 +156,10 @@ export const Dashboard = () => {
   const todaysPaymentCount =
     todaysPayments.length;
 
-  // Remind all unpaid students
-  const remindAllUnpaid = () => {
+  // Send fee reminders through the backend WhatsApp Cloud API.
+  // Defaults to one student for the first test.
+  // Type ALL only when ready for bulk sending.
+  const remindAllUnpaid = async () => {
     const unpaid = students.filter((s) => {
       const st = studentMonthStats(
         s,
@@ -168,7 +169,7 @@ export const Dashboard = () => {
 
       return (
         st.status !== "paid" &&
-        s.phone
+        (s.phone || s.parent_phone)
       );
     });
 
@@ -178,36 +179,85 @@ export const Dashboard = () => {
       );
     }
 
-    unpaid.forEach((s, i) => {
-      const st = studentMonthStats(
-        s,
-        paysFor(paymentsIndex, s.id),
-        month
-      );
-
-      const amount = Math.max(
-        0,
-        st.fee - st.paidThisMonth
-      );
-
-      setTimeout(
-        () =>
-          openWhatsApp(
-            s.phone,
-            reminderMessage(
-              s,
-              amount,
-              month,
-              settings?.org_name
-            )
-          ),
-        i * 200
-      );
-    });
-
-    toast.success(
-      `Opening WhatsApp for ${unpaid.length} unpaid students`
+    const choice = window.prompt(
+      `There are ${unpaid.length} unpaid students with phone numbers for ${monthLabel(month)}.\n\n` +
+        `For a safe first test, enter 1 to message only ${unpaid[0].name || "the first student"}; type ALL to message everyone.`,
+      "1"
     );
+
+    if (choice === null) return;
+
+    const normalizedChoice =
+      choice.trim().toUpperCase();
+
+    let recipients;
+
+    if (normalizedChoice === "1") {
+      recipients = [unpaid[0]];
+    } else if (normalizedChoice === "ALL") {
+      recipients = unpaid;
+    } else {
+      return toast.info(
+        'Cancelled. Enter "1" for one student or "ALL" for bulk reminders.'
+      );
+    }
+
+    const confirmed = window.confirm(
+      `Send WhatsApp fee reminder for ${monthLabel(month)} to ${recipients.length} student(s)?\n\n` +
+        `Recipients: ${recipients.map((student) => student.name || "Student").join(", ")}\n\n` +
+        "Continue?"
+    );
+
+    if (!confirmed) return;
+
+    try {
+      const result =
+        await api.sendWhatsAppFeeReminders(
+          month,
+          recipients.map((student) => student.id)
+        );
+
+      const sentCount = Array.isArray(result?.sent)
+        ? result.sent.length
+        : 0;
+
+      const skippedCount = Array.isArray(result?.skipped)
+        ? result.skipped.length
+        : 0;
+
+      const failedCount = Array.isArray(result?.failed)
+        ? result.failed.length
+        : 0;
+
+      toast.success(
+        `Meta accepted: ${sentCount} · Skipped: ${skippedCount} · Failed: ${failedCount}`,
+        {
+          description:
+            "Accepted means Meta returned a message ID; it does not confirm delivery to the recipient.",
+          duration: 8000,
+        }
+      );
+
+      if (failedCount > 0) {
+        const firstFailure = result.failed[0];
+
+        toast.error(
+          `${failedCount} reminder(s) failed. First error: ${firstFailure?.error || "See backend logs"}`,
+          { duration: 10000 }
+        );
+      }
+    } catch (error) {
+      const detail = error?.response?.data?.detail;
+
+      const message =
+        typeof detail === "string"
+          ? detail
+          : detail?.message ||
+            error?.message ||
+            "Fee reminders failed. Check the backend logs.";
+
+      toast.error(message);
+    }
   };
 
   /*
@@ -597,23 +647,26 @@ export const Dashboard = () => {
                 {inr(todaysCollection)}
               </div>
               <div className="mt-1 text-sm sm:text-base text-slate-500">
-                {todaysPaymentCount} {todaysPaymentCount === 1 ? "payment" : "payments"} received today
+                {todaysPaymentCount} payment(s) received today
               </div>
             </div>
           </div>
         </div>
 
         {/* PAYMENT OVERVIEW */}
-        <PaymentOverview paid={stats.paid} partial={stats.partial} unpaid={stats.unpaid} />
+        <PaymentOverview
+          students={students}
+          payments={payments}
+          batches={batches}
+          month={month}
+          mode={mode}
+        />
 
-        {/* MONTHLY REVIEW BUTTON */}
-        <button data-testid="check-monthly-overview" onClick={openMonthlyReport}
-          className="btn-press w-full rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-4 text-base sm:text-lg flex items-center justify-center gap-2 shadow-md">
-          📊 Check Monthly Overview
-        </button>
-
-        {/* ORGANISATION */}
-        <OrganisationCard value={settings?.org_name} onSave={saveSettings} />
+        {/* ORGANISATION SETTINGS */}
+        <OrganisationCard
+          value={settings?.org_name}
+          onSave={saveSettings}
+        />
 
         {/* AUTO MONTH ADVANCE */}
         <AutoAdvanceCard
