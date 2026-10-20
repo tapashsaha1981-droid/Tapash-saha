@@ -3515,6 +3515,8 @@ async def whatsapp_status():
 
 @whatsapp_router.post("/send-template")
 async def whatsapp_send_template(data: WhatsAppTemplateMessage):
+    """Send one explicitly requested WhatsApp template message only."""
+    logger = logging.getLogger(__name__)
     token = _whatsapp_env("WHATSAPP_ACCESS_TOKEN")
     phone_id = _whatsapp_env("WHATSAPP_PHONE_NUMBER_ID")
     version = _whatsapp_env("WHATSAPP_API_VERSION")
@@ -3529,15 +3531,17 @@ async def whatsapp_send_template(data: WhatsAppTemplateMessage):
     if not re.fullmatch(r"v\d+\.\d+", version):
         raise HTTPException(status_code=503, detail="Invalid WHATSAPP_API_VERSION")
 
+    recipient = _normalize_whatsapp_phone(data.to)
     payload = {
         "messaging_product": "whatsapp",
-        "to": _normalize_whatsapp_phone(data.to),
+        "to": recipient,
         "type": "template",
         "template": {
             "name": template,
             "language": {"code": language},
         },
     }
+    # Send template variables when provided by the caller.
     if data.body_parameters:
         payload["template"]["components"] = [{
             "type": "body",
@@ -3547,6 +3551,10 @@ async def whatsapp_send_template(data: WhatsAppTemplateMessage):
             ],
         }]
 
+    logger.info(
+        "WhatsApp send requested: template=%s language=%s recipient_suffix=%s body_parameter_count=%s",
+        template, language, recipient[-4:], len(data.body_parameters),
+    )
     try:
         response = requests.post(
             f"https://graph.facebook.com/{version}/{phone_id}/messages",
@@ -3558,7 +3566,7 @@ async def whatsapp_send_template(data: WhatsAppTemplateMessage):
             timeout=20,
         )
     except requests.RequestException:
-        logging.getLogger(__name__).exception("WhatsApp API connection failed")
+        logger.exception("WhatsApp Graph API connection failed")
         raise HTTPException(status_code=502, detail="WhatsApp API connection failed")
 
     try:
@@ -3567,12 +3575,10 @@ async def whatsapp_send_template(data: WhatsAppTemplateMessage):
         result = {}
 
     if not response.ok:
-        error = result.get("error", {})
-        error_data = error.get("error_data", {})
-        logging.getLogger(__name__).error(
-            "WhatsApp Graph API rejected message: http_status=%s "
-            "meta_type=%s meta_code=%s meta_subcode=%s details=%s "
-            "message=%s fbtrace_id=%s",
+        error = result.get("error", {}) if isinstance(result, dict) else {}
+        error_data = error.get("error_data", {}) or {}
+        logger.error(
+            "WhatsApp Graph API rejected message: http_status=%s meta_type=%s meta_code=%s meta_subcode=%s details=%s message=%s fbtrace_id=%s",
             response.status_code,
             error.get("type"),
             error.get("code"),
@@ -3593,11 +3599,28 @@ async def whatsapp_send_template(data: WhatsAppTemplateMessage):
             },
         )
 
-    messages = result.get("messages", [])
+    messages = result.get("messages", []) if isinstance(result, dict) else []
+    if not messages or not messages[0].get("id"):
+        logger.error(
+            "WhatsApp Graph API returned HTTP %s but no message ID; response_keys=%s",
+            response.status_code,
+            sorted(result.keys()) if isinstance(result, dict) else [],
+        )
+        raise HTTPException(
+            status_code=502,
+            detail="Meta returned no WhatsApp message ID; check Render logs and Meta response.",
+        )
+
+    message_id = messages[0]["id"]
+    logger.info(
+        "WhatsApp message accepted by Meta: message_id=%s recipient_suffix=%s template=%s language=%s",
+        message_id, recipient[-4:], template, language,
+    )
     return {
         "success": True,
-        "message_id": messages[0].get("id") if messages else None,
+        "message_id": message_id,
         "status": "accepted_by_meta",
+        "note": "Accepted by Meta does not guarantee delivery to the recipient.",
     }
 
 
