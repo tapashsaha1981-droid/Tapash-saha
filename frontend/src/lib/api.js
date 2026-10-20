@@ -55,16 +55,29 @@ export const api = {
       })
       .then((r) => r.data),
 
-  // batches
-  listBatches: () => client.get("/batches").then((r) => r.data),
+  // WhatsApp: send fee reminders to selected students for one month
+  sendWhatsAppFeeReminders: (month, studentIds) =>
+    client
+      .post("/whatsapp/send-fee-reminders", {
+        month,
+        student_ids: studentIds.map((id) => String(id)),
+      })
+      .then((r) => r.data),
+
+  // Batches
+  listBatches: () =>
+    client.get("/batches").then((r) => r.data),
+
   createBatch: (data) =>
     client.post("/batches", data).then((r) => r.data),
+
   updateBatch: (id, data) =>
     client.put(`/batches/${id}`, data).then((r) => r.data),
+
   deleteBatch: (id) =>
     client.delete(`/batches/${id}`).then((r) => r.data),
 
-  // students
+  // Students
   listStudents: () =>
     client.get("/students").then((r) => r.data),
 
@@ -105,13 +118,13 @@ export const api = {
       )
       .then((r) => r.data),
 
-  // Check the status of a background EduNotes batch sync.
+  // Check the status of a background EduNotes batch sync
   getEdunotesBatchSyncStatus: (jobId) =>
     client
       .get(`/students/batch-sync/jobs/${jobId}`)
       .then((r) => r.data),
 
-  // payments
+  // Payments
   listPayments: (params = {}) =>
     client.get("/payments", { params }).then((r) => r.data),
 
@@ -121,7 +134,7 @@ export const api = {
   deletePayment: (id) =>
     client.delete(`/payments/${id}`).then((r) => r.data),
 
-  // events
+  // Events
   listEvents: () =>
     client.get("/events").then((r) => r.data),
 
@@ -131,7 +144,7 @@ export const api = {
   deleteEvent: (id) =>
     client.delete(`/events/${id}`).then((r) => r.data),
 
-  // attendance
+  // Attendance
   listAttendance: (params = {}) =>
     client.get("/attendance", { params }).then((r) => r.data),
 
@@ -143,7 +156,7 @@ export const api = {
   deleteAttendance: (id) =>
     client.delete(`/attendance/${id}`).then((r) => r.data),
 
-  // settings & activity
+  // Settings and activity
   getSettings: () =>
     client.get("/settings").then((r) => r.data),
 
@@ -155,7 +168,7 @@ export const api = {
       ? client.listActivities()
       : client.get("/activities").then((r) => r.data),
 
-  // export/import
+  // Export and import
   exportAll: () =>
     client.get("/export").then((r) => r.data),
 
