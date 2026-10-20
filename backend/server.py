@@ -2934,6 +2934,33 @@ async def create_payment(
         payment.month
     )
 
+    # WhatsApp confirmation is best-effort and only runs after the
+    # payment record has been inserted successfully. Configure an
+    # approved template in WHATSAPP_PAYMENT_TEMPLATE_NAME to enable it.
+    try:
+        student_for_confirmation = await db.students.find_one(
+            {"id": payment.student_id},
+            {"_id": 0, "name": 1, "phone": 1, "parent_phone": 1}
+        )
+        if student_for_confirmation and _whatsapp_env("WHATSAPP_PAYMENT_TEMPLATE_NAME"):
+            recipient = (student_for_confirmation.get("parent_phone") or
+                         student_for_confirmation.get("phone") or "").strip()
+            if recipient:
+                await _send_whatsapp_template_internal(
+                    to=recipient,
+                    template_name=_whatsapp_env("WHATSAPP_PAYMENT_TEMPLATE_NAME"),
+                    body_parameters=[
+                        str(student_for_confirmation.get("name") or "Student"),
+                        str(payment.amount),
+                        _month_label(payment.month),
+                    ],
+                )
+    except Exception:
+        # Never undo a successfully recorded payment because WhatsApp failed.
+        logging.getLogger(__name__).exception(
+            "WhatsApp payment confirmation failed for payment_id=%s", payment.id
+        )
+
     # Existing response remains unchanged
     return payment.model_dump()
 
@@ -3501,6 +3528,48 @@ def _normalize_whatsapp_phone(phone: str) -> str:
     return digits
 
 
+async def _send_whatsapp_template_internal(
+    to: str,
+    template_name: str,
+    body_parameters: Optional[List[str]] = None,
+    language_code: Optional[str] = None,
+):
+    """Send one Meta-approved WhatsApp template; returns Meta message ID."""
+    token = _whatsapp_env("WHATSAPP_ACCESS_TOKEN")
+    phone_id = _whatsapp_env("WHATSAPP_PHONE_NUMBER_ID")
+    version = _whatsapp_env("WHATSAPP_API_VERSION")
+    language = language_code or _whatsapp_env("WHATSAPP_TEMPLATE_LANGUAGE") or "en"
+    if not all([token, phone_id, version, template_name]):
+        raise RuntimeError("WhatsApp credentials or approved template are missing")
+    if not re.fullmatch(r"v\d+\.\d+", version):
+        raise RuntimeError("Invalid WHATSAPP_API_VERSION")
+    recipient = _normalize_whatsapp_phone(to)
+    template_payload = {"name": template_name, "language": {"code": language}}
+    if body_parameters:
+        template_payload["components"] = [{
+            "type": "body",
+            "parameters": [{"type": "text", "text": str(v)} for v in body_parameters],
+        }]
+    response = requests.post(
+        f"https://graph.facebook.com/{version}/{phone_id}/messages",
+        headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+        json={"messaging_product": "whatsapp", "to": recipient,
+              "type": "template", "template": template_payload},
+        timeout=20,
+    )
+    try:
+        result = response.json()
+    except ValueError:
+        result = {}
+    if not response.ok:
+        error = result.get("error", {}) if isinstance(result, dict) else {}
+        raise RuntimeError(f"Meta WhatsApp error ({response.status_code}): {error.get('message', 'send failed')}")
+    messages = result.get("messages", []) if isinstance(result, dict) else []
+    if not messages or not messages[0].get("id"):
+        raise RuntimeError("Meta returned no WhatsApp message ID")
+    return messages[0]["id"]
+
+
 @whatsapp_status_router.get("/status")
 async def whatsapp_status():
     return {
@@ -3510,8 +3579,61 @@ async def whatsapp_status():
             _whatsapp_env("WHATSAPP_API_VERSION"),
         ]),
         "template_configured": bool(_whatsapp_env("WHATSAPP_FEE_TEMPLATE_NAME")),
-        "automatic_reminders_enabled": False,
+        "payment_template_configured": bool(_whatsapp_env("WHATSAPP_PAYMENT_TEMPLATE_NAME")),
+        "automatic_reminders_enabled": bool(_whatsapp_env("WHATSAPP_FEE_TEMPLATE_NAME")),
     }
+
+
+class WhatsAppFeeReminderRequest(BaseModel):
+    month: str
+    student_ids: List[str] = Field(default_factory=list)
+
+
+@whatsapp_router.post("/send-fee-reminders")
+async def whatsapp_send_fee_reminders(data: WhatsAppFeeReminderRequest):
+    """Send reminders only to explicitly selected students with unpaid fees."""
+    if not re.fullmatch(r"\d{4}-\d{2}", data.month):
+        raise HTTPException(status_code=422, detail="month must use YYYY-MM format")
+    if not data.student_ids:
+        raise HTTPException(status_code=422, detail="Select at least one student")
+    if len(data.student_ids) > 200:
+        raise HTTPException(status_code=422, detail="Maximum 200 students per request")
+    template = _whatsapp_env("WHATSAPP_FEE_TEMPLATE_NAME")
+    if not template:
+        raise HTTPException(status_code=503, detail="WHATSAPP_FEE_TEMPLATE_NAME is not configured")
+
+    sent, skipped, failed = [], [], []
+    for sid in list(dict.fromkeys(data.student_ids)):
+        student = await db.students.find_one(
+            {"id": sid},
+            {"_id": 0, "id": 1, "name": 1, "phone": 1, "parent_phone": 1, "monthly_fee": 1}
+        )
+        if not student:
+            skipped.append({"student_id": sid, "reason": "student_not_found"})
+            continue
+        phone = (student.get("parent_phone") or student.get("phone") or "").strip()
+        if not phone:
+            skipped.append({"student_id": sid, "reason": "no_phone"})
+            continue
+        payments = await db.payments.find(
+            {"student_id": sid, "month": data.month}, {"_id": 0, "amount": 1}
+        ).to_list(1000)
+        paid = sum(float(item.get("amount") or 0) for item in payments)
+        due = max(0.0, float(student.get("monthly_fee") or 0) - paid)
+        if due <= 0:
+            skipped.append({"student_id": sid, "reason": "already_paid"})
+            continue
+        try:
+            message_id = await _send_whatsapp_template_internal(
+                to=phone,
+                template_name=template,
+                body_parameters=[str(student.get("name") or "Student"), f"{due:.2f}", _month_label(data.month)],
+            )
+            sent.append({"student_id": sid, "message_id": message_id})
+        except Exception as exc:
+            logging.getLogger(__name__).exception("Fee reminder failed for student_id=%s", sid)
+            failed.append({"student_id": sid, "error": str(exc)[:250]})
+    return {"success": len(failed) == 0, "month": data.month, "sent": sent, "skipped": skipped, "failed": failed}
 
 
 @whatsapp_router.post("/send-template")
