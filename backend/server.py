@@ -1,3 +1,4 @@
+import json
 from fastapi import FastAPI, APIRouter, HTTPException, Depends, Header, BackgroundTasks, Request, Query
 from fastapi.responses import PlainTextResponse
 from dotenv import load_dotenv
@@ -3515,8 +3516,6 @@ async def whatsapp_status():
 
 @whatsapp_router.post("/send-template")
 async def whatsapp_send_template(data: WhatsAppTemplateMessage):
-    """Send one explicitly requested WhatsApp template message only."""
-    logger = logging.getLogger(__name__)
     token = _whatsapp_env("WHATSAPP_ACCESS_TOKEN")
     phone_id = _whatsapp_env("WHATSAPP_PHONE_NUMBER_ID")
     version = _whatsapp_env("WHATSAPP_API_VERSION")
@@ -3531,17 +3530,15 @@ async def whatsapp_send_template(data: WhatsAppTemplateMessage):
     if not re.fullmatch(r"v\d+\.\d+", version):
         raise HTTPException(status_code=503, detail="Invalid WHATSAPP_API_VERSION")
 
-    recipient = _normalize_whatsapp_phone(data.to)
     payload = {
         "messaging_product": "whatsapp",
-        "to": recipient,
+        "to": _normalize_whatsapp_phone(data.to),
         "type": "template",
         "template": {
             "name": template,
             "language": {"code": language},
         },
     }
-    # Send template variables when provided by the caller.
     if data.body_parameters:
         payload["template"]["components"] = [{
             "type": "body",
@@ -3551,10 +3548,6 @@ async def whatsapp_send_template(data: WhatsAppTemplateMessage):
             ],
         }]
 
-    logger.info(
-        "WhatsApp send requested: template=%s language=%s recipient_suffix=%s body_parameter_count=%s",
-        template, language, recipient[-4:], len(data.body_parameters),
-    )
     try:
         response = requests.post(
             f"https://graph.facebook.com/{version}/{phone_id}/messages",
@@ -3566,7 +3559,7 @@ async def whatsapp_send_template(data: WhatsAppTemplateMessage):
             timeout=20,
         )
     except requests.RequestException:
-        logger.exception("WhatsApp Graph API connection failed")
+        logging.getLogger(__name__).exception("WhatsApp API connection failed")
         raise HTTPException(status_code=502, detail="WhatsApp API connection failed")
 
     try:
@@ -3575,52 +3568,20 @@ async def whatsapp_send_template(data: WhatsAppTemplateMessage):
         result = {}
 
     if not response.ok:
-        error = result.get("error", {}) if isinstance(result, dict) else {}
-        error_data = error.get("error_data", {}) or {}
-        logger.error(
-            "WhatsApp Graph API rejected message: http_status=%s meta_type=%s meta_code=%s meta_subcode=%s details=%s message=%s fbtrace_id=%s",
-            response.status_code,
-            error.get("type"),
-            error.get("code"),
-            error.get("error_subcode"),
-            error_data.get("details"),
-            error.get("message", "WhatsApp message failed"),
-            error.get("fbtrace_id"),
-        )
+        error = result.get("error", {})
         raise HTTPException(
             status_code=502,
             detail={
                 "message": error.get("message", "WhatsApp message failed"),
-                "meta_type": error.get("type"),
                 "meta_code": error.get("code"),
-                "meta_subcode": error.get("error_subcode"),
-                "meta_details": error_data.get("details"),
-                "fbtrace_id": error.get("fbtrace_id"),
             },
         )
 
-    messages = result.get("messages", []) if isinstance(result, dict) else []
-    if not messages or not messages[0].get("id"):
-        logger.error(
-            "WhatsApp Graph API returned HTTP %s but no message ID; response_keys=%s",
-            response.status_code,
-            sorted(result.keys()) if isinstance(result, dict) else [],
-        )
-        raise HTTPException(
-            status_code=502,
-            detail="Meta returned no WhatsApp message ID; check Render logs and Meta response.",
-        )
-
-    message_id = messages[0]["id"]
-    logger.info(
-        "WhatsApp message accepted by Meta: message_id=%s recipient_suffix=%s template=%s language=%s",
-        message_id, recipient[-4:], template, language,
-    )
+    messages = result.get("messages", [])
     return {
         "success": True,
-        "message_id": message_id,
+        "message_id": messages[0].get("id") if messages else None,
         "status": "accepted_by_meta",
-        "note": "Accepted by Meta does not guarantee delivery to the recipient.",
     }
 
 
@@ -3644,22 +3605,44 @@ async def whatsapp_verify_webhook(
 
 @whatsapp_webhook_router.post("")
 async def whatsapp_receive_webhook(request: Request):
+    """Receive WhatsApp Cloud API callbacks and log delivery status safely."""
+    logger = logging.getLogger(__name__)
     app_secret = _whatsapp_env("WHATSAPP_APP_SECRET")
     if not app_secret:
+        logger.error("WhatsApp webhook callback received but WHATSAPP_APP_SECRET is not configured")
         raise HTTPException(status_code=503, detail="WhatsApp app secret is not configured")
 
     raw = await request.body()
     signature = request.headers.get("x-hub-signature-256", "")
-    expected = "sha256=" + hmac.new(
-        app_secret.encode("utf-8"),
-        raw,
-        hashlib.sha256,
-    ).hexdigest()
-
+    expected = "sha256=" + hmac.new(app_secret.encode("utf-8"), raw, hashlib.sha256).hexdigest()
     if not signature or not hmac.compare_digest(signature, expected):
+        logger.warning("WhatsApp webhook rejected: missing or invalid signature")
         raise HTTPException(status_code=401, detail="Invalid WhatsApp webhook signature")
 
-    logging.getLogger(__name__).info("Verified WhatsApp webhook event received")
+    try:
+        payload = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        logger.warning("WhatsApp webhook rejected: invalid JSON payload")
+        raise HTTPException(status_code=400, detail="Invalid webhook JSON")
+
+    event_count = 0
+    for entry in payload.get("entry", []) if isinstance(payload, dict) else []:
+        for change in entry.get("changes", []) if isinstance(entry, dict) else []:
+            value = change.get("value", {}) if isinstance(change, dict) else {}
+            field = change.get("field", "unknown") if isinstance(change, dict) else "unknown"
+            for message in value.get("messages", []) if isinstance(value, dict) else []:
+                event_count += 1
+                sender = re.sub(r"\D", "", str(message.get("from", "")))
+                logger.info("WhatsApp webhook incoming message: field=%s type=%s sender_suffix=%s message_id=%s", field, message.get("type", "unknown"), sender[-4:] if sender else "unknown", message.get("id", "unknown"))
+            for status in value.get("statuses", []) if isinstance(value, dict) else []:
+                event_count += 1
+                recipient = re.sub(r"\D", "", str(status.get("recipient_id", "")))
+                errors = []
+                for error in status.get("errors", []) or []:
+                    error_data = error.get("error_data", {}) or {}
+                    errors.append({"code": error.get("code"), "title": error.get("title"), "message": error.get("message"), "details": error_data.get("details")})
+                logger.info("WhatsApp delivery status: status=%s message_id=%s recipient_suffix=%s timestamp=%s errors=%s", status.get("status", "unknown"), status.get("id", "unknown"), recipient[-4:] if recipient else "unknown", status.get("timestamp"), json.dumps(errors, ensure_ascii=False))
+    logger.info("Verified WhatsApp webhook processed: event_count=%s", event_count)
     return {"status": "received"}
 
 
