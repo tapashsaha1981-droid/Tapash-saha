@@ -72,10 +72,9 @@ export const Dashboard = () => {
       }
     } catch (error) {
       const detail = error?.response?.data?.detail;
-      const message =
-        typeof detail === "string"
-          ? detail
-          : detail?.message || "WhatsApp test failed. Check backend configuration.";
+      const message = typeof detail === "string"
+        ? detail
+        : detail?.message || "WhatsApp test failed. Check backend configuration.";
       toast.error(message);
     }
   };
@@ -156,11 +155,26 @@ export const Dashboard = () => {
   const todaysPaymentCount =
     todaysPayments.length;
 
-  // Send fee reminders through the backend WhatsApp Cloud API.
-  // Defaults to one student for the first test.
-  // Type ALL only when ready for bulk sending.
+  // Send a WhatsApp fee reminder to one named student.
   const remindAllUnpaid = async () => {
-    const unpaid = students.filter((s) => {
+    const name = window.prompt(
+      "Enter the student's name to send a fee reminder:",
+      "Sanji"
+    );
+
+    if (!name || !name.trim()) return;
+
+    const matches = students.filter(
+      (s) =>
+        (s.name || "").trim().toLowerCase() ===
+        name.trim().toLowerCase()
+    );
+
+    if (matches.length === 0) {
+      return toast.error(`Student "${name.trim()}" not found.`);
+    }
+
+    const unpaid = matches.filter((s) => {
       const st = studentMonthStats(
         s,
         paysFor(paymentsIndex, s.id),
@@ -175,87 +189,66 @@ export const Dashboard = () => {
 
     if (unpaid.length === 0) {
       return toast.info(
-        "No unpaid students with phone numbers"
+        `${name.trim()} has no unpaid fee for ${monthLabel(month)}, or no phone number is available.`
       );
     }
 
-    const choice = window.prompt(
-      `There are ${unpaid.length} unpaid students with phone numbers for ${monthLabel(month)}.\n\n` +
-        `For a safe first test, enter 1 to message only ${unpaid[0].name || "the first student"}; type ALL to message everyone.`,
-      "1"
-    );
-
-    if (choice === null) return;
-
-    const normalizedChoice =
-      choice.trim().toUpperCase();
-
-    let recipients;
-
-    if (normalizedChoice === "1") {
-      recipients = [unpaid[0]];
-    } else if (normalizedChoice === "ALL") {
-      recipients = unpaid;
-    } else {
-      return toast.info(
-        'Cancelled. Enter "1" for one student or "ALL" for bulk reminders.'
+    if (unpaid.length > 1) {
+      return toast.error(
+        `More than one student named "${name.trim()}" was found. Please use a unique name.`
       );
     }
 
+    const student = unpaid[0];
     const confirmed = window.confirm(
-      `Send WhatsApp fee reminder for ${monthLabel(month)} to ${recipients.length} student(s)?\n\n` +
-        `Recipients: ${recipients.map((student) => student.name || "Student").join(", ")}\n\n` +
-        "Continue?"
+      `Send WhatsApp fee reminder to this student only?\n\n` +
+        `Student: ${student.name}\n` +
+        `Month: ${monthLabel(month)}\n\nContinue?`
     );
 
     if (!confirmed) return;
 
     try {
-      const result =
-        await api.sendWhatsAppFeeReminders(
-          month,
-          recipients.map((student) => student.id)
-        );
+      const result = await api.sendWhatsAppFeeReminders(
+        month,
+        [String(student.id)]
+      );
 
       const sentCount = Array.isArray(result?.sent)
         ? result.sent.length
         : 0;
-
       const skippedCount = Array.isArray(result?.skipped)
         ? result.skipped.length
         : 0;
-
       const failedCount = Array.isArray(result?.failed)
         ? result.failed.length
         : 0;
 
-      toast.success(
-        `Meta accepted: ${sentCount} · Skipped: ${skippedCount} · Failed: ${failedCount}`,
-        {
-          description:
-            "Accepted means Meta returned a message ID; it does not confirm delivery to the recipient.",
-          duration: 8000,
-        }
-      );
+      if (sentCount > 0) {
+        toast.success(
+          `Meta accepted ${student.name}'s reminder. This does not confirm delivery.`,
+          { duration: 8000 }
+        );
+      } else {
+        toast.info(
+          `No reminder accepted. Skipped: ${skippedCount}; Failed: ${failedCount}.`
+        );
+      }
 
       if (failedCount > 0) {
-        const firstFailure = result.failed[0];
-
         toast.error(
-          `${failedCount} reminder(s) failed. First error: ${firstFailure?.error || "See backend logs"}`,
-          { duration: 10000 }
+          result.failed[0]?.error ||
+            "Reminder failed. Check the backend logs."
         );
       }
     } catch (error) {
       const detail = error?.response?.data?.detail;
-
       const message =
         typeof detail === "string"
           ? detail
           : detail?.message ||
             error?.message ||
-            "Fee reminders failed. Check the backend logs.";
-
+            "Fee reminder failed. Check backend logs.";
       toast.error(message);
     }
   };
@@ -647,26 +640,23 @@ export const Dashboard = () => {
                 {inr(todaysCollection)}
               </div>
               <div className="mt-1 text-sm sm:text-base text-slate-500">
-                {todaysPaymentCount} payment(s) received today
+                {todaysPaymentCount} {todaysPaymentCount === 1 ? "payment" : "payments"} received today
               </div>
             </div>
           </div>
         </div>
 
         {/* PAYMENT OVERVIEW */}
-        <PaymentOverview
-          students={students}
-          payments={payments}
-          batches={batches}
-          month={month}
-          mode={mode}
-        />
+        <PaymentOverview paid={stats.paid} partial={stats.partial} unpaid={stats.unpaid} />
 
-        {/* ORGANISATION SETTINGS */}
-        <OrganisationCard
-          value={settings?.org_name}
-          onSave={saveSettings}
-        />
+        {/* MONTHLY REVIEW BUTTON */}
+        <button data-testid="check-monthly-overview" onClick={openMonthlyReport}
+          className="btn-press w-full rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-4 text-base sm:text-lg flex items-center justify-center gap-2 shadow-md">
+          📊 Check Monthly Overview
+        </button>
+
+        {/* ORGANISATION */}
+        <OrganisationCard value={settings?.org_name} onSave={saveSettings} />
 
         {/* AUTO MONTH ADVANCE */}
         <AutoAdvanceCard
