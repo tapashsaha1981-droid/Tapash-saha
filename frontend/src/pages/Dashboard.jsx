@@ -155,63 +155,38 @@ export const Dashboard = () => {
   const todaysPaymentCount =
     todaysPayments.length;
 
-  // Send a WhatsApp fee reminder to one named student.
+  // Manually send fee reminders to all students with a phone number.
+  // The backend calculates total arrears and prefers the parent's phone.
   const remindAllUnpaid = async () => {
-    const name = window.prompt(
-      "Enter the student's name to send a fee reminder:",
-      "Sanji"
-    );
-
-    if (!name || !name.trim()) return;
-
-    const matches = students.filter(
-      (s) =>
-        (s.name || "").trim().toLowerCase() ===
-        name.trim().toLowerCase()
-    );
-
-    if (matches.length === 0) {
-      return toast.error(`Student "${name.trim()}" not found.`);
-    }
-
-    const unpaid = matches.filter((s) => {
-      const st = studentMonthStats(
-        s,
-        paysFor(paymentsIndex, s.id),
-        month
-      );
+    const eligibleStudents = students.filter((student) => {
+      const phone = String(
+        student.parent_phone || student.phone || ""
+      ).trim();
 
       return (
-        st.status !== "paid" &&
-        (s.phone || s.parent_phone)
+        phone.length > 0 &&
+        (student.join_month || month) <= currentMonth()
       );
     });
 
-    if (unpaid.length === 0) {
-      return toast.info(
-        `${name.trim()} has no unpaid fee for ${monthLabel(month)}, or no phone number is available.`
-      );
+    if (eligibleStudents.length === 0) {
+      toast.info("No students with a phone number are available for reminders.");
+      return;
     }
 
-    if (unpaid.length > 1) {
-      return toast.error(
-        `More than one student named "${name.trim()}" was found. Please use a unique name.`
-      );
-    }
-
-    const student = unpaid[0];
     const confirmed = window.confirm(
-      `Send WhatsApp fee reminder to this student only?\n\n` +
-        `Student: ${student.name}\n` +
-        `Month: ${monthLabel(month)}\n\nContinue?`
+      `Send WhatsApp fee reminders to up to ${eligibleStudents.length} students?\\n\\n` +
+        "The backend will skip students who have no outstanding balance. " +
+        "The parent's number will be used first; if missing, the student's number will be used.\\n\\n" +
+        "Continue?"
     );
 
     if (!confirmed) return;
 
     try {
       const result = await api.sendWhatsAppFeeReminders(
-        month,
-        [String(student.id)]
+        currentMonth(),
+        eligibleStudents.map((student) => String(student.id))
       );
 
       const sentCount = Array.isArray(result?.sent)
@@ -224,21 +199,18 @@ export const Dashboard = () => {
         ? result.failed.length
         : 0;
 
-      if (sentCount > 0) {
-        toast.success(
-          `Meta accepted ${student.name}'s reminder. This does not confirm delivery.`,
-          { duration: 8000 }
-        );
-      } else {
-        toast.info(
-          `No reminder accepted. Skipped: ${skippedCount}; Failed: ${failedCount}.`
-        );
-      }
+      toast.success(
+        `WhatsApp reminder results: Sent/accepted ${sentCount}, skipped ${skippedCount}, failed ${failedCount}. Meta acceptance does not confirm delivery.`,
+        { duration: 10000 }
+      );
 
       if (failedCount > 0) {
+        const firstError = result.failed[0]?.error;
         toast.error(
-          result.failed[0]?.error ||
-            "Reminder failed. Check the backend logs."
+          firstError
+            ? `First failure: ${firstError}`
+            : "Some reminders failed. Check backend logs.",
+          { duration: 10000 }
         );
       }
     } catch (error) {
@@ -248,7 +220,7 @@ export const Dashboard = () => {
           ? detail
           : detail?.message ||
             error?.message ||
-            "Fee reminder failed. Check backend logs.";
+            "Fee reminders failed. Check backend logs.";
       toast.error(message);
     }
   };
