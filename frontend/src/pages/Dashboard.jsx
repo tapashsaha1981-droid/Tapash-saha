@@ -155,29 +155,62 @@ export const Dashboard = () => {
   const todaysPaymentCount =
     todaysPayments.length;
 
-  // Manually send fee reminders to all students with a phone number.
-  // The backend calculates total arrears and prefers the parent's phone.
+  // Manually send reminders only to students with a positive outstanding balance.
+  // Balance is calculated month-by-month using recorded payments.
   const remindAllUnpaid = async () => {
+    const throughMonth = currentMonth();
     const eligibleStudents = students.filter((student) => {
       const phone = String(
-        student.parent_phone || student.phone || ""
+        (student.parent_phone || "").trim() ||
+        (student.phone || "").trim()
       ).trim();
+      const joinMonth = String(student.join_month || throughMonth).slice(0, 7);
 
-      return (
-        phone.length > 0 &&
-        (student.join_month || month) <= currentMonth()
+      if (
+        !phone ||
+        !/^\d{4}-(0[1-9]|1[0-2])$/.test(joinMonth) ||
+        joinMonth > throughMonth
+      ) {
+        return false;
+      }
+
+      const studentPayments = payments.filter(
+        (payment) => String(payment.student_id) === String(student.id)
       );
+      let outstanding = 0;
+      let cursor = joinMonth;
+
+      while (cursor <= throughMonth) {
+        const monthPayments = studentPayments.filter(
+          (payment) => String(payment.month || "").slice(0, 7) === cursor
+        );
+        const feeSnapshot = monthPayments.reduce(
+          (fee, payment) => Math.max(fee, Number(payment.fee_snapshot || 0)),
+          0
+        );
+        const monthlyFee = feeSnapshot > 0
+          ? feeSnapshot
+          : Number(student.monthly_fee || 0);
+        const paid = monthPayments.reduce(
+          (sum, payment) => sum + Number(payment.amount || 0),
+          0
+        );
+        outstanding += Math.max(0, monthlyFee - paid);
+        cursor = shiftMonth(cursor, 1);
+      }
+
+      return outstanding > 0;
     });
 
     if (eligibleStudents.length === 0) {
-      toast.info("No students with a phone number are available for reminders.");
+      toast.info("No students with outstanding fees and a phone number were found.");
       return;
     }
 
     const confirmed = window.confirm(
-      `Send WhatsApp fee reminders to up to ${eligibleStudents.length} students?\\n\\n` +
-        "The backend will skip students who have no outstanding balance. " +
-        "The parent's number will be used first; if missing, the student's number will be used.\\n\\n" +
+      `Send WhatsApp fee reminders to ${eligibleStudents.length} students with outstanding fees?\n\n` +
+        "Only students with a positive balance are included. " +
+        "The parent's number will be used first; if missing, the student's number will be used.\n\n" +
         "Continue?"
     );
 
@@ -185,19 +218,13 @@ export const Dashboard = () => {
 
     try {
       const result = await api.sendWhatsAppFeeReminders(
-        currentMonth(),
+        throughMonth,
         eligibleStudents.map((student) => String(student.id))
       );
 
-      const sentCount = Array.isArray(result?.sent)
-        ? result.sent.length
-        : 0;
-      const skippedCount = Array.isArray(result?.skipped)
-        ? result.skipped.length
-        : 0;
-      const failedCount = Array.isArray(result?.failed)
-        ? result.failed.length
-        : 0;
+      const sentCount = Array.isArray(result?.sent) ? result.sent.length : 0;
+      const skippedCount = Array.isArray(result?.skipped) ? result.skipped.length : 0;
+      const failedCount = Array.isArray(result?.failed) ? result.failed.length : 0;
 
       toast.success(
         `WhatsApp reminder results: Sent/accepted ${sentCount}, skipped ${skippedCount}, failed ${failedCount}. Meta acceptance does not confirm delivery.`,
@@ -207,9 +234,7 @@ export const Dashboard = () => {
       if (failedCount > 0) {
         const firstError = result.failed[0]?.error;
         toast.error(
-          firstError
-            ? `First failure: ${firstError}`
-            : "Some reminders failed. Check backend logs.",
+          firstError ? `First failure: ${firstError}` : "Some reminders failed. Check backend logs.",
           { duration: 10000 }
         );
       }
@@ -218,9 +243,7 @@ export const Dashboard = () => {
       const message =
         typeof detail === "string"
           ? detail
-          : detail?.message ||
-            error?.message ||
-            "Fee reminders failed. Check backend logs.";
+          : detail?.message || error?.message || "Fee reminders failed. Check backend logs.";
       toast.error(message);
     }
   };
