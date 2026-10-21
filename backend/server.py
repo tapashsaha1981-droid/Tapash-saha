@@ -3612,50 +3612,129 @@ class WhatsAppFeeReminderRequest(BaseModel):
 
 @whatsapp_router.post("/send-fee-reminders")
 async def whatsapp_send_fee_reminders(data: WhatsAppFeeReminderRequest):
-    """Send reminders only to explicitly selected students with unpaid fees."""
-    if not re.fullmatch(r"\d{4}-\d{2}", data.month):
+    """Manually send fee reminders for selected students' total outstanding fees."""
+    if not re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", data.month):
         raise HTTPException(status_code=422, detail="month must use YYYY-MM format")
     if not data.student_ids:
         raise HTTPException(status_code=422, detail="Select at least one student")
     if len(data.student_ids) > 200:
         raise HTTPException(status_code=422, detail="Maximum 200 students per request")
+
     template = _whatsapp_env("WHATSAPP_FEE_TEMPLATE_NAME")
     if not template:
         raise HTTPException(status_code=503, detail="WHATSAPP_FEE_TEMPLATE_NAME is not configured")
 
+    # Calculate outstanding fees from join month through the current month.
+    current_month = datetime.now(timezone.utc).strftime("%Y-%m")
     sent, skipped, failed = [], [], []
+
     for sid in list(dict.fromkeys(data.student_ids)):
-        student = await db.students.find_one(
-            {"id": sid},
-            {"_id": 0, "id": 1, "name": 1, "phone": 1, "parent_phone": 1, "monthly_fee": 1}
-        )
-        if not student:
-            skipped.append({"student_id": sid, "reason": "student_not_found"})
-            continue
-        phone = (student.get("parent_phone") or student.get("phone") or "").strip()
-        if not phone:
-            skipped.append({"student_id": sid, "reason": "no_phone"})
-            continue
-        payments = await db.payments.find(
-            {"student_id": sid, "month": data.month}, {"_id": 0, "amount": 1}
-        ).to_list(1000)
-        paid = sum(float(item.get("amount") or 0) for item in payments)
-        due = max(0.0, float(student.get("monthly_fee") or 0) - paid)
-        if due <= 0:
-            skipped.append({"student_id": sid, "reason": "already_paid"})
-            continue
         try:
+            student = await db.students.find_one(
+                {"id": sid},
+                {
+                    "_id": 0, "id": 1, "name": 1, "phone": 1,
+                    "parent_phone": 1, "monthly_fee": 1, "join_month": 1,
+                },
+            )
+
+            if not student:
+                skipped.append({"student_id": sid, "reason": "student_not_found"})
+                continue
+
+            # Parent first; use the student's number if parent number is absent/blank.
+            parent_phone = str(student.get("parent_phone") or "").strip()
+            student_phone = str(student.get("phone") or "").strip()
+            phone = parent_phone or student_phone
+
+            if not phone:
+                skipped.append({
+                    "student_id": sid,
+                    "reason": "no_parent_or_student_phone",
+                })
+                continue
+
+            start_month = str(student.get("join_month") or current_month)[:7]
+            if not re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", start_month):
+                start_month = current_month
+
+            if start_month > current_month:
+                skipped.append({"student_id": sid, "reason": "join_month_in_future"})
+                continue
+
+            payment_docs = await db.payments.find(
+                {
+                    "student_id": sid,
+                    "month": {"$gte": start_month, "$lte": current_month},
+                },
+                {"_id": 0, "month": 1, "amount": 1, "fee_snapshot": 1},
+            ).to_list(50000)
+
+            paid_by_month = {}
+            fee_by_month = {}
+
+            for payment in payment_docs:
+                payment_month = str(payment.get("month") or "")[:7]
+                if not re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", payment_month):
+                    continue
+
+                paid_by_month[payment_month] = (
+                    paid_by_month.get(payment_month, 0.0)
+                    + float(payment.get("amount") or 0)
+                )
+
+                fee_snapshot = float(payment.get("fee_snapshot") or 0)
+                if fee_snapshot > 0:
+                    fee_by_month[payment_month] = fee_snapshot
+
+            monthly_fee = float(student.get("monthly_fee") or 0)
+            outstanding_months = []
+            total_due = 0.0
+
+            for month_key in _month_range(start_month, current_month):
+                fee = fee_by_month.get(month_key, monthly_fee)
+                paid = paid_by_month.get(month_key, 0.0)
+                due = max(0.0, fee - paid)
+                if due > 0:
+                    total_due += due
+                    outstanding_months.append(_month_label(month_key))
+
+            if total_due <= 0:
+                skipped.append({"student_id": sid, "reason": "no_outstanding_balance"})
+                continue
+
+            # Keep the existing approved template and its three parameters.
+            # The third parameter contains the list of unpaid months.
             message_id = await _send_whatsapp_template_internal(
                 to=phone,
                 template_name=template,
-                body_parameters=[str(student.get("name") or "Student"), f"{due:.2f}", _month_label(data.month)],
+                body_parameters=[
+                    str(student.get("name") or "Student"),
+                    f"{total_due:.2f}",
+                    ", ".join(outstanding_months),
+                ],
             )
-            sent.append({"student_id": sid, "message_id": message_id})
-        except Exception as exc:
-            logging.getLogger(__name__).exception("Fee reminder failed for student_id=%s", sid)
-            failed.append({"student_id": sid, "error": str(exc)[:250]})
-    return {"success": len(failed) == 0, "month": data.month, "sent": sent, "skipped": skipped, "failed": failed}
 
+            sent.append({
+                "student_id": sid,
+                "message_id": message_id,
+                "amount": round(total_due, 2),
+                "months": outstanding_months,
+            })
+
+        except Exception as exc:
+            logging.getLogger(__name__).exception(
+                "Fee reminder failed for student_id=%s", sid
+            )
+            failed.append({"student_id": sid, "error": str(exc)[:250]})
+
+    return {
+        "success": len(failed) == 0,
+        "through_month": current_month,
+        "sent": sent,
+        "skipped": skipped,
+        "failed": failed,
+    }
 
 @whatsapp_router.post("/send-template")
 async def whatsapp_send_template(data: WhatsAppTemplateMessage):
