@@ -155,11 +155,33 @@ export const Dashboard = () => {
   const todaysPaymentCount =
     todaysPayments.length;
 
-  // Manually send reminders only to students with a positive outstanding balance.
-  // Balance is calculated month-by-month using recorded payments.
+  // Send reminders for one selected tutorial batch at a time.
+  // If a batch has more than 200 eligible students, split it into API-safe requests.
   const remindAllUnpaid = async () => {
+    if (!Array.isArray(batches) || batches.length === 0) {
+      toast.error("No tutorial batches were found.");
+      return;
+    }
+
+    const batchOptions = batches
+      .map((batch, index) => `${index + 1}. ${batch.name || `Batch ${index + 1}`}`)
+      .join("\n");
+    const selection = window.prompt(
+      `Choose ONE tutorial batch by number:\n\n${batchOptions}\n\nEnter the batch number:`
+    );
+    if (selection === null || !selection.trim()) return;
+
+    const batchIndex = Number(selection.trim()) - 1;
+    if (!Number.isInteger(batchIndex) || batchIndex < 0 || batchIndex >= batches.length) {
+      toast.error("Invalid batch number. Please try again.");
+      return;
+    }
+
+    const selectedBatch = batches[batchIndex];
     const throughMonth = currentMonth();
     const eligibleStudents = students.filter((student) => {
+      if (String(student.batch_id) !== String(selectedBatch.id)) return false;
+
       const phone = String(
         (student.parent_phone || "").trim() ||
         (student.phone || "").trim()
@@ -170,9 +192,7 @@ export const Dashboard = () => {
         !phone ||
         !/^\d{4}-(0[1-9]|1[0-2])$/.test(joinMonth) ||
         joinMonth > throughMonth
-      ) {
-        return false;
-      }
+      ) return false;
 
       const studentPayments = payments.filter(
         (payment) => String(payment.student_id) === String(student.id)
@@ -203,48 +223,50 @@ export const Dashboard = () => {
     });
 
     if (eligibleStudents.length === 0) {
-      toast.info("No students with outstanding fees and a phone number were found.");
+      toast.info(`No students with outstanding fees and a phone number were found in ${selectedBatch.name || "the selected batch"}.`);
       return;
     }
 
     const confirmed = window.confirm(
-      `Send WhatsApp fee reminders to ${eligibleStudents.length} students with outstanding fees?\n\n` +
-        "Only students with a positive balance are included. " +
+      `Send WhatsApp fee reminders to ${eligibleStudents.length} students in ${selectedBatch.name || "the selected batch"}?\n\n` +
+        "Only students with a positive outstanding balance are included. " +
         "The parent's number will be used first; if missing, the student's number will be used.\n\n" +
-        "Continue?"
+        "This sends reminders for this batch only. Continue?"
     );
-
     if (!confirmed) return;
 
-    try {
-      const result = await api.sendWhatsAppFeeReminders(
-        throughMonth,
-        eligibleStudents.map((student) => String(student.id))
-      );
+    const combined = { sent: [], skipped: [], failed: [] };
+    const studentIds = eligibleStudents.map((student) => String(student.id));
+    const batchSize = 200;
 
-      const sentCount = Array.isArray(result?.sent) ? result.sent.length : 0;
-      const skippedCount = Array.isArray(result?.skipped) ? result.skipped.length : 0;
-      const failedCount = Array.isArray(result?.failed) ? result.failed.length : 0;
-
-      toast.success(
-        `WhatsApp reminder results: Sent/accepted ${sentCount}, skipped ${skippedCount}, failed ${failedCount}. Meta acceptance does not confirm delivery.`,
-        { duration: 10000 }
-      );
-
-      if (failedCount > 0) {
-        const firstError = result.failed[0]?.error;
-        toast.error(
-          firstError ? `First failure: ${firstError}` : "Some reminders failed. Check backend logs.",
-          { duration: 10000 }
+    for (let offset = 0; offset < studentIds.length; offset += batchSize) {
+      const batchIds = studentIds.slice(offset, offset + batchSize);
+      try {
+        const batchResult = await api.sendWhatsAppFeeReminders(throughMonth, batchIds);
+        ["sent", "skipped", "failed"].forEach((key) => {
+          if (Array.isArray(batchResult?.[key])) combined[key].push(...batchResult[key]);
+        });
+      } catch (batchError) {
+        const detail = batchError?.response?.data?.detail;
+        const message = typeof detail === "string"
+          ? detail
+          : detail?.message || batchError?.message || "Batch request failed.";
+        combined.failed.push(
+          ...batchIds.map((studentId) => ({ student_id: studentId, error: message }))
         );
       }
-    } catch (error) {
-      const detail = error?.response?.data?.detail;
-      const message =
-        typeof detail === "string"
-          ? detail
-          : detail?.message || error?.message || "Fee reminders failed. Check backend logs.";
-      toast.error(message);
+    }
+
+    toast.success(
+      `${selectedBatch.name || "Selected batch"} reminders: Sent/accepted ${combined.sent.length}, skipped ${combined.skipped.length}, failed ${combined.failed.length}. Meta acceptance does not confirm delivery.`,
+      { duration: 10000 }
+    );
+    if (combined.failed.length > 0) {
+      const firstError = combined.failed[0]?.error;
+      toast.error(
+        firstError ? `First failure: ${firstError}` : "Some reminders failed. Check backend logs.",
+        { duration: 10000 }
+      );
     }
   };
 
