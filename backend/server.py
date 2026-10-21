@@ -3561,13 +3561,32 @@ async def _send_whatsapp_template_internal(
         result = response.json()
     except ValueError:
         result = {}
-    if not response.ok:
-        error = result.get("error", {}) if isinstance(result, dict) else {}
-        raise RuntimeError(f"Meta WhatsApp error ({response.status_code}): {error.get('message', 'send failed')}")
+
+    # Diagnostic logging only: do not log access tokens or recipient phone numbers.
+    error = result.get("error", {}) if isinstance(result, dict) else {}
+    if not isinstance(error, dict):
+        error = {}
     messages = result.get("messages", []) if isinstance(result, dict) else []
-    if not messages or not messages[0].get("id"):
+    if not isinstance(messages, list):
+        messages = []
+    first_message = messages[0] if messages and isinstance(messages[0], dict) else {}
+    message_id = first_message.get("id")
+    logger.info(
+        "WhatsApp Meta send result: http_status=%s template=%s message_id=%s error_code=%s error_subcode=%s error_message=%s",
+        response.status_code,
+        template_name,
+        message_id,
+        error.get("code"),
+        error.get("error_subcode"),
+        error.get("message"),
+    )
+
+    if not response.ok:
+        raise RuntimeError(f"Meta WhatsApp error ({response.status_code}): {error.get('message', 'send failed')}")
+    if not message_id:
+        logger.error("WhatsApp Meta returned success without a message ID; template=%s", template_name)
         raise RuntimeError("Meta returned no WhatsApp message ID")
-    return messages[0]["id"]
+    return message_id
 
 
 @whatsapp_status_router.get("/status")
@@ -3581,6 +3600,8 @@ async def whatsapp_status():
         "template_configured": bool(_whatsapp_env("WHATSAPP_FEE_TEMPLATE_NAME")),
         "payment_template_configured": bool(_whatsapp_env("WHATSAPP_PAYMENT_TEMPLATE_NAME")),
         "automatic_reminders_enabled": bool(_whatsapp_env("WHATSAPP_FEE_TEMPLATE_NAME")),
+        "webhook_verify_token_configured": bool(_whatsapp_env("WHATSAPP_VERIFY_TOKEN")),
+        "webhook_app_secret_configured": bool(_whatsapp_env("WHATSAPP_APP_SECRET")),
     }
 
 
@@ -3689,8 +3710,25 @@ async def whatsapp_send_template(data: WhatsAppTemplateMessage):
     except ValueError:
         result = {}
 
+    error = result.get("error", {}) if isinstance(result, dict) else {}
+    if not isinstance(error, dict):
+        error = {}
+    messages = result.get("messages", []) if isinstance(result, dict) else []
+    if not isinstance(messages, list):
+        messages = []
+    first_message = messages[0] if messages and isinstance(messages[0], dict) else {}
+    message_id = first_message.get("id")
+    logging.getLogger(__name__).info(
+        "WhatsApp Meta test-send result: http_status=%s template=%s message_id=%s error_code=%s error_subcode=%s error_message=%s",
+        response.status_code,
+        template,
+        message_id,
+        error.get("code"),
+        error.get("error_subcode"),
+        error.get("message"),
+    )
+
     if not response.ok:
-        error = result.get("error", {})
         raise HTTPException(
             status_code=502,
             detail={
@@ -3699,11 +3737,10 @@ async def whatsapp_send_template(data: WhatsAppTemplateMessage):
             },
         )
 
-    messages = result.get("messages", [])
     return {
-        "success": True,
-        "message_id": messages[0].get("id") if messages else None,
-        "status": "accepted_by_meta",
+        "success": bool(message_id),
+        "message_id": message_id,
+        "status": "accepted_by_meta" if message_id else "meta_response_missing_message_id",
     }
 
 
@@ -3729,6 +3766,7 @@ async def whatsapp_verify_webhook(
 async def whatsapp_receive_webhook(request: Request):
     """Receive WhatsApp Cloud API callbacks and log delivery status safely."""
     logger = logging.getLogger(__name__)
+    logger.info("WhatsApp webhook POST received")
     app_secret = _whatsapp_env("WHATSAPP_APP_SECRET")
     if not app_secret:
         logger.error("WhatsApp webhook callback received but WHATSAPP_APP_SECRET is not configured")
