@@ -3529,7 +3529,7 @@ def _normalize_whatsapp_phone(phone: str) -> str:
     return digits
 
 
-async def _send_whatsapp_template_internal(
+def _send_whatsapp_template_internal(
     to: str,
     template_name: str,
     body_parameters: Optional[List[str]] = None,
