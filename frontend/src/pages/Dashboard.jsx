@@ -51,6 +51,16 @@ export const Dashboard = () => {
 
   const [month, setMonth] = useState(currentMonth());
   const [mode, setMode] = useState("monthly");
+  const [reminderBatchPickerOpen, setReminderBatchPickerOpen] = useState(false);
+  const [reminderBatchConfirmOpen, setReminderBatchConfirmOpen] = useState(false);
+  const [selectedReminderBatchId, setSelectedReminderBatchId] = useState("");
+
+  const sortedReminderBatches = useMemo(
+    () => [...(Array.isArray(batches) ? batches : [])].sort((a, b) =>
+      String(a?.name || "").localeCompare(String(b?.name || ""), undefined, { numeric: true, sensitivity: "base" })
+    ),
+    [batches]
+  );
 
   // Send one manually confirmed WhatsApp template test message.
   const sendWhatsAppTest = async () => {
@@ -156,28 +166,18 @@ export const Dashboard = () => {
     todaysPayments.length;
 
   // Send reminders for one selected tutorial batch at a time.
+  // The user selects and confirms the batch in the dashboard UI.
   // If a batch has more than 200 eligible students, split it into API-safe requests.
   const remindAllUnpaid = async () => {
-    if (!Array.isArray(batches) || batches.length === 0) {
-      toast.error("No tutorial batches were found.");
-      return;
-    }
-
-    const batchOptions = batches
-      .map((batch, index) => `${index + 1}. ${batch.name || `Batch ${index + 1}`}`)
-      .join("\n");
-    const selection = window.prompt(
-      `Choose ONE tutorial batch by number:\n\n${batchOptions}\n\nEnter the batch number:`
+    const selectedBatch = sortedReminderBatches.find(
+      (batch) => String(batch.id) === String(selectedReminderBatchId)
     );
-    if (selection === null || !selection.trim()) return;
-
-    const batchIndex = Number(selection.trim()) - 1;
-    if (!Number.isInteger(batchIndex) || batchIndex < 0 || batchIndex >= batches.length) {
-      toast.error("Invalid batch number. Please try again.");
+    if (!selectedBatch) {
+      toast.error("Please select a tutorial batch first.");
       return;
     }
-
-    const selectedBatch = batches[batchIndex];
+    setReminderBatchConfirmOpen(false);
+    setReminderBatchPickerOpen(false);
     const throughMonth = currentMonth();
     const eligibleStudents = students.filter((student) => {
       if (String(student.batch_id) !== String(selectedBatch.id)) return false;
@@ -227,13 +227,7 @@ export const Dashboard = () => {
       return;
     }
 
-    const confirmed = window.confirm(
-      `Send WhatsApp fee reminders to ${eligibleStudents.length} students in ${selectedBatch.name || "the selected batch"}?\n\n` +
-        "Only students with a positive outstanding balance are included. " +
-        "The parent's number will be used first; if missing, the student's number will be used.\n\n" +
-        "This sends reminders for this batch only. Continue?"
-    );
-    if (!confirmed) return;
+    // The confirmation dialog is shown in the dashboard before this function runs.
 
     const combined = { sent: [], skipped: [], failed: [] };
     const studentIds = eligibleStudents.map((student) => String(student.id));
@@ -566,9 +560,13 @@ export const Dashboard = () => {
             </Button>
 
             <Button
-              onClick={
-                remindAllUnpaid
-              }
+              onClick={() => {
+                if (sortedReminderBatches.length === 0) {
+                  toast.error("No tutorial batches were found.");
+                  return;
+                }
+                setReminderBatchPickerOpen(true);
+              }}
               className="gap-2"
             >
               <Megaphone
@@ -684,6 +682,94 @@ export const Dashboard = () => {
 
         {/* RECENT ACTIVITY */}
         <RecentActivity activities={activities} />
+
+        {/* FEE REMINDER BATCH PICKER */}
+        {reminderBatchPickerOpen && (
+          <div
+            className="fixed inset-0 z-[110] bg-slate-900/55 backdrop-blur-[2px] flex items-center justify-center p-4"
+            onClick={() => setReminderBatchPickerOpen(false)}
+          >
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="reminder-batch-title"
+              className="w-full max-w-md rounded-3xl bg-white p-5 sm:p-6 shadow-2xl"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <h2 id="reminder-batch-title" className="text-xl font-extrabold text-slate-900">
+                Choose Fee Reminder Batch
+              </h2>
+              <p className="mt-2 text-sm text-slate-500">
+                Select one batch. The list is sorted numerically.
+              </p>
+              <label htmlFor="reminder-batch-select" className="mt-4 block text-sm font-semibold text-slate-700">
+                Tutorial batch
+              </label>
+              <select
+                id="reminder-batch-select"
+                value={selectedReminderBatchId}
+                onChange={(event) => setSelectedReminderBatchId(event.target.value)}
+                className="mt-2 min-h-12 w-full rounded-xl border border-slate-300 bg-white px-3 py-3 text-base text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              >
+                <option value="">Select a batch…</option>
+                {sortedReminderBatches.map((batch) => (
+                  <option key={String(batch.id)} value={String(batch.id)}>
+                    {batch.name || "Unnamed batch"}
+                  </option>
+                ))}
+              </select>
+              <div className="mt-5 flex gap-3">
+                <Button variant="outline" className="flex-1" onClick={() => setReminderBatchPickerOpen(false)}>
+                  Cancel
+                </Button>
+                <Button
+                  className="flex-1"
+                  disabled={!selectedReminderBatchId}
+                  onClick={() => {
+                    setReminderBatchPickerOpen(false);
+                    setReminderBatchConfirmOpen(true);
+                  }}
+                >
+                  Continue
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* CONFIRM SELECTED FEE REMINDER BATCH */}
+        {reminderBatchConfirmOpen && (
+          <div
+            className="fixed inset-0 z-[111] bg-slate-900/55 backdrop-blur-[2px] flex items-center justify-center p-4"
+            onClick={() => setReminderBatchConfirmOpen(false)}
+          >
+            <div
+              role="alertdialog"
+              aria-modal="true"
+              aria-labelledby="reminder-batch-confirm-title"
+              className="w-full max-w-md rounded-3xl bg-white p-5 sm:p-6 shadow-2xl"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <h2 id="reminder-batch-confirm-title" className="text-xl font-extrabold text-slate-900">
+                Confirm Fee Reminder
+              </h2>
+              <p className="mt-3 text-sm leading-6 text-slate-600">
+                Send WhatsApp fee reminders only to students with outstanding fees in <strong>{sortedReminderBatches.find((batch) => String(batch.id) === String(selectedReminderBatchId))?.name || "the selected batch"}</strong>?
+              </p>
+              <p className="mt-2 text-xs leading-5 text-slate-500">
+                Only students with a positive outstanding balance and a phone number will be included. Parent phone is used first when available. Please do not retry if a request times out until you check which messages were sent.
+              </p>
+              <div className="mt-5 flex gap-3">
+                <Button variant="outline" className="flex-1" onClick={() => setReminderBatchConfirmOpen(false)}>
+                  Cancel
+                </Button>
+                <Button className="flex-1" onClick={remindAllUnpaid}>
+                  Confirm &amp; Send
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* IMPORT CONFIRM */}
         <ConfirmDialog
