@@ -55,6 +55,8 @@ export const Dashboard = () => {
   const [reminderBatchConfirmOpen, setReminderBatchConfirmOpen] = useState(false);
   const [selectedReminderBatchId, setSelectedReminderBatchId] = useState("");
   const [pendingFeePreviewOpen, setPendingFeePreviewOpen] = useState(false);
+  const [pendingFeeBatchPickerOpen, setPendingFeeBatchPickerOpen] = useState(false);
+  const [selectedPendingFeeBatchId, setSelectedPendingFeeBatchId] = useState("");
   const [pendingFeeSending, setPendingFeeSending] = useState(false);
 
   const sortedReminderBatches = useMemo(
@@ -117,9 +119,18 @@ export const Dashboard = () => {
     );
   }, [students, payments]);
 
+  // Only show eligible students in the selected batch, using the same class picker
+  // pattern as "Remind All Unpaid".
+  const selectedPendingFeeReminderRows = useMemo(() => {
+    if (!selectedPendingFeeBatchId) return [];
+    return pendingFeeReminderRows.filter(
+      (row) => String(row.student.batch_id ?? "") === String(selectedPendingFeeBatchId)
+    );
+  }, [pendingFeeReminderRows, selectedPendingFeeBatchId]);
+
   // Group eligible students by their existing tutorial batch/class for easier review.
   const pendingFeeReminderGroups = useMemo(() => {
-    const rows = Array.isArray(pendingFeeReminderRows) ? pendingFeeReminderRows : [];
+    const rows = Array.isArray(selectedPendingFeeReminderRows) ? selectedPendingFeeReminderRows : [];
     const groups = (Array.isArray(sortedReminderBatches) ? sortedReminderBatches : [])
       .map((batch) => {
         const groupRows = rows.filter((row) => String(row.student.batch_id ?? "") === String(batch.id ?? ""));
@@ -143,7 +154,7 @@ export const Dashboard = () => {
       });
     }
     return groups;
-  }, [pendingFeeReminderRows, sortedReminderBatches]);
+  }, [selectedPendingFeeReminderRows, sortedReminderBatches]);
 
   // Send one manually confirmed WhatsApp template test message.
   const sendWhatsAppTest = async () => {
@@ -173,15 +184,15 @@ export const Dashboard = () => {
   };
 
   const sendPendingFeeReminders = async () => {
-    if (pendingFeeReminderRows.length === 0) {
-      toast.info("No students with 2 or more unpaid months and a phone number were found.");
+    if (selectedPendingFeeReminderRows.length === 0) {
+      toast.info("No students in this class have 2 or more unpaid months and a phone number.");
       setPendingFeePreviewOpen(false);
       return;
     }
     setPendingFeeSending(true);
     const throughMonth = currentMonth();
     const combined = { sent: [], skipped: [], failed: [] };
-    const studentIds = pendingFeeReminderRows.map((row) => String(row.student.id));
+    const studentIds = selectedPendingFeeReminderRows.map((row) => String(row.student.id));
     // Keep each manually triggered request small enough to avoid the frontend's 20s timeout.
     // This change applies only to the new Pending Fees Reminders flow.
     const batchSize = 10;
@@ -687,7 +698,14 @@ export const Dashboard = () => {
 
             <Button
               variant="outline"
-              onClick={() => setPendingFeePreviewOpen(true)}
+              onClick={() => {
+                if (sortedReminderBatches.length === 0) {
+                  toast.error("No tutorial batches were found.");
+                  return;
+                }
+                setSelectedPendingFeeBatchId("");
+                setPendingFeeBatchPickerOpen(true);
+              }}
               className="gap-2"
             >
               <Megaphone size={16} />
@@ -818,7 +836,61 @@ export const Dashboard = () => {
         {/* RECENT ACTIVITY */}
         <RecentActivity activities={activities} />
 
-        {/* MANUAL ALL-CLASSES PENDING FEE REMINDER PREVIEW */}
+        {/* PENDING-FEE REMINDER BATCH PICKER — mirrors Remind All Unpaid */}
+        {pendingFeeBatchPickerOpen && (
+          <div
+            className="fixed inset-0 z-[113] bg-slate-900/55 backdrop-blur-[2px] flex items-center justify-center p-4"
+            onClick={() => setPendingFeeBatchPickerOpen(false)}
+          >
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="pending-fee-batch-title"
+              className="w-full max-w-md rounded-3xl bg-white p-5 sm:p-6 shadow-2xl"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <h2 id="pending-fee-batch-title" className="text-xl font-extrabold text-slate-900">
+                Choose Pending Fee Reminder Batch
+              </h2>
+              <p className="mt-2 text-sm text-slate-500">
+                Select one batch. The list is sorted numerically.
+              </p>
+              <label htmlFor="pending-fee-batch-select" className="mt-4 block text-sm font-semibold text-slate-700">
+                Tutorial batch
+              </label>
+              <select
+                id="pending-fee-batch-select"
+                value={selectedPendingFeeBatchId}
+                onChange={(event) => setSelectedPendingFeeBatchId(event.target.value)}
+                className="mt-2 min-h-12 w-full rounded-xl border border-slate-300 bg-white px-3 py-3 text-base text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              >
+                <option value="">Select a batch…</option>
+                {sortedReminderBatches.map((batch) => (
+                  <option key={String(batch.id)} value={String(batch.id)}>
+                    {batch.name || "Unnamed batch"}
+                  </option>
+                ))}
+              </select>
+              <div className="mt-5 flex gap-3">
+                <Button variant="outline" className="flex-1" onClick={() => setPendingFeeBatchPickerOpen(false)}>
+                  Cancel
+                </Button>
+                <Button
+                  className="flex-1"
+                  disabled={!selectedPendingFeeBatchId}
+                  onClick={() => {
+                    setPendingFeeBatchPickerOpen(false);
+                    setPendingFeePreviewOpen(true);
+                  }}
+                >
+                  Continue
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* MANUAL SELECTED-CLASS PENDING FEE REMINDER PREVIEW */}
         {pendingFeePreviewOpen && (
           <div
             className="fixed inset-0 z-[112] bg-slate-900/55 backdrop-blur-[2px] flex items-center justify-center p-3 sm:p-5"
@@ -853,18 +925,18 @@ export const Dashboard = () => {
                 <div className="mt-4 grid grid-cols-2 gap-3">
                   <div className="rounded-2xl bg-indigo-50 p-3">
                     <div className="text-xs font-semibold uppercase text-indigo-500">Students</div>
-                    <div className="mt-1 text-2xl font-extrabold text-indigo-700">{pendingFeeReminderRows.length}</div>
+                    <div className="mt-1 text-2xl font-extrabold text-indigo-700">{selectedPendingFeeReminderRows.length}</div>
                   </div>
                   <div className="rounded-2xl bg-amber-50 p-3">
                     <div className="text-xs font-semibold uppercase text-amber-600">Total Pending Fees</div>
                     <div className="mt-1 text-2xl font-extrabold text-amber-700">
-                      {inr(pendingFeeReminderRows.reduce((sum, row) => sum + row.total, 0))}
+                      {inr(selectedPendingFeeReminderRows.reduce((sum, row) => sum + row.total, 0))}
                     </div>
                   </div>
                 </div>
               </div>
               <div className="overflow-y-auto max-h-[calc(90vh-250px)] px-5 pb-3 sm:px-7">
-                {pendingFeeReminderRows.length === 0 ? (
+                {selectedPendingFeeReminderRows.length === 0 ? (
                   <p className="py-8 text-center text-sm text-slate-500">
                     No students with 2 or more unpaid months and a phone number were found.
                   </p>
@@ -918,9 +990,9 @@ export const Dashboard = () => {
                   Cancel
                 </Button>
                 <Button
-                  disabled={pendingFeeSending || pendingFeeReminderRows.length === 0}
+                  disabled={pendingFeeSending || selectedPendingFeeReminderRows.length === 0}
                   onClick={() => {
-                    if (window.confirm(`Send WhatsApp fee reminders to ${pendingFeeReminderRows.length} students with 2 or more unpaid months? The total includes previous balances plus the current month. Please confirm the list and amounts first.`)) {
+                    if (window.confirm(`Send WhatsApp fee reminders to ${selectedPendingFeeReminderRows.length} students with 2 or more unpaid months? The total includes previous balances plus the current month. Please confirm the list and amounts first.`)) {
                       sendPendingFeeReminders();
                     }
                   }}
