@@ -76,7 +76,7 @@ export const Dashboard = () => {
       const joinMonth = String(student.join_month || throughMonth).slice(0, 7);
       if (
         !phone ||
-        !/^\\d{4}-(0[1-9]|1[0-2])$/.test(joinMonth) ||
+        !/^\d{4}-(0[1-9]|1[0-2])$/.test(joinMonth) ||
         joinMonth > throughMonth
       ) return null;
 
