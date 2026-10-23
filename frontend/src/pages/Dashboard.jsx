@@ -76,7 +76,7 @@ export const Dashboard = () => {
       const joinMonth = String(student.join_month || throughMonth).slice(0, 7);
       if (
         !phone ||
-        !/^\\d{4}-(0[1-9]|1[0-2])$/.test(joinMonth) ||
+        !/^[0-9]{4}-(0[1-9]|1[0-2])$/.test(joinMonth) ||
         joinMonth > throughMonth
       ) return null;
 
@@ -116,6 +116,34 @@ export const Dashboard = () => {
       String(a.student.name || "").localeCompare(String(b.student.name || ""), undefined, { sensitivity: "base" })
     );
   }, [students, payments]);
+
+  // Group eligible students by their existing tutorial batch/class for easier review.
+  const pendingFeeReminderGroups = useMemo(() => {
+    const rows = Array.isArray(pendingFeeReminderRows) ? pendingFeeReminderRows : [];
+    const groups = (Array.isArray(sortedReminderBatches) ? sortedReminderBatches : [])
+      .map((batch) => {
+        const groupRows = rows.filter((row) => String(row.student.batch_id ?? "") === String(batch.id ?? ""));
+        return groupRows.length ? {
+          id: String(batch.id),
+          name: batch.name || "Unnamed class",
+          rows: groupRows,
+          total: groupRows.reduce((sum, row) => sum + row.total, 0),
+        } : null;
+      })
+      .filter(Boolean);
+
+    const knownBatchIds = new Set((Array.isArray(sortedReminderBatches) ? sortedReminderBatches : []).map((batch) => String(batch.id ?? "")));
+    const otherRows = rows.filter((row) => !knownBatchIds.has(String(row.student.batch_id ?? "")));
+    if (otherRows.length) {
+      groups.push({
+        id: "__other__",
+        name: "Other / Unassigned",
+        rows: otherRows,
+        total: otherRows.reduce((sum, row) => sum + row.total, 0),
+      });
+    }
+    return groups;
+  }, [pendingFeeReminderRows, sortedReminderBatches]);
 
   // Send one manually confirmed WhatsApp template test message.
   const sendWhatsAppTest = async () => {
@@ -810,7 +838,7 @@ export const Dashboard = () => {
                       Send Pending Fees Reminders
                     </h2>
                     <p className="mt-1 text-sm text-slate-500">
-                      All classes · Only students with 2 or more months pending · Includes previous balance plus current month
+                      Class-wise list · Only students with 2 or more months pending · Previous balance plus current month
                     </p>
                   </div>
                   <button
@@ -851,18 +879,30 @@ export const Dashboard = () => {
                         </tr>
                       </thead>
                       <tbody>
-                        {pendingFeeReminderRows.map(({ student, pendingMonths, total }) => (
-                          <tr key={String(student.id)} className="border-t border-slate-100 align-top">
-                            <td className="px-3 py-3 font-semibold text-slate-800">
-                              {student.name || "Unnamed student"}
-                            </td>
-                            <td className="px-3 py-3 text-slate-600">
-                              {pendingMonths.map(({ month: pendingMonth }) => monthLabel(pendingMonth).replace(/\s+\d{4}$/, "")).join(", ")}
-                            </td>
-                            <td className="px-3 py-3 text-right font-bold text-slate-800 whitespace-nowrap">
-                              {inr(total)}
-                            </td>
-                          </tr>
+                        {pendingFeeReminderGroups.map((group) => (
+                          <React.Fragment key={group.id}>
+                            <tr className="border-t-2 border-slate-200 bg-indigo-50">
+                              <td colSpan={2} className="px-3 py-3 font-extrabold text-indigo-900">
+                                {group.name} <span className="ml-1 text-xs font-semibold text-indigo-700">({group.rows.length} students)</span>
+                              </td>
+                              <td className="px-3 py-3 text-right font-extrabold text-indigo-900 whitespace-nowrap">
+                                {inr(group.total)}
+                              </td>
+                            </tr>
+                            {group.rows.map(({ student, pendingMonths, total }) => (
+                              <tr key={String(student.id)} className="border-t border-slate-100 align-top">
+                                <td className="px-3 py-3 font-semibold text-slate-800">
+                                  {student.name || "Unnamed student"}
+                                </td>
+                                <td className="px-3 py-3 text-slate-600">
+                                  {pendingMonths.map(({ month: pendingMonth }) => monthLabel(pendingMonth).replace(/\s+\d{4}$/, "")).join(", ")}
+                                </td>
+                                <td className="px-3 py-3 text-right font-bold text-slate-800 whitespace-nowrap">
+                                  {inr(total)}
+                                </td>
+                              </tr>
+                            ))}
+                          </React.Fragment>
                         ))}
                       </tbody>
                     </table>
