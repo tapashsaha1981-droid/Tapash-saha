@@ -54,6 +54,9 @@ export const Dashboard = () => {
   const [reminderBatchPickerOpen, setReminderBatchPickerOpen] = useState(false);
   const [reminderBatchConfirmOpen, setReminderBatchConfirmOpen] = useState(false);
   const [selectedReminderBatchId, setSelectedReminderBatchId] = useState("");
+  const [pendingPreviewOpen, setPendingPreviewOpen] = useState(false);
+  const [pendingPreviewRows, setPendingPreviewRows] = useState([]);
+  const [pendingSending, setPendingSending] = useState(false);
 
   const sortedReminderBatches = useMemo(
     () => [...(Array.isArray(batches) ? batches : [])].sort((a, b) =>
@@ -62,30 +65,69 @@ export const Dashboard = () => {
     [batches]
   );
 
-  // Send one manually confirmed WhatsApp template test message.
-  const sendWhatsAppTest = async () => {
-    const to = window.prompt(
-      "Enter the recipient WhatsApp number with country code (e.g. 919876543210):"
-    );
-    if (!to || !to.trim()) return;
+  // Build a preview of every student's outstanding months through the current month.
+  const openPendingFeesPreview = () => {
+    const throughMonth = currentMonth();
+    const rows = students.map((student) => {
+      const phone = String((student.parent_phone || "").trim() || (student.phone || "").trim()).trim();
+      const joinMonth = String(student.join_month || throughMonth).slice(0, 7);
+      if (!phone || !/^\d{4}-(0[1-9]|1[0-2])$/.test(joinMonth) || joinMonth > throughMonth) return null;
+      const studentPayments = payments.filter((payment) => String(payment.student_id) === String(student.id));
+      const pendingMonths = [];
+      let total = 0;
+      let cursor = joinMonth;
+      while (cursor <= throughMonth) {
+        const monthPayments = studentPayments.filter((payment) => String(payment.month || "").slice(0, 7) === cursor);
+        const feeSnapshot = monthPayments.reduce((fee, payment) => Math.max(fee, Number(payment.fee_snapshot || 0)), 0);
+        const fee = feeSnapshot > 0 ? feeSnapshot : Number(student.monthly_fee || 0);
+        const paid = monthPayments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+        const due = Math.max(0, fee - paid);
+        if (due > 0) {
+          pendingMonths.push({ key: cursor, label: monthLabel(cursor), due });
+          total += due;
+        }
+        cursor = shiftMonth(cursor, 1);
+      }
+      if (!pendingMonths.length) return null;
+      return { student, id: String(student.id), name: student.name || student.student_name || "Unnamed student", months: pendingMonths, total };
+    }).filter(Boolean).sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
 
-    if (!window.confirm(`Send ONE WhatsApp test message to ${to.trim()}?`)) {
+    if (!rows.length) {
+      toast.info("No students with pending fees and a phone number were found.", { duration: Infinity, closeButton: true });
       return;
     }
+    setPendingPreviewRows(rows);
+    setPendingPreviewOpen(true);
+  };
 
+  const sendPendingFeesReminders = async () => {
+    setPendingSending(true);
+    const throughMonth = currentMonth();
+    const combined = { sent: [], skipped: [], failed: [] };
+    const studentIds = pendingPreviewRows.map((row) => row.id);
     try {
-      const result = await api.sendWhatsAppTest(to.trim());
-      if (result?.success) {
-        toast.success("WhatsApp test accepted by Meta.");
-      } else {
-        toast.error("WhatsApp test was not confirmed. Please check the response.");
+      for (let offset = 0; offset < studentIds.length; offset += 200) {
+        const batchIds = studentIds.slice(offset, offset + 200);
+        try {
+          const result = await api.sendWhatsAppFeeReminders(throughMonth, batchIds);
+          ["sent", "skipped", "failed"].forEach((key) => {
+            if (Array.isArray(result?.[key])) combined[key].push(...result[key]);
+          });
+        } catch (error) {
+          const detail = error?.response?.data?.detail;
+          const message = typeof detail === "string" ? detail : detail?.message || error?.message || "Batch request failed.";
+          combined.failed.push(...batchIds.map((studentId) => ({ student_id: studentId, error: message })));
+        }
       }
-    } catch (error) {
-      const detail = error?.response?.data?.detail;
-      const message = typeof detail === "string"
-        ? detail
-        : detail?.message || "WhatsApp test failed. Check backend configuration.";
-      toast.error(message);
+      setPendingPreviewOpen(false);
+      toast.success(`Pending-fee reminders: Sent/accepted ${combined.sent.length}, skipped ${combined.skipped.length}, failed ${combined.failed.length}. Meta acceptance does not confirm delivery.`, { duration: Infinity, closeButton: true });
+      if (combined.skipped.length) toast.info(`Skipped: ${combined.skipped.length}. These students were not sent a reminder.`, { duration: Infinity, closeButton: true });
+      if (combined.failed.length) {
+        const firstError = combined.failed[0]?.error;
+        toast.error(`Failed: ${combined.failed.length}.${firstError ? ` First error: ${firstError}` : " Check backend logs for details."}`, { duration: Infinity, closeButton: true });
+      }
+    } finally {
+      setPendingSending(false);
     }
   };
 
@@ -253,13 +295,16 @@ export const Dashboard = () => {
 
     toast.success(
       `${selectedBatch.name || "Selected batch"} reminders: Sent/accepted ${combined.sent.length}, skipped ${combined.skipped.length}, failed ${combined.failed.length}. Meta acceptance does not confirm delivery.`,
-      { duration: 10000 }
+      { duration: Infinity, closeButton: true }
     );
+    if (combined.skipped.length > 0) {
+      toast.info(`Skipped: ${combined.skipped.length}. These students were not sent a reminder.`, { duration: Infinity, closeButton: true });
+    }
     if (combined.failed.length > 0) {
       const firstError = combined.failed[0]?.error;
       toast.error(
         firstError ? `First failure: ${firstError}` : "Some reminders failed. Check backend logs.",
-        { duration: 10000 }
+        { duration: Infinity, closeButton: true }
       );
     }
   };
@@ -553,10 +598,12 @@ export const Dashboard = () => {
 
             <Button
               variant="outline"
-              onClick={sendWhatsAppTest}
+              onClick={openPendingFeesPreview}
               className="gap-2"
+              data-testid="send-pending-fees-reminders"
             >
-              Test WhatsApp
+              <Megaphone size={16} />
+              Send Pending Fees Reminders
             </Button>
 
             <Button
@@ -766,6 +813,29 @@ export const Dashboard = () => {
                 <Button className="flex-1" onClick={remindAllUnpaid}>
                   Confirm &amp; Send
                 </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ALL-CLASS PENDING FEES PREVIEW */}
+        {pendingPreviewOpen && (
+          <div className="fixed inset-0 z-[112] bg-slate-900/55 backdrop-blur-[2px] flex items-center justify-center p-3 sm:p-5" onClick={() => !pendingSending && setPendingPreviewOpen(false)}>
+            <div role="dialog" aria-modal="true" aria-labelledby="pending-fees-title" className="w-full max-w-3xl max-h-[90vh] overflow-hidden rounded-3xl bg-white shadow-2xl" onClick={(event) => event.stopPropagation()}>
+              <div className="p-5 sm:p-6 border-b border-slate-100">
+                <h2 id="pending-fees-title" className="text-xl sm:text-2xl font-extrabold text-slate-900">Pending Fees WhatsApp Reminders</h2>
+                <p className="mt-2 text-sm text-slate-500">All classes · Includes every pending month, including the current month. Review before sending.</p>
+              </div>
+              <div className="max-h-[55vh] overflow-auto px-5 sm:px-6">
+                <table className="w-full text-sm text-left">
+                  <thead className="sticky top-0 bg-white border-b border-slate-200"><tr><th className="py-3 pr-3 font-bold">Student</th><th className="py-3 pr-3 font-bold">Months</th><th className="py-3 text-right font-bold">Total Fees</th></tr></thead>
+                  <tbody>{pendingPreviewRows.map((row) => <tr key={row.id} className="border-b border-slate-100 align-top"><td className="py-3 pr-3 font-medium">{row.name}</td><td className="py-3 pr-3">{row.months.map((item) => item.label).join(", ")}</td><td className="py-3 text-right whitespace-nowrap">{inr(row.total)}</td></tr>)}</tbody>
+                  <tfoot className="sticky bottom-0 bg-slate-50"><tr><td colSpan={2} className="py-3 pr-3 font-extrabold">{pendingPreviewRows.length} students</td><td className="py-3 text-right font-extrabold whitespace-nowrap">{inr(pendingPreviewRows.reduce((sum, row) => sum + row.total, 0))}</td></tr></tfoot>
+                </table>
+              </div>
+              <div className="p-5 sm:p-6 flex flex-col-reverse sm:flex-row gap-3 border-t border-slate-100">
+                <Button variant="outline" className="flex-1" disabled={pendingSending} onClick={() => setPendingPreviewOpen(false)}>Cancel</Button>
+                <Button className="flex-1" disabled={pendingSending || pendingPreviewRows.length === 0} onClick={sendPendingFeesReminders}>{pendingSending ? "Sending…" : `Confirm & Send to ${pendingPreviewRows.length} Students`}</Button>
               </div>
             </div>
           </div>
