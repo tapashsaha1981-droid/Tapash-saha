@@ -76,7 +76,7 @@ export const Dashboard = () => {
       const joinMonth = String(student.join_month || throughMonth).slice(0, 7);
       if (
         !phone ||
-        !/^\d{4}-(0[1-9]|1[0-2])$/.test(joinMonth) ||
+        !/^\\d{4}-(0[1-9]|1[0-2])$/.test(joinMonth) ||
         joinMonth > throughMonth
       ) return null;
 
@@ -154,7 +154,9 @@ export const Dashboard = () => {
     const throughMonth = currentMonth();
     const combined = { sent: [], skipped: [], failed: [] };
     const studentIds = pendingFeeReminderRows.map((row) => String(row.student.id));
-    const batchSize = 200;
+    // Keep each manually triggered request small enough to avoid the frontend's 20s timeout.
+    // This change applies only to the new Pending Fees Reminders flow.
+    const batchSize = 10;
 
     try {
       for (let offset = 0; offset < studentIds.length; offset += batchSize) {
