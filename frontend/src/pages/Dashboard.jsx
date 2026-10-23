@@ -54,9 +54,8 @@ export const Dashboard = () => {
   const [reminderBatchPickerOpen, setReminderBatchPickerOpen] = useState(false);
   const [reminderBatchConfirmOpen, setReminderBatchConfirmOpen] = useState(false);
   const [selectedReminderBatchId, setSelectedReminderBatchId] = useState("");
-  const [pendingPreviewOpen, setPendingPreviewOpen] = useState(false);
-  const [pendingPreviewRows, setPendingPreviewRows] = useState([]);
-  const [pendingSending, setPendingSending] = useState(false);
+  const [pendingFeePreviewOpen, setPendingFeePreviewOpen] = useState(false);
+  const [pendingFeeSending, setPendingFeeSending] = useState(false);
 
   const sortedReminderBatches = useMemo(
     () => [...(Array.isArray(batches) ? batches : [])].sort((a, b) =>
@@ -65,69 +64,132 @@ export const Dashboard = () => {
     [batches]
   );
 
-  // Build a preview of every student's outstanding months through the current month.
-  const openPendingFeesPreview = () => {
+  // Include only students with 2 or more unpaid months. Total includes all unpaid
+  // previous-month balances plus the current month. Sending remains manual.
+  const pendingFeeReminderRows = useMemo(() => {
     const throughMonth = currentMonth();
-    const rows = students.map((student) => {
-      const phone = String((student.parent_phone || "").trim() || (student.phone || "").trim()).trim();
+    return (Array.isArray(students) ? students : []).map((student) => {
+      const phone = String(
+        (student.parent_phone || "").trim() ||
+        (student.phone || "").trim()
+      ).trim();
       const joinMonth = String(student.join_month || throughMonth).slice(0, 7);
-      if (!phone || !/^\d{4}-(0[1-9]|1[0-2])$/.test(joinMonth) || joinMonth > throughMonth) return null;
-      const studentPayments = payments.filter((payment) => String(payment.student_id) === String(student.id));
+      if (
+        !phone ||
+        !/^\\d{4}-(0[1-9]|1[0-2])$/.test(joinMonth) ||
+        joinMonth > throughMonth
+      ) return null;
+
+      const studentPayments = (Array.isArray(payments) ? payments : []).filter(
+        (payment) => String(payment.student_id) === String(student.id)
+      );
       const pendingMonths = [];
       let total = 0;
       let cursor = joinMonth;
       while (cursor <= throughMonth) {
-        const monthPayments = studentPayments.filter((payment) => String(payment.month || "").slice(0, 7) === cursor);
-        const feeSnapshot = monthPayments.reduce((fee, payment) => Math.max(fee, Number(payment.fee_snapshot || 0)), 0);
-        const fee = feeSnapshot > 0 ? feeSnapshot : Number(student.monthly_fee || 0);
-        const paid = monthPayments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
-        const due = Math.max(0, fee - paid);
+        const monthPayments = studentPayments.filter(
+          (payment) => String(payment.month || "").slice(0, 7) === cursor
+        );
+        const feeSnapshot = monthPayments.reduce(
+          (fee, payment) => Math.max(fee, Number(payment.fee_snapshot || 0)),
+          0
+        );
+        const monthlyFee = feeSnapshot > 0
+          ? feeSnapshot
+          : Number(student.monthly_fee || 0);
+        const paid = monthPayments.reduce(
+          (sum, payment) => sum + Number(payment.amount || 0),
+          0
+        );
+        const due = Math.max(0, monthlyFee - paid);
         if (due > 0) {
-          pendingMonths.push({ key: cursor, label: monthLabel(cursor), due });
+          pendingMonths.push({ month: cursor, due });
           total += due;
         }
         cursor = shiftMonth(cursor, 1);
       }
-      if (!pendingMonths.length) return null;
-      return { student, id: String(student.id), name: student.name || student.student_name || "Unnamed student", months: pendingMonths, total };
-    }).filter(Boolean).sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
 
-    if (!rows.length) {
-      toast.info("No students with pending fees and a phone number were found.", { duration: Infinity, closeButton: true });
+      return pendingMonths.length >= 2
+        ? { student, phone, pendingMonths, total }
+        : null;
+    }).filter(Boolean).sort((a, b) =>
+      String(a.student.name || "").localeCompare(String(b.student.name || ""), undefined, { sensitivity: "base" })
+    );
+  }, [students, payments]);
+
+  // Send one manually confirmed WhatsApp template test message.
+  const sendWhatsAppTest = async () => {
+    const to = window.prompt(
+      "Enter the recipient WhatsApp number with country code (e.g. 919876543210):"
+    );
+    if (!to || !to.trim()) return;
+
+    if (!window.confirm(`Send ONE WhatsApp test message to ${to.trim()}?`)) {
       return;
     }
-    setPendingPreviewRows(rows);
-    setPendingPreviewOpen(true);
+
+    try {
+      const result = await api.sendWhatsAppTest(to.trim());
+      if (result?.success) {
+        toast.success("WhatsApp test accepted by Meta.");
+      } else {
+        toast.error("WhatsApp test was not confirmed. Please check the response.");
+      }
+    } catch (error) {
+      const detail = error?.response?.data?.detail;
+      const message = typeof detail === "string"
+        ? detail
+        : detail?.message || "WhatsApp test failed. Check backend configuration.";
+      toast.error(message);
+    }
   };
 
-  const sendPendingFeesReminders = async () => {
-    setPendingSending(true);
+  const sendPendingFeeReminders = async () => {
+    if (pendingFeeReminderRows.length === 0) {
+      toast.info("No students with 2 or more unpaid months and a phone number were found.");
+      setPendingFeePreviewOpen(false);
+      return;
+    }
+    setPendingFeeSending(true);
     const throughMonth = currentMonth();
     const combined = { sent: [], skipped: [], failed: [] };
-    const studentIds = pendingPreviewRows.map((row) => row.id);
+    const studentIds = pendingFeeReminderRows.map((row) => String(row.student.id));
+    const batchSize = 200;
+
     try {
-      for (let offset = 0; offset < studentIds.length; offset += 200) {
-        const batchIds = studentIds.slice(offset, offset + 200);
+      for (let offset = 0; offset < studentIds.length; offset += batchSize) {
+        const batchIds = studentIds.slice(offset, offset + batchSize);
         try {
-          const result = await api.sendWhatsAppFeeReminders(throughMonth, batchIds);
+          const batchResult = await api.sendWhatsAppFeeReminders(throughMonth, batchIds);
           ["sent", "skipped", "failed"].forEach((key) => {
-            if (Array.isArray(result?.[key])) combined[key].push(...result[key]);
+            if (Array.isArray(batchResult?.[key])) combined[key].push(...batchResult[key]);
           });
-        } catch (error) {
-          const detail = error?.response?.data?.detail;
-          const message = typeof detail === "string" ? detail : detail?.message || error?.message || "Batch request failed.";
-          combined.failed.push(...batchIds.map((studentId) => ({ student_id: studentId, error: message })));
+        } catch (batchError) {
+          const detail = batchError?.response?.data?.detail;
+          const message = typeof detail === "string"
+            ? detail
+            : detail?.message || batchError?.message || "Batch request failed.";
+          combined.failed.push(
+            ...batchIds.map((studentId) => ({ student_id: studentId, error: message }))
+          );
         }
       }
-      setPendingPreviewOpen(false);
-      toast.success(`Pending-fee reminders: Sent/accepted ${combined.sent.length}, skipped ${combined.skipped.length}, failed ${combined.failed.length}. Meta acceptance does not confirm delivery.`, { duration: Infinity, closeButton: true });
-      if (combined.skipped.length) toast.info(`Skipped: ${combined.skipped.length}. These students were not sent a reminder.`, { duration: Infinity, closeButton: true });
-      if (combined.failed.length) {
+
+      setPendingFeePreviewOpen(false);
+      const outcomeMessage = `Pending-fee reminders — Sent/accepted: ${combined.sent.length}; Skipped: ${combined.skipped.length}; Failed: ${combined.failed.length}. Meta acceptance does not confirm delivery.`;
+      if (combined.failed.length > 0) {
         const firstError = combined.failed[0]?.error;
-        toast.error(`Failed: ${combined.failed.length}.${firstError ? ` First error: ${firstError}` : " Check backend logs for details."}`, { duration: Infinity, closeButton: true });
+        toast.error(
+          `${outcomeMessage}${firstError ? ` First failure: ${firstError}` : " Check backend logs for failure details."}`,
+          { duration: Infinity }
+        );
+      } else if (combined.skipped.length > 0) {
+        toast.warning(outcomeMessage, { duration: Infinity });
+      } else {
+        toast.success(outcomeMessage, { duration: Infinity });
       }
     } finally {
-      setPendingSending(false);
+      setPendingFeeSending(false);
     }
   };
 
@@ -295,16 +357,13 @@ export const Dashboard = () => {
 
     toast.success(
       `${selectedBatch.name || "Selected batch"} reminders: Sent/accepted ${combined.sent.length}, skipped ${combined.skipped.length}, failed ${combined.failed.length}. Meta acceptance does not confirm delivery.`,
-      { duration: Infinity, closeButton: true }
+      { duration: Infinity }
     );
-    if (combined.skipped.length > 0) {
-      toast.info(`Skipped: ${combined.skipped.length}. These students were not sent a reminder.`, { duration: Infinity, closeButton: true });
-    }
     if (combined.failed.length > 0) {
       const firstError = combined.failed[0]?.error;
       toast.error(
         firstError ? `First failure: ${firstError}` : "Some reminders failed. Check backend logs.",
-        { duration: Infinity, closeButton: true }
+        { duration: Infinity }
       );
     }
   };
@@ -598,9 +657,8 @@ export const Dashboard = () => {
 
             <Button
               variant="outline"
-              onClick={openPendingFeesPreview}
+              onClick={() => setPendingFeePreviewOpen(true)}
               className="gap-2"
-              data-testid="send-pending-fees-reminders"
             >
               <Megaphone size={16} />
               Send Pending Fees Reminders
@@ -730,6 +788,110 @@ export const Dashboard = () => {
         {/* RECENT ACTIVITY */}
         <RecentActivity activities={activities} />
 
+        {/* MANUAL ALL-CLASSES PENDING FEE REMINDER PREVIEW */}
+        {pendingFeePreviewOpen && (
+          <div
+            className="fixed inset-0 z-[112] bg-slate-900/55 backdrop-blur-[2px] flex items-center justify-center p-3 sm:p-5"
+            onClick={() => !pendingFeeSending && setPendingFeePreviewOpen(false)}
+          >
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="pending-fee-reminder-title"
+              className="w-full max-w-3xl max-h-[90vh] overflow-hidden rounded-3xl bg-white shadow-2xl"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="px-5 pt-5 sm:px-7 sm:pt-6">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h2 id="pending-fee-reminder-title" className="text-xl sm:text-2xl font-extrabold text-slate-900">
+                      Send Pending Fees Reminders
+                    </h2>
+                    <p className="mt-1 text-sm text-slate-500">
+                      All classes · Only students with 2 or more months pending · Includes previous balance plus current month
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setPendingFeePreviewOpen(false)}
+                    disabled={pendingFeeSending}
+                    className="h-10 w-10 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500 shrink-0"
+                    aria-label="Close pending fee preview"
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+                <div className="mt-4 grid grid-cols-2 gap-3">
+                  <div className="rounded-2xl bg-indigo-50 p-3">
+                    <div className="text-xs font-semibold uppercase text-indigo-500">Students</div>
+                    <div className="mt-1 text-2xl font-extrabold text-indigo-700">{pendingFeeReminderRows.length}</div>
+                  </div>
+                  <div className="rounded-2xl bg-amber-50 p-3">
+                    <div className="text-xs font-semibold uppercase text-amber-600">Total Pending Fees</div>
+                    <div className="mt-1 text-2xl font-extrabold text-amber-700">
+                      {inr(pendingFeeReminderRows.reduce((sum, row) => sum + row.total, 0))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="overflow-y-auto max-h-[calc(90vh-250px)] px-5 pb-3 sm:px-7">
+                {pendingFeeReminderRows.length === 0 ? (
+                  <p className="py-8 text-center text-sm text-slate-500">
+                    No students with 2 or more unpaid months and a phone number were found.
+                  </p>
+                ) : (
+                  <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200">
+                    <table className="w-full min-w-[520px] text-left text-sm">
+                      <thead className="bg-slate-50 text-slate-600">
+                        <tr>
+                          <th className="px-3 py-3 font-bold">Student</th>
+                          <th className="px-3 py-3 font-bold">Months</th>
+                          <th className="px-3 py-3 text-right font-bold">Fees</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {pendingFeeReminderRows.map(({ student, pendingMonths, total }) => (
+                          <tr key={String(student.id)} className="border-t border-slate-100 align-top">
+                            <td className="px-3 py-3 font-semibold text-slate-800">
+                              {student.name || "Unnamed student"}
+                            </td>
+                            <td className="px-3 py-3 text-slate-600">
+                              {pendingMonths.map(({ month: pendingMonth }) => monthLabel(pendingMonth).replace(/\s+\d{4}$/, "")).join(", ")}
+                            </td>
+                            <td className="px-3 py-3 text-right font-bold text-slate-800 whitespace-nowrap">
+                              {inr(total)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+              <div className="border-t border-slate-100 px-5 py-4 sm:px-7 flex flex-col-reverse sm:flex-row gap-3 sm:justify-end">
+                <Button
+                  variant="outline"
+                  disabled={pendingFeeSending}
+                  onClick={() => setPendingFeePreviewOpen(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  disabled={pendingFeeSending || pendingFeeReminderRows.length === 0}
+                  onClick={() => {
+                    if (window.confirm(`Send WhatsApp fee reminders to ${pendingFeeReminderRows.length} students with 2 or more unpaid months? The total includes previous balances plus the current month. Please confirm the list and amounts first.`)) {
+                      sendPendingFeeReminders();
+                    }
+                  }}
+                  className="gap-2"
+                >
+                  <Megaphone size={16} />
+                  {pendingFeeSending ? "Sending..." : "Confirm & Send"}
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* FEE REMINDER BATCH PICKER */}
         {reminderBatchPickerOpen && (
           <div
@@ -813,29 +975,6 @@ export const Dashboard = () => {
                 <Button className="flex-1" onClick={remindAllUnpaid}>
                   Confirm &amp; Send
                 </Button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ALL-CLASS PENDING FEES PREVIEW */}
-        {pendingPreviewOpen && (
-          <div className="fixed inset-0 z-[112] bg-slate-900/55 backdrop-blur-[2px] flex items-center justify-center p-3 sm:p-5" onClick={() => !pendingSending && setPendingPreviewOpen(false)}>
-            <div role="dialog" aria-modal="true" aria-labelledby="pending-fees-title" className="w-full max-w-3xl max-h-[90vh] overflow-hidden rounded-3xl bg-white shadow-2xl" onClick={(event) => event.stopPropagation()}>
-              <div className="p-5 sm:p-6 border-b border-slate-100">
-                <h2 id="pending-fees-title" className="text-xl sm:text-2xl font-extrabold text-slate-900">Pending Fees WhatsApp Reminders</h2>
-                <p className="mt-2 text-sm text-slate-500">All classes · Includes every pending month, including the current month. Review before sending.</p>
-              </div>
-              <div className="max-h-[55vh] overflow-auto px-5 sm:px-6">
-                <table className="w-full text-sm text-left">
-                  <thead className="sticky top-0 bg-white border-b border-slate-200"><tr><th className="py-3 pr-3 font-bold">Student</th><th className="py-3 pr-3 font-bold">Months</th><th className="py-3 text-right font-bold">Total Fees</th></tr></thead>
-                  <tbody>{pendingPreviewRows.map((row) => <tr key={row.id} className="border-b border-slate-100 align-top"><td className="py-3 pr-3 font-medium">{row.name}</td><td className="py-3 pr-3">{row.months.map((item) => item.label).join(", ")}</td><td className="py-3 text-right whitespace-nowrap">{inr(row.total)}</td></tr>)}</tbody>
-                  <tfoot className="sticky bottom-0 bg-slate-50"><tr><td colSpan={2} className="py-3 pr-3 font-extrabold">{pendingPreviewRows.length} students</td><td className="py-3 text-right font-extrabold whitespace-nowrap">{inr(pendingPreviewRows.reduce((sum, row) => sum + row.total, 0))}</td></tr></tfoot>
-                </table>
-              </div>
-              <div className="p-5 sm:p-6 flex flex-col-reverse sm:flex-row gap-3 border-t border-slate-100">
-                <Button variant="outline" className="flex-1" disabled={pendingSending} onClick={() => setPendingPreviewOpen(false)}>Cancel</Button>
-                <Button className="flex-1" disabled={pendingSending || pendingPreviewRows.length === 0} onClick={sendPendingFeesReminders}>{pendingSending ? "Sending…" : `Confirm & Send to ${pendingPreviewRows.length} Students`}</Button>
               </div>
             </div>
           </div>
