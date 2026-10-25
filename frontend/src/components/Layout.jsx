@@ -12,6 +12,7 @@ import {
   ClipboardCheck,
   LogOut,
   RefreshCw,
+  CreditCard,
 } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
 import { useData } from "@/lib/store";
@@ -84,6 +85,13 @@ export const Layout = ({ children }) => {
       icon: CalendarDays,
       testid: "nav-calendar",
       emoji: "📅",
+    },
+    {
+      to: "/razorpay-payments",
+      label: "Razorpay",
+      icon: CreditCard,
+      testid: "nav-razorpay-payments",
+      emoji: "💳",
     },
   ];
 
@@ -178,7 +186,7 @@ export const Layout = ({ children }) => {
 
       {/* Bottom nav */}
       <nav className="fixed bottom-0 left-0 right-0 z-30 bg-white/90 backdrop-blur-md border-t border-slate-200/60">
-        <div className="max-w-3xl mx-auto grid grid-cols-6 px-2 py-2">
+        <div className="max-w-3xl mx-auto grid grid-cols-7 px-1 sm:px-2 py-2">
           {nav.map((n) => {
             const active = loc.pathname === n.to;
 
