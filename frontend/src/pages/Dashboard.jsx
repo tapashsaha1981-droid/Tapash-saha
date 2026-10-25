@@ -66,6 +66,60 @@ export const Dashboard = () => {
     [batches]
   );
 
+  // Count students eligible for the "Remind All Unpaid" confirmation.
+  // Keep the same rules as the sending function: selected batch, valid phone,
+  // valid join month, and a positive outstanding balance through the current month.
+  const selectedReminderEligibleStudents = useMemo(() => {
+    const selectedBatch = sortedReminderBatches.find(
+      (batch) => String(batch.id) === String(selectedReminderBatchId)
+    );
+    if (!selectedBatch) return [];
+
+    const throughMonth = currentMonth();
+    return (Array.isArray(students) ? students : []).filter((student) => {
+      if (String(student.batch_id) !== String(selectedBatch.id)) return false;
+
+      const phone = String(
+        (student.parent_phone || "").trim() ||
+        (student.phone || "").trim()
+      ).trim();
+      const joinMonth = String(student.join_month || throughMonth).slice(0, 7);
+
+      if (
+        !phone ||
+        !/^\d{4}-(0[1-9]|1[0-2])$/.test(joinMonth) ||
+        joinMonth > throughMonth
+      ) return false;
+
+      const studentPayments = (Array.isArray(payments) ? payments : []).filter(
+        (payment) => String(payment.student_id) === String(student.id)
+      );
+      let outstanding = 0;
+      let cursor = joinMonth;
+
+      while (cursor <= throughMonth) {
+        const monthPayments = studentPayments.filter(
+          (payment) => String(payment.month || "").slice(0, 7) === cursor
+        );
+        const feeSnapshot = monthPayments.reduce(
+          (fee, payment) => Math.max(fee, Number(payment.fee_snapshot || 0)),
+          0
+        );
+        const monthlyFee = feeSnapshot > 0
+          ? feeSnapshot
+          : Number(student.monthly_fee || 0);
+        const paid = monthPayments.reduce(
+          (sum, payment) => sum + Number(payment.amount || 0),
+          0
+        );
+        outstanding += Math.max(0, monthlyFee - paid);
+        cursor = shiftMonth(cursor, 1);
+      }
+
+      return outstanding > 0;
+    });
+  }, [students, payments, sortedReminderBatches, selectedReminderBatchId]);
+
   // Include only students with 2 or more unpaid months. Total includes all unpaid
   // previous-month balances plus the current month. Sending remains manual.
   const pendingFeeReminderRows = useMemo(() => {
@@ -1079,14 +1133,29 @@ export const Dashboard = () => {
               <p className="mt-3 text-sm leading-6 text-slate-600">
                 Send WhatsApp fee reminders only to students with outstanding fees in <strong>{sortedReminderBatches.find((batch) => String(batch.id) === String(selectedReminderBatchId))?.name || "the selected batch"}</strong>?
               </p>
+              <div className="mt-4 rounded-2xl border border-indigo-100 bg-indigo-50 p-4 text-center">
+                <div className="text-3xl font-extrabold text-indigo-700">
+                  {selectedReminderEligibleStudents.length}
+                </div>
+                <div className="mt-1 text-sm font-semibold text-indigo-900">
+                  {selectedReminderEligibleStudents.length === 1 ? "student will" : "students will"} receive a reminder request
+                </div>
+                <div className="mt-1 text-xs text-indigo-700">
+                  Count includes students with outstanding fees and a phone number.
+                </div>
+              </div>
               <p className="mt-2 text-xs leading-5 text-slate-500">
-                Only students with a positive outstanding balance and a phone number will be included. Parent phone is used first when available. Please do not retry if a request times out until you check which messages were sent.
+                Parent phone is used first when available. Please do not retry if a request times out until you check which messages were sent.
               </p>
               <div className="mt-5 flex gap-3">
                 <Button variant="outline" className="flex-1" onClick={() => setReminderBatchConfirmOpen(false)}>
                   Cancel
                 </Button>
-                <Button className="flex-1" onClick={remindAllUnpaid}>
+                <Button
+                  className="flex-1"
+                  disabled={selectedReminderEligibleStudents.length === 0}
+                  onClick={remindAllUnpaid}
+                >
                   Confirm &amp; Send
                 </Button>
               </div>
