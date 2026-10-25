@@ -30,6 +30,7 @@ import { Students } from "@/pages/Students";
 import { Overview } from "@/pages/Overview";
 import { CalendarPage } from "@/pages/CalendarPage";
 import Attendance from "@/pages/Attendance";
+import { RazorpayPayments } from "@/pages/RazorpayPayments";
 
 import { api } from "@/lib/api";
 
@@ -270,6 +271,11 @@ const Shell = () => {
         <Route
           path="/attendance"
           element={<Attendance />}
+        />
+
+        <Route
+          path="/razorpay-payments"
+          element={<RazorpayPayments />}
         />
 
       </Routes>
