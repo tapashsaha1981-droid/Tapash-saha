@@ -2504,11 +2504,31 @@ async def create_student_razorpay_order(
                             and str(remote_old.get("currency") or "").upper() == "INR"
                             and str(remote_old.get("status") or "").lower() in {"created", "attempted"}
                         )
-                        attempts_all_failed = bool(remote_payments) and all(
-                            str(payment.get("status") or "").lower() == "failed"
-                            and payment.get("captured") is not True
-                            and payment.get("amount") is not None
-                            for payment in remote_payments
+                        # Closing Razorpay checkout without attempting payment leaves
+                        # an order in "created" with zero payment records. Such an order
+                        # must not block retries forever. Retire it locally only after it
+                        # is at least 20 minutes old and the exact order identity, owner,
+                        # months, amount, currency, and mode have already been checked.
+                        try:
+                            remote_created_at = int(remote_old.get("created_at") or 0)
+                            remote_age_seconds = max(
+                                0,
+                                int(datetime.now(timezone.utc).timestamp()) - remote_created_at,
+                            )
+                        except (TypeError, ValueError):
+                            remote_age_seconds = 0
+                        zero_attempts_and_stale = (
+                            len(remote_payments) == 0
+                            and str(remote_old.get("status") or "").lower() == "created"
+                            and remote_age_seconds >= 20 * 60
+                        )
+                        attempts_all_failed = zero_attempts_and_stale or (
+                            bool(remote_payments) and all(
+                                str(payment.get("status") or "").lower() == "failed"
+                                and payment.get("captured") is not True
+                                and payment.get("amount") is not None
+                                for payment in remote_payments
+                            )
                         )
                         no_money_moved = all(
                             str(payment.get("status") or "").lower() == "failed"
