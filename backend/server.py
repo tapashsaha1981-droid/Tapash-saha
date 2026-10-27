@@ -2468,6 +2468,84 @@ async def create_student_razorpay_order(
                             "test_mode": mode == "test",
                         }
                     raise HTTPException(409, "The previous Razorpay order is not safely reusable. Please contact the administrator before paying again.")
+            else:
+                # Repair a legacy/interrupted write where the month claims have the
+                # Razorpay order ID but the local order document was never saved.
+                # Reuse is allowed only after Razorpay independently confirms that
+                # this exact order belongs to this student, covers exactly these
+                # months, has the exact current total, and remains unpaid/payable.
+                # Never release claims or create a replacement order in this path.
+                try:
+                    rz = razorpay.Client(auth=(key_id, key_secret))
+                    remote_order = await run_in_threadpool(rz.order.fetch, old_order_id)
+                except Exception:
+                    logging.exception("Could not verify legacy Razorpay order missing from local order collection")
+                    raise HTTPException(503, "Could not verify the previous payment order. Do not pay again; please contact the administrator.")
+
+                remote_status = str(remote_order.get("status") or "").lower()
+                remote_notes = remote_order.get("notes") or {}
+                remote_months = sorted(
+                    m.strip() for m in str(remote_notes.get("months") or "").split(",") if m.strip()
+                )
+                related_claims = await db.razorpay_student_month_claims.find(
+                    {"order_id": old_order_id},
+                    {"_id": 0, "student_id": 1, "profile_id": 1, "mode": 1, "month": 1},
+                ).to_list(length=100)
+                claimed_months = sorted(str(c.get("month") or "") for c in related_claims if c.get("month"))
+                claims_owned = bool(related_claims) and all(
+                    c.get("student_id") == student["id"]
+                    and c.get("profile_id") == profile_id
+                    and c.get("mode") == mode
+                    for c in related_claims
+                )
+                remote_matches = (
+                    remote_order.get("id") == old_order_id
+                    and remote_notes.get("edunotes_profile_id") == profile_id
+                    and str(remote_notes.get("tuition_student_id")) == str(student["id"])
+                    and remote_months == months
+                    and claimed_months == months
+                    and int(remote_order.get("amount") or 0) == total_paise
+                    and str(remote_order.get("currency") or "").upper() == "INR"
+                    and claims_owned
+                )
+                if remote_status == "paid":
+                    await db.razorpay_student_month_claims.update_many(
+                        {"order_id": old_order_id},
+                        {"$set": {"status": "reconciliation_required", "expires_at": None}},
+                    )
+                    raise HTTPException(409, "This previous order is already paid or awaiting fee reconciliation. Do not pay again.")
+                if not remote_matches or remote_status not in {"created", "attempted"}:
+                    raise HTTPException(409, "The previous order could not be safely reused. Do not pay again; contact the administrator for reconciliation.")
+
+                repaired_order_doc = {
+                    "order_id": old_order_id,
+                    "profile_id": profile_id,
+                    "student_id": student["id"],
+                    "amount_paise": total_paise,
+                    "currency": "INR",
+                    "breakdown": breakdown,
+                    "status": remote_status,
+                    "mode": mode,
+                    "reservation_token": existing_claims[0].get("reservation_token"),
+                    "receipt": remote_order.get("receipt"),
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                }
+                await db.razorpay_student_orders.update_one(
+                    {"order_id": old_order_id}, {"$setOnInsert": repaired_order_doc}, upsert=True
+                )
+                await db.razorpay_student_month_claims.update_many(
+                    {"order_id": old_order_id, "student_id": student["id"],
+                     "profile_id": profile_id, "mode": mode},
+                    {"$set": {"status": remote_status, "expires_at": None}},
+                )
+                return {
+                    "order_id": old_order_id,
+                    "key_id": key_id,
+                    "amount": total_paise,
+                    "currency": "INR",
+                    "name": str(student.get("name") or "EduNotes Pro Student"),
+                    "test_mode": mode == "test",
+                }
         # A single checkout response can contain only one Razorpay order. If the
         # selected months are already attached to different orders, do not merge
         # or replace them: ask the student to retry one month at a time. This is
