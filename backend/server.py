@@ -2475,28 +2475,79 @@ async def create_student_razorpay_order(
                         f"An earlier Razorpay order still covers {old_month_labels} for ₹{old_amount_rupees}. "
                         f"Select those same months to resume that checkout. Do not create another payment."
                     )
-                # The Razorpay order amount is immutable. Never return an old order
-                # to checkout when the live Tuition Manager ledger now calculates a
-                # different amount. Such an order may still be payable, so do not
-                # create a replacement order or release its claims automatically.
+                # If the ledger amount changed, do not reuse the immutable old order.
+                # Permit a fresh checkout only when Razorpay confirms the old order
+                # belongs to this exact student/month selection and every recorded
+                # payment attempt is explicitly FAILED (no authorized/captured/pending
+                # attempts). This releases only the local month reservation; Razorpay
+                # does not provide a normal order-delete/cancel operation, so an old
+                # checkout URL may still exist outside this app. Keep this conservative
+                # and fail closed if the remote order/payments cannot be verified.
                 if old_months == months and old_amount > 0 and old_amount != total_paise:
-                    logging.error(
-                        "RAZORPAY_AMOUNT_MISMATCH_BLOCKED student_id=%s order_id=%s months=%s saved_amount_paise=%s current_amount_paise=%s",
-                        student["id"], old_order_id, months, old_amount, total_paise,
-                    )
-                    await db.razorpay_student_month_claims.update_many(
-                        {"order_id": old_order_id, "student_id": student["id"],
-                         "profile_id": profile_id, "mode": mode},
-                        {"$set": {"status": "reconciliation_required", "expires_at": None}},
-                    )
+                    try:
+                        rz_retry = razorpay.Client(auth=(key_id, key_secret))
+                        remote_old = await run_in_threadpool(rz_retry.order.fetch, old_order_id)
+                        remote_notes = remote_old.get("notes") or {}
+                        remote_months = sorted(
+                            m.strip() for m in str(remote_notes.get("months") or "").split(",") if m.strip()
+                        )
+                        remote_payments_response = await run_in_threadpool(
+                            rz_retry.order.payments, old_order_id
+                        )
+                        remote_payments = remote_payments_response.get("items", []) if isinstance(remote_payments_response, dict) else []
+                        old_order_matches = (
+                            remote_old.get("id") == old_order_id
+                            and remote_notes.get("edunotes_profile_id") == profile_id
+                            and str(remote_notes.get("tuition_student_id")) == str(student["id"])
+                            and remote_months == months
+                            and int(remote_old.get("amount") or 0) == old_amount
+                            and str(remote_old.get("currency") or "").upper() == "INR"
+                            and str(remote_old.get("status") or "").lower() in {"created", "attempted"}
+                        )
+                        attempts_all_failed = bool(remote_payments) and all(
+                            str(payment.get("status") or "").lower() == "failed"
+                            and payment.get("captured") is not True
+                            and payment.get("amount") is not None
+                            for payment in remote_payments
+                        )
+                        no_money_moved = all(
+                            str(payment.get("status") or "").lower() == "failed"
+                            and payment.get("captured") is not True
+                            for payment in remote_payments
+                        )
+                    except Exception:
+                        logging.exception("Could not verify old Razorpay order/payment attempts for retry")
+                        raise HTTPException(
+                            503,
+                            "We could not verify the previous payment attempt. Please refresh and try again shortly.",
+                        )
+
+                    if not (old_order_matches and attempts_all_failed and no_money_moved):
+                        logging.warning(
+                            "RAZORPAY_RETRY_BLOCKED old order not conclusively failed: order_id=%s status=%s payments=%s",
+                            old_order_id, remote_old.get("status"),
+                            [str(x.get("status") or "unknown") for x in remote_payments],
+                        )
+                        raise HTTPException(
+                            409,
+                            "The previous checkout has not been confirmed as failed yet. Please wait briefly, refresh, and retry.",
+                        )
+
+                    # Retire the stale local order record and release only its own
+                    # claims. Never remove a claim that has since been reassigned.
                     await db.razorpay_student_orders.update_one(
                         {"order_id": old_order_id, "student_id": student["id"],
                          "profile_id": profile_id, "mode": mode},
-                        {"$set": {"status": "reconciliation_required", "reconciliation_reason": "amount_mismatch", "current_amount_paise": total_paise}},
+                        {"$set": {"status": "retired_failed_retry", "reconciliation_reason": "amount_mismatch_all_attempts_failed", "retired_at": datetime.now(timezone.utc).isoformat(), "replacement_amount_paise": total_paise}},
                     )
-                    raise HTTPException(
-                        409,
-                        "The previous Razorpay order amount differs from your current fee balance. It has been blocked for administrator reconciliation. Do not pay this order or start another payment yet.",
+                    await db.razorpay_student_month_claims.delete_many({
+                        "order_id": old_order_id, "student_id": student["id"],
+                        "profile_id": profile_id, "mode": mode,
+                    })
+                    existing_claims = []
+                    logging.info(
+                        "RAZORPAY_RETRY_RELEASED_FAILED_ORDER student_id=%s old_order_id=%s months=%s old_amount=%s new_amount=%s",
+                        student["id"], old_order_id, months, old_amount, total_paise,
                     )
                 # Reuse is allowed only if the saved order matches the current
                 # amount and Razorpay independently confirms the exact order.
