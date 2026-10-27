@@ -2434,6 +2434,16 @@ async def create_student_razorpay_order(
             and c.get("mode") == mode
             for c in existing_claims
         )
+        if not same_owner:
+            logging.warning(
+                "RAZORPAY_409_DIAG owner/mode mismatch: selected_months=%s current_mode=%s claims=%s",
+                months, mode,
+                [{"month": c.get("month"), "claim_mode": c.get("mode"),
+                  "student_match": c.get("student_id") == student["id"],
+                  "profile_match": c.get("profile_id") == profile_id,
+                  "has_order_id": bool(c.get("order_id")),
+                  "status": c.get("status")} for c in existing_claims],
+            )
         # A prior multi-month checkout can leave only some month-claims in the
         # collection (for example, October is reserved but September's claim row
         # was never persisted). If the existing local order proves that it covers
@@ -2448,6 +2458,13 @@ async def create_student_razorpay_order(
             if old_doc:
                 old_months = sorted(x.get("month") for x in old_doc.get("breakdown", []) if x.get("month"))
                 old_amount = int(old_doc.get("amount_paise") or 0)
+                logging.info(
+                    "RAZORPAY_409_DIAG local order comparison: selected_months=%s saved_months=%s "
+                    "selected_amount_paise=%s saved_amount_paise=%s current_mode=%s saved_mode=%s "
+                    "saved_status=%s order_id_present=%s",
+                    months, old_months, total_paise, old_amount, mode, old_doc.get("mode"),
+                    old_doc.get("status"), bool(old_doc.get("order_id")),
+                )
                 if old_months == months and old_amount == total_paise:
                     rz = razorpay.Client(auth=(key_id, key_secret))
                     try:
@@ -2608,6 +2625,15 @@ async def create_student_razorpay_order(
                 "starting with the month shown as already in progress. If it still "
                 "fails, contact the administrator with the month and order ID."
             )
+        logging.warning(
+            "RAZORPAY_409_DIAG generic reservation block: selected_months=%s current_mode=%s "
+            "claim_order_ids=%s claims=%s",
+            months, mode, sorted(str(x) for x in claim_order_ids),
+            [{"month": c.get("month"), "claim_mode": c.get("mode"),
+              "status": c.get("status"), "has_order_id": bool(c.get("order_id")),
+              "has_receipt": bool(c.get("receipt")),
+              "has_breakdown": bool(c.get("breakdown"))} for c in existing_claims],
+        )
         raise HTTPException(
             409,
             "A previous payment order still reserves this month and could still be payable. "
