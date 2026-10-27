@@ -2434,7 +2434,12 @@ async def create_student_razorpay_order(
             and c.get("mode") == mode
             for c in existing_claims
         )
-        if len(existing_claims) == len(months) and same_owner and len(claim_order_ids) == 1 and None not in claim_order_ids:
+        # A prior multi-month checkout can leave only some month-claims in the
+        # collection (for example, October is reserved but September's claim row
+        # was never persisted). If the existing local order proves that it covers
+        # the EXACT selection and amount, we may safely reuse it and repair missing
+        # claim rows. Do not require one claim document per selected month here.
+        if existing_claims and same_owner and len(claim_order_ids) == 1 and None not in claim_order_ids:
             old_order_id = next(iter(claim_order_ids))
             old_doc = await db.razorpay_student_orders.find_one(
                 {"order_id": old_order_id, "profile_id": profile_id, "student_id": student["id"], "mode": mode},
@@ -2458,6 +2463,50 @@ async def create_student_razorpay_order(
                         )
                         raise HTTPException(409, "This order is already paid or awaiting fee reconciliation. Do not pay again.")
                     if remote_status in {"created", "attempted"}:
+                        # Repair any missing month-claim rows only after the saved
+                        # order and Razorpay status have been matched to this exact
+                        # student, mode, month selection and total. Never overwrite
+                        # a claim that points at a different order.
+                        reservation_token_for_repair = (
+                            old_doc.get("reservation_token")
+                            or existing_claims[0].get("reservation_token")
+                        )
+                        for selected_month in months:
+                            month_claim_id = f"{student['id']}:{selected_month}"
+                            month_claim = await db.razorpay_student_month_claims.find_one(
+                                {"_id": month_claim_id}, {"_id": 0, "order_id": 1,
+                                 "student_id": 1, "profile_id": 1, "mode": 1}
+                            )
+                            if month_claim:
+                                if (month_claim.get("student_id") != student["id"]
+                                        or month_claim.get("profile_id") != profile_id
+                                        or month_claim.get("mode") != mode
+                                        or month_claim.get("order_id") != old_order_id):
+                                    raise HTTPException(
+                                        409,
+                                        "A selected month is reserved by a different payment order. Do not pay again; contact the administrator."
+                                    )
+                                continue
+                            await db.razorpay_student_month_claims.update_one(
+                                {"_id": month_claim_id},
+                                {"$setOnInsert": {
+                                    "_id": month_claim_id,
+                                    "student_id": student["id"],
+                                    "profile_id": profile_id,
+                                    "month": selected_month,
+                                    "mode": mode,
+                                    "reservation_token": reservation_token_for_repair,
+                                    "order_id": old_order_id,
+                                    "status": remote_status,
+                                    "created_at": datetime.now(timezone.utc).isoformat(),
+                                    "expires_at": None,
+                                    "receipt": old_doc.get("receipt"),
+                                    "amount_paise": old_amount,
+                                    "currency": old_doc.get("currency") or "INR",
+                                    "breakdown": old_doc.get("breakdown", []),
+                                }},
+                                upsert=True,
+                            )
                         # Return the original order, never create a second one.
                         return {
                             "order_id": old_order_id,
