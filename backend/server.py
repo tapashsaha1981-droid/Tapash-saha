@@ -2475,11 +2475,32 @@ async def create_student_razorpay_order(
                         f"An earlier Razorpay order still covers {old_month_labels} for ₹{old_amount_rupees}. "
                         f"Select those same months to resume that checkout. Do not create another payment."
                     )
-                # A checkout may be closed and reopened after the current fee
-                # balance changes. The existing Razorpay order amount is immutable;
-                # when the selected months match exactly, resume the saved order
-                # using its original amount instead of creating a second order.
-                if old_months == months and old_amount > 0:
+                # The Razorpay order amount is immutable. Never return an old order
+                # to checkout when the live Tuition Manager ledger now calculates a
+                # different amount. Such an order may still be payable, so do not
+                # create a replacement order or release its claims automatically.
+                if old_months == months and old_amount > 0 and old_amount != total_paise:
+                    logging.error(
+                        "RAZORPAY_AMOUNT_MISMATCH_BLOCKED student_id=%s order_id=%s months=%s saved_amount_paise=%s current_amount_paise=%s",
+                        student["id"], old_order_id, months, old_amount, total_paise,
+                    )
+                    await db.razorpay_student_month_claims.update_many(
+                        {"order_id": old_order_id, "student_id": student["id"],
+                         "profile_id": profile_id, "mode": mode},
+                        {"$set": {"status": "reconciliation_required", "expires_at": None}},
+                    )
+                    await db.razorpay_student_orders.update_one(
+                        {"order_id": old_order_id, "student_id": student["id"],
+                         "profile_id": profile_id, "mode": mode},
+                        {"$set": {"status": "reconciliation_required", "reconciliation_reason": "amount_mismatch", "current_amount_paise": total_paise}},
+                    )
+                    raise HTTPException(
+                        409,
+                        "The previous Razorpay order amount differs from your current fee balance. It has been blocked for administrator reconciliation. Do not pay this order or start another payment yet.",
+                    )
+                # Reuse is allowed only if the saved order matches the current
+                # amount and Razorpay independently confirms the exact order.
+                if old_months == months and old_amount > 0 and old_amount == total_paise:
                     rz = razorpay.Client(auth=(key_id, key_secret))
                     try:
                         remote_order = await run_in_threadpool(rz.order.fetch, old_order_id)
