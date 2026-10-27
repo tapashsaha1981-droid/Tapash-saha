@@ -2465,7 +2465,21 @@ async def create_student_razorpay_order(
                     months, old_months, total_paise, old_amount, mode, old_doc.get("mode"),
                     old_doc.get("status"), bool(old_doc.get("order_id")),
                 )
-                if old_months == months and old_amount == total_paise:
+                if old_months != months and set(months).issubset(set(old_months)):
+                    old_month_labels = ", ".join(
+                        datetime.strptime(m, "%Y-%m").strftime("%B %Y") for m in old_months
+                    )
+                    old_amount_rupees = f"{old_amount / 100:.2f}"
+                    raise HTTPException(
+                        409,
+                        f"An earlier Razorpay order still covers {old_month_labels} for ₹{old_amount_rupees}. "
+                        f"Select those same months to resume that checkout. Do not create another payment."
+                    )
+                # A checkout may be closed and reopened after the current fee
+                # balance changes. The existing Razorpay order amount is immutable;
+                # when the selected months match exactly, resume the saved order
+                # using its original amount instead of creating a second order.
+                if old_months == months and old_amount > 0:
                     rz = razorpay.Client(auth=(key_id, key_secret))
                     try:
                         remote_order = await run_in_threadpool(rz.order.fetch, old_order_id)
@@ -2473,6 +2487,23 @@ async def create_student_razorpay_order(
                         logging.exception("Could not confirm existing Razorpay order status")
                         raise HTTPException(503, "Could not confirm the previous payment status. Do not pay again; please contact the administrator.")
                     remote_status = str(remote_order.get("status") or "").lower()
+                    remote_notes = remote_order.get("notes") or {}
+                    remote_months = sorted(
+                        m.strip() for m in str(remote_notes.get("months") or "").split(",") if m.strip()
+                    )
+                    if (
+                        remote_order.get("id") != old_order_id
+                        or int(remote_order.get("amount") or 0) != old_amount
+                        or str(remote_order.get("currency") or "").upper() != str(old_doc.get("currency") or "INR").upper()
+                        or remote_months != old_months
+                        or remote_notes.get("edunotes_profile_id") != profile_id
+                        or str(remote_notes.get("tuition_student_id")) != str(student["id"])
+                    ):
+                        raise HTTPException(
+                            409,
+                            "The saved Razorpay order does not match its original student, months, or amount. "
+                            "Do not pay again; contact the administrator."
+                        )
                     if remote_status == "paid":
                         await db.razorpay_student_month_claims.update_many(
                             {"order_id": old_order_id},
