@@ -3022,10 +3022,30 @@ async def verify_student_razorpay_payment(
                 "payment_method": "razorpay_live" if mode == "live" else "razorpay_test",
             }
             await db.payments.insert_one(record)
-        sync_ok = await sync_payment_for_student(student["id"])
+        # Retry transient Supabase REST failures after the Razorpay capture.
+        # sync_payment_for_student is idempotent: it reads each profile/month
+        # first, then PATCHes existing records or POSTs missing ones. Re-running
+        # it safely recovers from timeouts where Supabase may have accepted a
+        # write but the response was lost.
+        sync_ok = False
+        sync_last_error = None
+        for sync_attempt in range(1, 4):
+            try:
+                sync_ok = await sync_payment_for_student(student["id"])
+                if sync_ok is True:
+                    break
+            except Exception as sync_exc:
+                sync_last_error = sync_exc
+                logging.exception(
+                    "Supabase fee sync attempt %s/3 failed for Razorpay payment %s",
+                    sync_attempt, payload.payment_id,
+                )
+            if sync_attempt < 3:
+                await asyncio.sleep(sync_attempt * 2)
         if sync_ok is not True:
             raise RuntimeError(
-                "EduNotes Pro fee-history synchronization did not confirm success."
+                "EduNotes Pro fee-history synchronization failed after 3 attempts."
+                + (f" Last error: {sync_last_error}" if sync_last_error else "")
             )
         await db.razorpay_student_orders.update_one(
             {"order_id": payload.order_id},
