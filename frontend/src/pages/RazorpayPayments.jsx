@@ -1,3 +1,4 @@
+
 import React, { useMemo } from "react";
 import {
   CreditCard,
@@ -7,12 +8,17 @@ import {
 import { useData } from "@/lib/store";
 import { inr, monthLabel } from "@/lib/calc";
 
+const getPaymentId = (payment) =>
+  payment?.razorpay_payment_id ||
+  payment?.payment_id ||
+  "";
+
 const isRazorpayPayment = (payment) => {
   const method = String(
     payment?.payment_method || ""
   ).toLowerCase();
 
-  const paymentId = payment?.razorpay_payment_id;
+  const paymentId = getPaymentId(payment);
   const note = String(payment?.note || "").toLowerCase();
 
   return (
@@ -37,7 +43,9 @@ const displayMonth = (month) => {
 
 const displayDate = (payment) => {
   const value =
-    payment?.payment_date || payment?.created_at;
+    payment?.payment_date ||
+    payment?.created_at ||
+    payment?.date;
 
   if (!value) return "Date not recorded";
 
@@ -52,6 +60,18 @@ const displayDate = (payment) => {
     month: "short",
     year: "numeric",
   });
+};
+
+const getPaymentTimestamp = (payment) => {
+  const value =
+    payment?.payment_date ||
+    payment?.created_at ||
+    payment?.date;
+
+  if (!value) return 0;
+
+  const parsed = new Date(value).getTime();
+  return Number.isNaN(parsed) ? 0 : parsed;
 };
 
 const getClassDetails = (student, batches) => {
@@ -121,21 +141,11 @@ export const RazorpayPayments = () => {
             : "Student details unavailable",
         };
       })
-      .sort((a, b) => {
-        const dateA = new Date(
-          a.payment.payment_date ||
-            a.payment.created_at ||
-            0
-        ).getTime();
-
-        const dateB = new Date(
-          b.payment.payment_date ||
-            b.payment.created_at ||
-            0
-        ).getTime();
-
-        return dateB - dateA;
-      });
+      .sort(
+        (a, b) =>
+          getPaymentTimestamp(b.payment) -
+          getPaymentTimestamp(a.payment)
+      );
   }, [students, payments, batches]);
 
   const total = rows.reduce(
@@ -231,67 +241,70 @@ export const RazorpayPayments = () => {
                   classDetails,
                 },
                 index
-              ) => (
-                <div
-                  key={
-                    payment.id ||
-                    `${payment.razorpay_payment_id || "razorpay"}-${payment.month || "month"}-${index}`
-                  }
-                  className="p-4 sm:p-5"
-                >
-                  <div className="flex flex-wrap items-start gap-3">
-                    <div className="h-10 w-10 shrink-0 rounded-xl bg-indigo-50 text-indigo-700 flex items-center justify-center font-bold">
-                      {studentName ===
-                      "Student not matched"
-                        ? "?"
-                        : studentName
-                            .trim()
-                            .charAt(0)
-                            .toUpperCase()}
+              ) => {
+                const paymentId = getPaymentId(payment);
+
+                return (
+                  <div
+                    key={
+                      payment.id ||
+                      `${paymentId || "razorpay"}-${payment.month || "month"}-${index}`
+                    }
+                    className="p-4 sm:p-5"
+                  >
+                    <div className="flex flex-wrap items-start gap-3">
+                      <div className="h-10 w-10 shrink-0 rounded-xl bg-indigo-50 text-indigo-700 flex items-center justify-center font-bold">
+                        {studentName ===
+                        "Student not matched"
+                          ? "?"
+                          : studentName
+                              .trim()
+                              .charAt(0)
+                              .toUpperCase()}
+                      </div>
+
+                      <div className="min-w-0 flex-1">
+                        <div className="font-bold text-slate-900">
+                          {studentName}
+                        </div>
+
+                        <div className="mt-0.5 text-sm text-slate-500">
+                          {classDetails}
+                        </div>
+                      </div>
+
+                      <div className="text-right">
+                        <div className="text-lg font-extrabold text-slate-900">
+                          {inr(
+                            Number(payment.amount) || 0
+                          )}
+                        </div>
+
+                        <div className="mt-1 inline-flex items-center gap-1 text-xs font-semibold text-emerald-700">
+                          <CheckCircle2 size={13} />
+                          Recorded
+                        </div>
+                      </div>
                     </div>
 
-                    <div className="min-w-0 flex-1">
-                      <div className="font-bold text-slate-900">
-                        {studentName}
-                      </div>
+                    <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-600">
+                      <span>
+                        {displayMonth(payment.month)}
+                      </span>
 
-                      <div className="mt-0.5 text-sm text-slate-500">
-                        {classDetails}
-                      </div>
+                      <span>
+                        {displayDate(payment)}
+                      </span>
                     </div>
 
-                    <div className="text-right">
-                      <div className="text-lg font-extrabold text-slate-900">
-                        {inr(
-                          Number(payment.amount) || 0
-                        )}
+                    {paymentId && (
+                      <div className="mt-2 text-xs text-slate-400 break-all">
+                        Payment ID: {paymentId}
                       </div>
-
-                      <div className="mt-1 inline-flex items-center gap-1 text-xs font-semibold text-emerald-700">
-                        <CheckCircle2 size={13} />
-                        Recorded
-                      </div>
-                    </div>
+                    )}
                   </div>
-
-                  <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-600">
-                    <span>
-                      {displayMonth(payment.month)}
-                    </span>
-
-                    <span>
-                      {displayDate(payment)}
-                    </span>
-                  </div>
-
-                  {payment.razorpay_payment_id && (
-                    <div className="mt-2 text-xs text-slate-400 break-all">
-                      Payment ID:{" "}
-                      {payment.razorpay_payment_id}
-                    </div>
-                  )}
-                </div>
-              )
+                );
+              }
             )}
           </div>
         )}
