@@ -78,6 +78,7 @@ async def health_check():
 
 # Public routes - login only
 public_router = APIRouter(prefix="/api")
+razorpay_webhook_router = APIRouter(prefix="/webhooks/razorpay", tags=["Razorpay webhook"])
 
 
 # All normal application API routes require authentication
@@ -2870,12 +2871,22 @@ async def verify_student_razorpay_payment(
     if str(payment.get("currency") or "") != "INR":
         raise HTTPException(400, "Unexpected payment currency")
 
+    return await _record_verified_student_razorpay_payment(
+        order_id=payload.order_id, payment_id=payload.payment_id,
+        profile_id=profile_id, student=student, order_doc=order_doc, mode=mode,
+    )
+
+
+async def _record_verified_student_razorpay_payment(
+    order_id: str, payment_id: str, profile_id: str, student: dict,
+    order_doc: dict, mode: str,
+):
     # Idempotent success must be checked before recreating month claims. The
     # successful path deletes claims; recreating them on a repeat callback would
     # incorrectly block the student's next checkout forever.
     already = await db.razorpay_student_orders.find_one(
-        {"order_id": payload.order_id, "profile_id": profile_id,
-         "status": "recorded", "payment_id": payload.payment_id},
+        {"order_id": order_id, "profile_id": profile_id,
+         "status": "recorded", "payment_id": payment_id},
         {"_id": 0, "order_id": 1},
     )
     if already:
@@ -2888,12 +2899,12 @@ async def verify_student_razorpay_payment(
     for item in order_doc.get("breakdown", []):
         competing = await db.payments.find_one({
             "student_id": student["id"], "month": item["month"],
-            "razorpay_payment_id": {"$type": "string", "$ne": payload.payment_id},
+            "razorpay_payment_id": {"$type": "string", "$ne": payment_id},
         }, {"_id": 0, "razorpay_payment_id": 1})
         if competing:
             await db.razorpay_student_orders.update_one(
-                {"order_id": payload.order_id},
-                {"$set": {"status": "reconciliation_required", "payment_id": payload.payment_id}},
+                {"order_id": order_id},
+                {"$set": {"status": "reconciliation_required", "payment_id": payment_id}},
             )
             await db.razorpay_student_month_claims.update_many(
                 {"_id": {"$in": [f"{student['id']}:{x['month']}" for x in order_doc.get("breakdown", [])]}},
@@ -2906,32 +2917,32 @@ async def verify_student_razorpay_payment(
     for item in order_doc.get("breakdown", []):
         claim_id = f"{student['id']}:{item['month']}"
         claim_doc = await db.razorpay_student_month_claims.find_one({"_id": claim_id}, {"_id": 0, "order_id": 1, "status": 1})
-        if claim_doc and claim_doc.get("order_id") not in (None, payload.order_id):
+        if claim_doc and claim_doc.get("order_id") not in (None, order_id):
             await db.razorpay_student_orders.update_one(
-                {"order_id": payload.order_id},
-                {"$set": {"status": "reconciliation_required", "payment_id": payload.payment_id}},
+                {"order_id": order_id},
+                {"$set": {"status": "reconciliation_required", "payment_id": payment_id}},
             )
             raise HTTPException(409, "Payment was captured but another order owns this fee-month reservation. Do not pay again; administrator reconciliation is required.")
         if not claim_doc:
             try:
                 await db.razorpay_student_month_claims.insert_one({
                     "_id": claim_id, "student_id": student["id"], "profile_id": profile_id,
-                    "month": item["month"], "mode": mode, "reservation_token": order_doc.get("reservation_token", payload.order_id),
-                    "order_id": payload.order_id, "status": "verifying", "expires_at": None,
+                    "month": item["month"], "mode": mode, "reservation_token": order_doc.get("reservation_token", order_id),
+                    "order_id": order_id, "status": "verifying", "expires_at": None,
                     "created_at": datetime.now(timezone.utc).isoformat(),
                 })
             except Exception:
                 claim_doc = await db.razorpay_student_month_claims.find_one({"_id": claim_id}, {"_id": 0, "order_id": 1})
-                if not claim_doc or claim_doc.get("order_id") != payload.order_id:
+                if not claim_doc or claim_doc.get("order_id") != order_id:
                     await db.razorpay_student_orders.update_one(
-                        {"order_id": payload.order_id},
-                        {"$set": {"status": "reconciliation_required", "payment_id": payload.payment_id}},
+                        {"order_id": order_id},
+                        {"$set": {"status": "reconciliation_required", "payment_id": payment_id}},
                     )
                     raise HTTPException(409, "Payment was captured but the fee-month reservation could not be secured. Do not pay again; administrator reconciliation is required.")
         else:
             await db.razorpay_student_month_claims.update_one(
-                {"_id": claim_id, "order_id": {"$in": [None, payload.order_id]}},
-                {"$set": {"order_id": payload.order_id, "status": "verifying", "expires_at": None}},
+                {"_id": claim_id, "order_id": {"$in": [None, order_id]}},
+                {"$set": {"order_id": order_id, "status": "verifying", "expires_at": None}},
             )
 
     # One payment ID may create one ledger row per month, but never twice for the same month.
@@ -2946,14 +2957,14 @@ async def verify_student_razorpay_payment(
         raise HTTPException(500, "Payment safety check is unavailable; no fee record was changed")
     # Return immediately for a fully recorded payment. This makes repeat callbacks idempotent.
     already = await db.razorpay_student_orders.find_one(
-        {"order_id": payload.order_id, "profile_id": profile_id, "status": "recorded", "payment_id": payload.payment_id},
+        {"order_id": order_id, "profile_id": profile_id, "status": "recorded", "payment_id": payment_id},
         {"_id": 0, "order_id": 1},
     )
     if already:
         return {"ok": True, "already_recorded": True, "message": "Payment is already recorded"}
 
     # Never let a second payment replace the payment already associated with this order.
-    if order_doc.get("payment_id") and order_doc.get("payment_id") != payload.payment_id:
+    if order_doc.get("payment_id") and order_doc.get("payment_id") != payment_id:
         raise HTTPException(409, "A different payment is already attached to this order")
 
     # Claim atomically. A verified payment that previously failed during ledger or
@@ -2965,7 +2976,7 @@ async def verify_student_razorpay_payment(
     stale_verification_before = (datetime.now(timezone.utc) - timedelta(minutes=15)).isoformat()
     claim = await db.razorpay_student_orders.update_one(
         {
-            "order_id": payload.order_id,
+            "order_id": order_id,
             "profile_id": profile_id,
             "student_id": student["id"],
             "$and": [
@@ -2979,17 +2990,17 @@ async def verify_student_razorpay_payment(
                     "$or": [
                         {"payment_id": {"$exists": False}},
                         {"payment_id": None},
-                        {"payment_id": payload.payment_id},
+                        {"payment_id": payment_id},
                     ]
                 },
             ],
         },
-        {"$set": {"status": "verifying", "payment_id": payload.payment_id, "verified_at": datetime.now(timezone.utc).isoformat()}},
+        {"$set": {"status": "verifying", "payment_id": payment_id, "verified_at": datetime.now(timezone.utc).isoformat()}},
     )
     if claim.matched_count == 0:
         # Another request may have completed while this request was checking.
         already = await db.razorpay_student_orders.find_one(
-            {"order_id": payload.order_id, "profile_id": profile_id, "status": "recorded", "payment_id": payload.payment_id},
+            {"order_id": order_id, "profile_id": profile_id, "status": "recorded", "payment_id": payment_id},
             {"_id": 0, "order_id": 1},
         )
         if already:
@@ -2999,7 +3010,7 @@ async def verify_student_razorpay_payment(
         breakdown = order_doc.get("breakdown", [])
         for item in breakdown:
             month = item["month"]
-            existing = await db.payments.find_one({"razorpay_payment_id": payload.payment_id, "month": month}, {"_id": 0, "id": 1})
+            existing = await db.payments.find_one({"razorpay_payment_id": payment_id, "month": month}, {"_id": 0, "id": 1})
             if existing:
                 continue
             balance = await _student_month_balance(student["id"], month, student.get("monthly_fee"))
@@ -3008,17 +3019,17 @@ async def verify_student_razorpay_payment(
                 raise RuntimeError("The fee balance changed after checkout was started; administrator reconciliation is required.")
         for item in breakdown:
             month = item["month"]
-            existing = await db.payments.find_one({"razorpay_payment_id": payload.payment_id, "month": month}, {"_id": 0, "id": 1})
+            existing = await db.payments.find_one({"razorpay_payment_id": payment_id, "month": month}, {"_id": 0, "id": 1})
             if existing:
                 continue
             amount = int(item["amount_paise"]) / 100
             record = {
                 "id": str(uuid.uuid4()), "student_id": student["id"], "month": month,
                 "amount": amount, "fee_snapshot": float(student.get("monthly_fee") or 0),
-                "note": "Razorpay " + mode.title() + " Mode payment " + payload.payment_id,
+                "note": "Razorpay " + mode.title() + " Mode payment " + payment_id,
                 "payment_date": datetime.now(timezone.utc).date().isoformat(),
                 "created_at": datetime.now(timezone.utc).isoformat(),
-                "razorpay_payment_id": payload.payment_id, "razorpay_order_id": payload.order_id,
+                "razorpay_payment_id": payment_id, "razorpay_order_id": order_id,
                 "payment_method": "razorpay_live" if mode == "live" else "razorpay_test",
             }
             await db.payments.insert_one(record)
@@ -3038,7 +3049,7 @@ async def verify_student_razorpay_payment(
                 sync_last_error = sync_exc
                 logging.exception(
                     "Supabase fee sync attempt %s/3 failed for Razorpay payment %s",
-                    sync_attempt, payload.payment_id,
+                    sync_attempt, payment_id,
                 )
             if sync_attempt < 3:
                 await asyncio.sleep(sync_attempt * 2)
@@ -3048,22 +3059,99 @@ async def verify_student_razorpay_payment(
                 + (f" Last error: {sync_last_error}" if sync_last_error else "")
             )
         await db.razorpay_student_orders.update_one(
-            {"order_id": payload.order_id},
+            {"order_id": order_id},
             {"$set": {"status": "recorded", "synced_at": datetime.now(timezone.utc).isoformat(), "recorded_at": datetime.now(timezone.utc).isoformat()}},
         )
-        await db.razorpay_student_month_claims.delete_many({"order_id": payload.order_id})
+        await db.razorpay_student_month_claims.delete_many({"order_id": order_id})
     except Exception:
         logging.exception("Verified Razorpay payment needs reconciliation")
         await db.razorpay_student_orders.update_one(
-            {"order_id": payload.order_id},
-            {"$set": {"status": "reconciliation_required", "payment_id": payload.payment_id}},
+            {"order_id": order_id},
+            {"$set": {"status": "reconciliation_required", "payment_id": payment_id}},
         )
         await db.razorpay_student_month_claims.update_many(
-            {"order_id": payload.order_id},
+            {"order_id": order_id},
             {"$set": {"status": "reconciliation_required", "expires_at": None}},
         )
         raise HTTPException(500, "Payment was captured, but fee recording needs administrator reconciliation. Do not pay again; contact the administrator.")
     return {"ok": True, "already_recorded": False, "message": "Payment verified and fee history synchronized"}
+
+
+@razorpay_webhook_router.post("")
+async def razorpay_receive_webhook(request: Request):
+    """Verify Razorpay's signed webhook and record captured student payments."""
+    webhook_secret = (os.environ.get("RAZORPAY_WEBHOOK_SECRET") or "").strip()
+    if not webhook_secret:
+        raise HTTPException(503, "Razorpay webhook secret is not configured")
+
+    raw = await request.body()
+    signature = request.headers.get("x-razorpay-signature", "")
+    expected = hmac.new(webhook_secret.encode("utf-8"), raw, hashlib.sha256).hexdigest()
+    if not signature or not hmac.compare_digest(signature, expected):
+        raise HTTPException(400, "Invalid Razorpay webhook signature")
+
+    try:
+        event = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        raise HTTPException(400, "Invalid Razorpay webhook JSON")
+    if not isinstance(event, dict):
+        raise HTTPException(400, "Invalid Razorpay webhook event")
+
+    if event.get("event") != "payment.captured":
+        return {"ok": True, "ignored": True, "event": event.get("event")}
+
+    event_payload = event.get("payload")
+    payment_wrapper = event_payload.get("payment") if isinstance(event_payload, dict) else None
+    payment = payment_wrapper.get("entity") if isinstance(payment_wrapper, dict) else None
+    if not isinstance(payment, dict):
+        raise HTTPException(400, "Captured payment event has an invalid payload")
+    payment_id = str(payment.get("id") or "").strip()
+    order_id = str(payment.get("order_id") or "").strip()
+    if not payment_id or not order_id:
+        raise HTTPException(400, "Captured payment event is missing payment/order ID")
+
+    order_doc = await db.razorpay_student_orders.find_one({"order_id": order_id}, {"_id": 0})
+    if not order_doc:
+        logging.warning("Razorpay captured webhook has unknown order_id=%s", order_id)
+        return {"ok": True, "ignored": True, "reason": "unknown_order"}
+    mode, key_id, key_secret = _razorpay_mode_and_credentials()
+    if order_doc.get("mode") != mode:
+        raise HTTPException(409, "Razorpay order mode differs from configured credentials")
+
+    from fastapi.concurrency import run_in_threadpool
+    import razorpay
+    try:
+        rz = razorpay.Client(auth=(key_id, key_secret))
+        fetched_payment = await run_in_threadpool(rz.payment.fetch, payment_id)
+        remote_order = await run_in_threadpool(rz.order.fetch, order_id)
+    except Exception:
+        logging.exception("Razorpay webhook payment lookup failed")
+        raise HTTPException(502, "Could not confirm captured payment with Razorpay")
+
+    expected_amount = int(order_doc.get("amount_paise") or -1)
+    if (fetched_payment.get("id") != payment_id
+            or fetched_payment.get("order_id") != order_id
+            or remote_order.get("id") != order_id):
+        raise HTTPException(400, "Razorpay payment/order mismatch")
+    if fetched_payment.get("status") != "captured" or fetched_payment.get("captured") is not True:
+        raise HTTPException(409, "Razorpay payment is not captured")
+    if (int(fetched_payment.get("amount") or 0) != expected_amount
+            or int(remote_order.get("amount") or 0) != expected_amount):
+        raise HTTPException(400, "Captured amount does not match stored fee order")
+    if str(fetched_payment.get("currency") or "") != "INR":
+        raise HTTPException(400, "Unexpected payment currency")
+
+    student = await db.students.find_one({"id": order_doc.get("student_id")}, {"_id": 0})
+    if not student:
+        raise HTTPException(500, "Stored payment order references a missing student")
+    profile_id = str(order_doc.get("profile_id") or "")
+    if not profile_id:
+        raise HTTPException(500, "Stored payment order has no EduNotes profile")
+
+    return await _record_verified_student_razorpay_payment(
+        order_id=order_id, payment_id=payment_id,
+        profile_id=profile_id, student=student, order_doc=order_doc, mode=mode,
+    )
 
 
 # ---------- Razorpay Test Mode preparation ----------
@@ -4165,6 +4253,7 @@ app.include_router(api_router)
 app.include_router(whatsapp_status_router)
 app.include_router(whatsapp_router)
 app.include_router(whatsapp_webhook_router)
+app.include_router(razorpay_webhook_router)
 
 
 # ---------- Attendance API ----------
