@@ -400,6 +400,7 @@ export const Dashboard = () => {
     setReminderSending(true);
 
     const combined = { sent: [], skipped: [], failed: [] };
+    const throughMonth = currentMonth();
     const studentIds = eligibleStudents.map((student) => String(student.id));
 
     // Small sequential requests keep each backend/Meta request below the
