@@ -1,3 +1,4 @@
+
 import axios from "axios";
 
 const BACKEND_URL =
@@ -55,13 +56,17 @@ export const api = {
       })
       .then((r) => r.data),
 
-  // WhatsApp: send fee reminders to selected students for one month
-  sendWhatsAppFeeReminders: (month, studentIds) =>
+  // WhatsApp: send fee reminders with an optional custom timeout
+  sendWhatsAppFeeReminders: (month, studentIds, timeout = 20000) =>
     client
-      .post("/whatsapp/send-fee-reminders", {
-        month,
-        student_ids: studentIds.map((id) => String(id)),
-      })
+      .post(
+        "/whatsapp/send-fee-reminders",
+        {
+          month,
+          student_ids: studentIds.map((id) => String(id)),
+        },
+        { timeout }
+      )
       .then((r) => r.data),
 
   // Batches
