@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useData } from "@/lib/store";
 import {
@@ -58,6 +58,8 @@ export const Dashboard = () => {
   const [pendingFeeBatchPickerOpen, setPendingFeeBatchPickerOpen] = useState(false);
   const [selectedPendingFeeBatchId, setSelectedPendingFeeBatchId] = useState("");
   const [pendingFeeSending, setPendingFeeSending] = useState(false);
+  const [reminderSending, setReminderSending] = useState(false);
+  const reminderSendingRef = useRef(false);
 
   const sortedReminderBatches = useMemo(
     () => [...(Array.isArray(batches) ? batches : [])].sort((a, b) =>
@@ -368,6 +370,9 @@ export const Dashboard = () => {
   // The user selects and confirms the batch in the dashboard UI.
   // If a batch has more than 200 eligible students, split it into API-safe requests.
   const remindAllUnpaid = async () => {
+    // Prevent duplicate clicks while a reminder run is in progress.
+    if (reminderSendingRef.current) return;
+
     const selectedBatch = sortedReminderBatches.find(
       (batch) => String(batch.id) === String(selectedReminderBatchId)
     );
@@ -375,10 +380,9 @@ export const Dashboard = () => {
       toast.error("Please select a tutorial batch first.");
       return;
     }
-    setReminderBatchConfirmOpen(false);
-    setReminderBatchPickerOpen(false);
+
     const throughMonth = currentMonth();
-    const eligibleStudents = students.filter((student) => {
+    const eligibleStudents = (Array.isArray(students) ? students : []).filter((student) => {
       if (String(student.batch_id) !== String(selectedBatch.id)) return false;
 
       const phone = String(
@@ -389,11 +393,11 @@ export const Dashboard = () => {
 
       if (
         !phone ||
-        !/^\d{4}-(0[1-9]|1[0-2])$/.test(joinMonth) ||
+        !/^\\d{4}-(0[1-9]|1[0-2])$/.test(joinMonth) ||
         joinMonth > throughMonth
       ) return false;
 
-      const studentPayments = payments.filter(
+      const studentPayments = (Array.isArray(payments) ? payments : []).filter(
         (payment) => String(payment.student_id) === String(student.id)
       );
       let outstanding = 0;
@@ -423,43 +427,86 @@ export const Dashboard = () => {
 
     if (eligibleStudents.length === 0) {
       toast.info(`No students with outstanding fees and a phone number were found in ${selectedBatch.name || "the selected batch"}.`);
+      setReminderBatchConfirmOpen(false);
       return;
     }
 
-    // The confirmation dialog is shown in the dashboard before this function runs.
+    // Close the dialogs and lock this action until all requests finish.
+    setReminderBatchConfirmOpen(false);
+    setReminderBatchPickerOpen(false);
+    reminderSendingRef.current = true;
+    setReminderSending(true);
 
     const combined = { sent: [], skipped: [], failed: [] };
     const studentIds = eligibleStudents.map((student) => String(student.id));
-    const batchSize = 200;
 
-    for (let offset = 0; offset < studentIds.length; offset += batchSize) {
-      const batchIds = studentIds.slice(offset, offset + batchSize);
-      try {
-        const batchResult = await api.sendWhatsAppFeeReminders(throughMonth, batchIds);
-        ["sent", "skipped", "failed"].forEach((key) => {
-          if (Array.isArray(batchResult?.[key])) combined[key].push(...batchResult[key]);
-        });
-      } catch (batchError) {
-        const detail = batchError?.response?.data?.detail;
-        const message = typeof detail === "string"
-          ? detail
-          : detail?.message || batchError?.message || "Batch request failed.";
-        combined.failed.push(
-          ...batchIds.map((studentId) => ({ student_id: studentId, error: message }))
-        );
+    // Small sequential requests keep each backend/Meta request below the
+    // previous 20-second frontend timeout seen with large classes.
+    const batchSize = 10;
+    let stoppedAfterRequestError = false;
+
+    try {
+      for (let offset = 0; offset < studentIds.length; offset += batchSize) {
+        const batchIds = studentIds.slice(offset, offset + batchSize);
+
+        try {
+          // The third argument is the per-request timeout supported by api.js.
+          const batchResult = await api.sendWhatsAppFeeReminders(
+            throughMonth,
+            batchIds,
+            120000
+          );
+
+          ["sent", "skipped", "failed"].forEach((key) => {
+            if (Array.isArray(batchResult?.[key])) {
+              combined[key].push(...batchResult[key]);
+            }
+          });
+        } catch (batchError) {
+          const detail = batchError?.response?.data?.detail;
+          const message = typeof detail === "string"
+            ? detail
+            : detail?.message || batchError?.message || "Batch request failed.";
+
+          // A timeout/network error can happen after Meta has accepted some
+          // messages. Do not automatically send later batches or retry this one.
+          combined.failed.push(
+            ...batchIds.map((studentId) => ({
+              student_id: studentId,
+              error: `Request outcome uncertain: ${message}`,
+            }))
+          );
+          stoppedAfterRequestError = true;
+          break;
+        }
       }
-    }
 
-    toast.success(
-      `${selectedBatch.name || "Selected batch"} reminders: Sent/accepted ${combined.sent.length}, skipped ${combined.skipped.length}, failed ${combined.failed.length}. Meta acceptance does not confirm delivery.`,
-      { duration: Infinity }
-    );
-    if (combined.failed.length > 0) {
-      const firstError = combined.failed[0]?.error;
-      toast.error(
-        firstError ? `First failure: ${firstError}` : "Some reminders failed. Check backend logs.",
-        { duration: Infinity }
-      );
+      const summary =
+        `${selectedBatch.name || "Selected batch"} reminders — ` +
+        `Sent/accepted: ${combined.sent.length}; ` +
+        `Skipped: ${combined.skipped.length}; ` +
+        `Failed/uncertain: ${combined.failed.length}. ` +
+        `Meta acceptance does not confirm delivery.`;
+
+      if (stoppedAfterRequestError) {
+        toast.error(
+          `${summary} Sending stopped after a request error. Check the WhatsApp/Render logs before trying again; some messages in the last batch may already have been accepted.`,
+          { duration: Infinity }
+        );
+      } else if (combined.failed.length > 0) {
+        const firstError = combined.failed[0]?.error;
+        toast.warning(
+          `${summary}${firstError ? ` First failure: ${firstError}` : ""}`,
+          { duration: Infinity }
+        );
+      } else if (combined.skipped.length > 0) {
+        toast.warning(summary, { duration: Infinity });
+      } else {
+        toast.success(summary, { duration: Infinity });
+      }
+    } finally {
+      reminderSendingRef.current = false;
+      setReminderSending(false);
     }
   };
 
@@ -767,6 +814,7 @@ export const Dashboard = () => {
             </Button>
 
             <Button
+              disabled={reminderSending}
               onClick={() => {
                 if (sortedReminderBatches.length === 0) {
                   toast.error("No tutorial batches were found.");
@@ -1118,7 +1166,7 @@ export const Dashboard = () => {
         {reminderBatchConfirmOpen && (
           <div
             className="fixed inset-0 z-[111] bg-slate-900/55 backdrop-blur-[2px] flex items-center justify-center p-4"
-            onClick={() => setReminderBatchConfirmOpen(false)}
+            onClick={() => !reminderSending && setReminderBatchConfirmOpen(false)}
           >
             <div
               role="alertdialog"
@@ -1148,15 +1196,15 @@ export const Dashboard = () => {
                 Parent phone is used first when available. Please do not retry if a request times out until you check which messages were sent.
               </p>
               <div className="mt-5 flex gap-3">
-                <Button variant="outline" className="flex-1" onClick={() => setReminderBatchConfirmOpen(false)}>
+                <Button variant="outline" className="flex-1" disabled={reminderSending} onClick={() => setReminderBatchConfirmOpen(false)}>
                   Cancel
                 </Button>
                 <Button
                   className="flex-1"
-                  disabled={selectedReminderEligibleStudents.length === 0}
+                  disabled={reminderSending || selectedReminderEligibleStudents.length === 0}
                   onClick={remindAllUnpaid}
                 >
-                  Confirm &amp; Send
+                  {reminderSending ? "Sending..." : "Confirm &amp; Send"}
                 </Button>
               </div>
             </div>
