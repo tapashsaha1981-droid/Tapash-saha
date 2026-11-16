@@ -3251,9 +3251,70 @@ async def list_payments(
     return docs
 
 
+async def run_payment_sync_job(job_id: str, student_id: str, month: str):
+    """Run EduNotes sync and persist its outcome for the dashboard."""
+    jobs = db.payment_sync_jobs
+    now = datetime.now(timezone.utc).isoformat()
+    await jobs.update_one(
+        {"id": job_id},
+        {"$set": {"status": "processing", "started_at": now, "updated_at": now, "error": None}},
+    )
+    try:
+        synced = await sync_payment_for_student(student_id, month)
+        if synced:
+            await jobs.update_one(
+                {"id": job_id},
+                {"$set": {"status": "success", "completed_at": datetime.now(timezone.utc).isoformat(), "updated_at": datetime.now(timezone.utc).isoformat(), "error": None}},
+            )
+        else:
+            raise RuntimeError("EduNotes sync did not complete. Check Supabase configuration and student profile mapping.")
+    except Exception as exc:
+        logger.exception("EduNotes background payment sync failed for job_id=%s", job_id)
+        await jobs.update_one(
+            {"id": job_id},
+            {"$set": {"status": "failed", "error": str(exc)[:500], "failed_at": datetime.now(timezone.utc).isoformat(), "updated_at": datetime.now(timezone.utc).isoformat()}},
+        )
+
+
+@api_router.get("/payment-sync/jobs")
+async def list_payment_sync_jobs():
+    """Return unresolved or failed sync notices not manually dismissed."""
+    return await db.payment_sync_jobs.find(
+        {"status": {"$in": ["pending", "processing", "failed"]}, "dismissed": {"$ne": True}},
+        {"_id": 0},
+    ).sort("created_at", -1).to_list(200)
+
+
+@api_router.post("/payment-sync/jobs/{job_id}/retry")
+async def retry_payment_sync_job(job_id: str, background_tasks: BackgroundTasks):
+    job = await db.payment_sync_jobs.find_one({"id": job_id}, {"_id": 0})
+    if not job:
+        raise HTTPException(404, "Sync job not found")
+    if job.get("status") in ["pending", "processing"]:
+        raise HTTPException(409, "This sync is already pending or processing")
+    await db.payment_sync_jobs.update_one(
+        {"id": job_id},
+        {"$set": {"status": "pending", "dismissed": False, "error": None, "updated_at": datetime.now(timezone.utc).isoformat()}},
+    )
+    background_tasks.add_task(run_payment_sync_job, job_id, job["student_id"], job["month"])
+    return {"status": "pending", "job_id": job_id}
+
+
+@api_router.post("/payment-sync/jobs/{job_id}/dismiss")
+async def dismiss_payment_sync_job(job_id: str):
+    result = await db.payment_sync_jobs.update_one(
+        {"id": job_id, "status": "failed"},
+        {"$set": {"dismissed": True, "dismissed_at": datetime.now(timezone.utc).isoformat()}},
+    )
+    if result.matched_count == 0:
+        raise HTTPException(404, "Failed sync notice not found")
+    return {"status": "dismissed", "job_id": job_id}
+
+
 @api_router.post("/payments")
 async def create_payment(
-    payload: PaymentIn
+    payload: PaymentIn,
+    background_tasks: BackgroundTasks,
 ):
     data = payload.model_dump(
         exclude_none=True
@@ -3276,6 +3337,7 @@ async def create_payment(
     # Everything after the insert is a secondary operation. Do not turn a
     # successfully recorded payment into an apparent failure if activity
     # logging, fee calculation, or EduNotes synchronization is slow/unavailable.
+    student_name_for_sync = None
     try:
         st = await db.students.find_one(
             {"id": payment.student_id},
@@ -3287,6 +3349,7 @@ async def create_payment(
         )
 
         if st:
+            student_name_for_sync = st.get("name")
             month_pays = await db.payments.find(
                 {
                     "student_id": payment.student_id,
@@ -3320,22 +3383,29 @@ async def create_payment(
             payment.id
         )
 
-    # EduNotes synchronization is secondary to the Tuition Manager payment.
-    # Bound its runtime so a slow external sync cannot make the saved payment
-    # look unsuccessful in the app.
+    # Queue EduNotes synchronization after the payment has been safely saved.
+    # The durable MongoDB job record lets the dashboard show failures until dismissed.
+    sync_job_id = None
     try:
-        await asyncio.wait_for(
-            sync_payment_for_student(
-                payment.student_id,
-                payment.month
-            ),
-            timeout=8
+        sync_job_id = str(uuid.uuid4())
+        created_at = datetime.now(timezone.utc).isoformat()
+        await db.payment_sync_jobs.insert_one({
+            "id": sync_job_id,
+            "payment_id": payment.id,
+            "student_id": payment.student_id,
+            "student_name": student_name_for_sync,
+            "month": payment.month,
+            "status": "pending",
+            "dismissed": False,
+            "created_at": created_at,
+            "updated_at": created_at,
+            "error": None,
+        })
+        background_tasks.add_task(
+            run_payment_sync_job, sync_job_id, payment.student_id, payment.month
         )
     except Exception:
-        logging.getLogger(__name__).exception(
-            "EduNotes payment sync failed/timed out for payment_id=%s",
-            payment.id
-        )
+        logger.exception("Could not queue EduNotes sync for saved payment_id=%s", payment.id)
 
     # WhatsApp confirmation is best-effort and only runs after the
     # payment record has been inserted successfully. Configure an
@@ -3364,8 +3434,10 @@ async def create_payment(
             "WhatsApp payment confirmation failed for payment_id=%s", payment.id
         )
 
-    # Existing response remains unchanged
-    return payment.model_dump()
+    # Extra field is additive; existing payment fields and records are unchanged.
+    response = payment.model_dump()
+    response["sync_job_id"] = sync_job_id
+    return response
 
 
 @api_router.delete("/payments/{payment_id}")
@@ -4310,6 +4382,23 @@ logging.basicConfig(
 )
 
 logger = logging.getLogger(__name__)
+
+
+# ---------- Recover queued sync jobs after a Render restart ----------
+@app.on_event("startup")
+async def recover_payment_sync_jobs():
+    try:
+        stranded = await db.payment_sync_jobs.find(
+            {"status": {"$in": ["pending", "processing"]}}, {"_id": 0}
+        ).to_list(500)
+        for job in stranded:
+            asyncio.create_task(
+                run_payment_sync_job(job["id"], job["student_id"], job["month"])
+            )
+        if stranded:
+            logger.info("Recovered %s pending EduNotes payment sync job(s)", len(stranded))
+    except Exception:
+        logger.exception("Could not recover pending EduNotes payment sync jobs")
 
 
 # ---------- Shutdown ----------
