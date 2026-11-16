@@ -115,7 +115,6 @@ export const api = {
       .then((r) => r.data),
 
   // Batch-wise EduNotes synchronization
-  // Starts the server-side background sync and returns immediately.
   syncEdunotesBatch: (batchId) =>
     client
       .post(
@@ -133,12 +132,31 @@ export const api = {
   listPayments: (params = {}) =>
     client.get("/payments", { params }).then((r) => r.data),
 
-  // Corrected: allow 60 seconds for payment saving
   createPayment: (data) =>
     client.post("/payments", data, { timeout: 60000 }).then((r) => r.data),
 
   deletePayment: (id) =>
     client.delete(`/payments/${id}`).then((r) => r.data),
+
+  // Background EduNotes payment synchronization
+  listPaymentSyncJobs: () =>
+    client
+      .get("/payment-sync/jobs")
+      .then((r) => r.data),
+
+  retryPaymentSyncJob: (jobId) =>
+    client
+      .post(
+        `/payment-sync/jobs/${encodeURIComponent(jobId)}/retry`
+      )
+      .then((r) => r.data),
+
+  dismissPaymentSyncJob: (jobId) =>
+    client
+      .post(
+        `/payment-sync/jobs/${encodeURIComponent(jobId)}/dismiss`
+      )
+      .then((r) => r.data),
 
   // Events
   listEvents: () =>
@@ -170,9 +188,7 @@ export const api = {
     client.put("/settings", data).then((r) => r.data),
 
   listActivities: () =>
-    client.listActivities
-      ? client.listActivities()
-      : client.get("/activities").then((r) => r.data),
+    client.get("/activities").then((r) => r.data),
 
   // Export and import
   exportAll: () =>
@@ -182,8 +198,8 @@ export const api = {
     client.post("/import", data).then((r) => r.data),
 
   seed: () =>
-    client.post("/seed", data).then((r) => r.data),
+    client.post("/seed").then((r) => r.data),
 
   reset: () =>
-    client.post("/reset", data).then((r) => r.data),
+    client.post("/reset").then((r) => r.data),
 };
