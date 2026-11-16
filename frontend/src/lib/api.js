@@ -92,7 +92,7 @@ export const api = {
   updateStudent: (id, data) =>
     client.put(`/students/${id}`, data).then((r) => r.data),
 
-  // Safe bulk Board CSV import
+  // Safe bulk Board CSV import.
   // Updates ONLY the Board field.
   // Does not create/delete students or modify fees/payments/batches.
   importStudentBoards: (rows) =>
@@ -133,8 +133,9 @@ export const api = {
   listPayments: (params = {}) =>
     client.get("/payments", { params }).then((r) => r.data),
 
+  // Corrected: allow 60 seconds for payment saving
   createPayment: (data) =>
-    client.post("/payments", data).then((r) => r.data),
+    client.post("/payments", data, { timeout: 60000 }).then((r) => r.data),
 
   deletePayment: (id) =>
     client.delete(`/payments/${id}`).then((r) => r.data),
