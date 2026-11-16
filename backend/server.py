@@ -3273,51 +3273,69 @@ async def create_payment(
         payment.model_dump()
     )
 
-    st = await db.students.find_one(
-        {"id": payment.student_id},
-        {
-            "_id": 0,
-            "name": 1,
-            "monthly_fee": 1
-        }
-    )
-
-    if st:
-        month_pays = await db.payments.find(
-            {
-                "student_id": payment.student_id,
-                "month": payment.month
-            },
+    # Everything after the insert is a secondary operation. Do not turn a
+    # successfully recorded payment into an apparent failure if activity
+    # logging, fee calculation, or EduNotes synchronization is slow/unavailable.
+    try:
+        st = await db.students.find_one(
+            {"id": payment.student_id},
             {
                 "_id": 0,
-                "amount": 1
+                "name": 1,
+                "monthly_fee": 1
             }
-        ).to_list(1000)
-
-        month_total = sum(
-            p.get("amount", 0)
-            for p in month_pays
         )
 
-        if month_total >= (
-            st.get("monthly_fee") or 0
-        ):
-            await log_activity(
-                f"Marked paid: {st['name']}"
-            )
-        else:
-            await log_activity(
-                f"Partial payment ₹{int(payment.amount)}: "
-                f"{st['name']}"
+        if st:
+            month_pays = await db.payments.find(
+                {
+                    "student_id": payment.student_id,
+                    "month": payment.month
+                },
+                {
+                    "_id": 0,
+                    "amount": 1
+                }
+            ).to_list(1000)
+
+            month_total = sum(
+                p.get("amount", 0)
+                for p in month_pays
             )
 
-    # --------------------------------------------------------
-    # NEW: SYNC TO EDUNOTES PRO
-    # --------------------------------------------------------
-    await sync_payment_for_student(
-        payment.student_id,
-        payment.month
-    )
+            if month_total >= (
+                st.get("monthly_fee") or 0
+            ):
+                await log_activity(
+                    f"Marked paid: {st['name']}"
+                )
+            else:
+                await log_activity(
+                    f"Partial payment ₹{int(payment.amount)}: "
+                    f"{st['name']}"
+                )
+    except Exception:
+        logging.getLogger(__name__).exception(
+            "Post-save payment activity update failed for payment_id=%s",
+            payment.id
+        )
+
+    # EduNotes synchronization is secondary to the Tuition Manager payment.
+    # Bound its runtime so a slow external sync cannot make the saved payment
+    # look unsuccessful in the app.
+    try:
+        await asyncio.wait_for(
+            sync_payment_for_student(
+                payment.student_id,
+                payment.month
+            ),
+            timeout=8
+        )
+    except Exception:
+        logging.getLogger(__name__).exception(
+            "EduNotes payment sync failed/timed out for payment_id=%s",
+            payment.id
+        )
 
     # WhatsApp confirmation is best-effort and only runs after the
     # payment record has been inserted successfully. Configure an
