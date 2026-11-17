@@ -1,3 +1,4 @@
+
 import React, {
   createContext,
   useContext,
@@ -71,21 +72,44 @@ export const DataProvider = ({ children }) => {
     setActivities,
   ]);
 
+  // Initial loading with one automatic retry
   const retryLoad = useCallback(async () => {
     setLoading(true);
     setLoadError(null);
 
     try {
-      await refresh();
+      // First attempt
+      try {
+        await refresh();
+      } catch (firstError) {
+        if (process.env.NODE_ENV === "development") {
+          console.warn(
+            "Initial data load failed; retrying once.",
+            firstError
+          );
+        }
+
+        // Wait 1.2 seconds before retrying
+        await new Promise((resolve) =>
+          setTimeout(resolve, 1200)
+        );
+
+        // Second attempt
+        await refresh();
+      }
     } catch (err) {
       if (process.env.NODE_ENV === "development") {
-        console.error("Initial data load failed", err);
+        console.error(
+          "Initial data load failed after automatic retry",
+          err
+        );
       }
+
       setLoadError(err);
     } finally {
       setLoading(false);
     }
-  }, [refresh, api, setLoading, setLoadError]);
+  }, [refresh]);
 
   useEffect(() => {
     retryLoad();
