@@ -3255,26 +3255,91 @@ async def run_payment_sync_job(job_id: str, student_id: str, month: str):
     """Run EduNotes sync and persist its outcome for the dashboard."""
     jobs = db.payment_sync_jobs
     now = datetime.now(timezone.utc).isoformat()
+
     await jobs.update_one(
         {"id": job_id},
-        {"$set": {"status": "processing", "started_at": now, "updated_at": now, "error": None}},
+        {
+            "$set": {
+                "status": "processing",
+                "started_at": now,
+                "updated_at": now,
+                "error": None,
+            }
+        },
     )
+
     try:
-        synced = await sync_payment_for_student(student_id, month)
-        if synced:
-            await jobs.update_one(
-                {"id": job_id},
-                {"$set": {"status": "success", "completed_at": datetime.now(timezone.utc).isoformat(), "updated_at": datetime.now(timezone.utc).isoformat(), "error": None}},
+        # Find the student in Tuition Manager.
+        student = await db.students.find_one(
+            {"id": student_id},
+            {"_id": 0},
+        )
+        if not student:
+            raise RuntimeError(
+                "Tuition Manager student record was not found."
             )
-        else:
-            raise RuntimeError("EduNotes sync did not complete. Check Supabase configuration and student profile mapping.")
-    except Exception as exc:
-        logger.exception("EduNotes background payment sync failed for job_id=%s", job_id)
+
+        # Repair/register the EduNotes profile before syncing fee history.
+        # In the Render deployment, render_entry.py replaces this hook
+        # with the real profile repair/registration implementation.
+        registration_ok = await ensure_edunotes_student(student)
+        if not registration_ok:
+            raise RuntimeError(
+                "EduNotes student profile could not be repaired or registered. "
+                "Please check the student's phone number and EduNotes account."
+            )
+
+        # Confirm the permanent profile mapping was saved.
+        refreshed_student = await db.students.find_one(
+            {"id": student_id},
+            {"_id": 0, "id": 1, "edunotes_profile_id": 1},
+        )
+        if (
+            not refreshed_student
+            or not refreshed_student.get("edunotes_profile_id")
+        ):
+            raise RuntimeError(
+                "EduNotes profile setup did not save the profile mapping."
+            )
+
+        # Synchronize the requested payment month.
+        synced = await sync_payment_for_student(student_id, month)
+        if not synced:
+            raise RuntimeError(
+                "EduNotes sync did not complete. "
+                "Check Supabase configuration and student profile mapping."
+            )
+
+        completed_at = datetime.now(timezone.utc).isoformat()
         await jobs.update_one(
             {"id": job_id},
-            {"$set": {"status": "failed", "error": str(exc)[:500], "failed_at": datetime.now(timezone.utc).isoformat(), "updated_at": datetime.now(timezone.utc).isoformat()}},
+            {
+                "$set": {
+                    "status": "success",
+                    "completed_at": completed_at,
+                    "updated_at": completed_at,
+                    "error": None,
+                }
+            },
         )
 
+    except Exception as exc:
+        logger.exception(
+            "EduNotes background payment sync failed for job_id=%s",
+            job_id,
+        )
+        failed_at = datetime.now(timezone.utc).isoformat()
+        await jobs.update_one(
+            {"id": job_id},
+            {
+                "$set": {
+                    "status": "failed",
+                    "error": str(exc)[:500],
+                    "failed_at": failed_at,
+                    "updated_at": failed_at,
+                }
+            },
+        )
 
 @api_router.get("/payment-sync/jobs")
 async def list_payment_sync_jobs():
